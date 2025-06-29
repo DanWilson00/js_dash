@@ -6,7 +6,9 @@ void main() {
 }
 
 class SubmersibleJetskiApp extends StatelessWidget {
-  const SubmersibleJetskiApp({super.key});
+  const SubmersibleJetskiApp({super.key, this.autoStartMonitor = true});
+
+  final bool autoStartMonitor;
 
   @override
   Widget build(BuildContext context) {
@@ -19,7 +21,7 @@ class SubmersibleJetskiApp extends StatelessWidget {
         ),
         useMaterial3: true,
       ),
-      home: const RealtimeDataDisplay(),
+      home: RealtimeDataDisplay(autoStartMonitor: autoStartMonitor),
       debugShowCheckedModeBanner: false,
     );
   }

@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:math';
 import 'package:dart_mavlink/dialects/common.dart';
+import 'mavlink_message_tracker.dart';
 
 class MavlinkSpoofService {
   static MavlinkSpoofService? _instance;
@@ -18,6 +19,7 @@ class MavlinkSpoofService {
 
   final Random _random = Random();
   bool _isRunning = false;
+  final MavlinkMessageTracker _tracker = MavlinkMessageTracker();
   
   final StreamController<Heartbeat> _heartbeatController = StreamController<Heartbeat>.broadcast();
   final StreamController<SysStatus> _sysStatusController = StreamController<SysStatus>.broadcast();
@@ -84,6 +86,7 @@ class MavlinkSpoofService {
       systemStatus: mavStateActive,
       mavlinkVersion: 3,
     );
+    _tracker.trackMessage(heartbeat);
     _heartbeatController.add(heartbeat);
   }
 
@@ -109,6 +112,7 @@ class MavlinkSpoofService {
       onboardControlSensorsEnabledExtended: 0,
       onboardControlSensorsHealthExtended: 0,
     );
+    _tracker.trackMessage(sysStatus);
     _sysStatusController.add(sysStatus);
   }
 
@@ -137,6 +141,7 @@ class MavlinkSpoofService {
       pitchspeed: (_random.nextDouble() - 0.5) * 0.1,
       yawspeed: (_random.nextDouble() - 0.5) * 0.05,
     );
+    _tracker.trackMessage(attitude);
     _attitudeController.add(attitude);
   }
 
@@ -161,6 +166,7 @@ class MavlinkSpoofService {
       vz: ((_random.nextDouble() - 0.5) * 50).round(), // ±0.5 m/s vertical
       hdg: (_heading * 100).round(), // Convert to centidegrees
     );
+    _tracker.trackMessage(gps);
     _gpsController.add(gps);
   }
 
@@ -180,6 +186,7 @@ class MavlinkSpoofService {
       alt: _alt,
       climb: (_random.nextDouble() - 0.5) * 0.5, // ±0.5 m/s climb rate
     );
+    _tracker.trackMessage(vfrHud);
     _vfrHudController.add(vfrHud);
   }
 

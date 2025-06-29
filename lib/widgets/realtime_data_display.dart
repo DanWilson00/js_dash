@@ -4,9 +4,12 @@ import 'package:flutter/material.dart';
 import 'package:dart_mavlink/dialects/common.dart';
 import '../services/mavlink_service.dart';
 import '../services/mavlink_spoof_service.dart';
+import 'mavlink_message_monitor.dart';
 
 class RealtimeDataDisplay extends StatefulWidget {
-  const RealtimeDataDisplay({super.key});
+  const RealtimeDataDisplay({super.key, this.autoStartMonitor = true});
+
+  final bool autoStartMonitor;
 
   @override
   State<RealtimeDataDisplay> createState() => _RealtimeDataDisplayState();
@@ -168,17 +171,24 @@ class _RealtimeDataDisplayState extends State<RealtimeDataDisplay> {
           ),
         ],
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          children: [
-            _buildConnectionStatus(),
-            const SizedBox(height: 16),
-            Expanded(
-              child: _isConnected ? _buildTelemetryDisplay() : _buildDisconnectedDisplay(),
+      body: Row(
+        children: [
+          MavlinkMessageMonitor(autoStart: widget.autoStartMonitor),
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                children: [
+                  _buildConnectionStatus(),
+                  const SizedBox(height: 16),
+                  Expanded(
+                    child: _isConnected ? _buildTelemetryDisplay() : _buildDisconnectedDisplay(),
+                  ),
+                ],
+              ),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -195,18 +205,24 @@ class _RealtimeDataDisplayState extends State<RealtimeDataDisplay> {
           children: [
             Icon(Icons.circle, color: statusColor, size: 16),
             const SizedBox(width: 8),
-            Text(
-              '$statusText ($modeText)',
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                color: statusColor,
+            Flexible(
+              child: Text(
+                '$statusText ($modeText)',
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: statusColor,
+                ),
+                overflow: TextOverflow.ellipsis,
               ),
             ),
             const Spacer(),
             if (_lastPacketTime != null)
-              Text(
-                'Last packet: ${_formatTime(_lastPacketTime!)}',
-                style: Theme.of(context).textTheme.bodySmall,
+              Flexible(
+                child: Text(
+                  'Last packet: ${_formatTime(_lastPacketTime!)}',
+                  style: Theme.of(context).textTheme.bodySmall,
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
           ],
         ),

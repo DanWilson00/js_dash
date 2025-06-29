@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:js_dash/widgets/realtime_data_display.dart';
 import 'package:js_dash/services/mavlink_service.dart';
 import 'package:js_dash/services/mavlink_spoof_service.dart';
+import 'package:js_dash/services/mavlink_message_tracker.dart';
 
 void main() {
   group('RealtimeDataDisplay Widget', () {
@@ -10,18 +11,20 @@ void main() {
       // Reset any singleton state before widget tests
       MavlinkService.resetInstanceForTesting();
       MavlinkSpoofService.resetInstanceForTesting();
+      MavlinkMessageTracker.resetInstanceForTesting();
     });
     
     tearDownAll(() {
       // Clean up after all widget tests
       MavlinkService.resetInstanceForTesting();
       MavlinkSpoofService.resetInstanceForTesting();
+      MavlinkMessageTracker.resetInstanceForTesting();
     });
 
     testWidgets('should build without error', (WidgetTester tester) async {
       await tester.pumpWidget(
         const MaterialApp(
-          home: RealtimeDataDisplay(),
+          home: RealtimeDataDisplay(autoStartMonitor: false),
         ),
       );
 
@@ -31,7 +34,7 @@ void main() {
     testWidgets('should show app bar with title', (WidgetTester tester) async {
       await tester.pumpWidget(
         const MaterialApp(
-          home: RealtimeDataDisplay(),
+          home: RealtimeDataDisplay(autoStartMonitor: false),
         ),
       );
 
@@ -42,7 +45,7 @@ void main() {
     testWidgets('should have basic UI structure', (WidgetTester tester) async {
       await tester.pumpWidget(
         const MaterialApp(
-          home: RealtimeDataDisplay(),
+          home: RealtimeDataDisplay(autoStartMonitor: false),
         ),
       );
 

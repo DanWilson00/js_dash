@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 import 'package:dart_mavlink/mavlink.dart';
 import 'package:dart_mavlink/dialects/common.dart';
+import 'mavlink_message_tracker.dart';
 
 class MavlinkService {
   static MavlinkService? _instance;
@@ -13,6 +14,7 @@ class MavlinkService {
 
   final MavlinkDialectCommon _dialect;
   MavlinkParser? _parser;
+  final MavlinkMessageTracker _tracker = MavlinkMessageTracker();
   
   RawDatagramSocket? _socket;
   StreamSubscription<RawSocketEvent>? _socketSubscription;
@@ -43,6 +45,7 @@ class MavlinkService {
     
     _parser!.stream.listen((MavlinkFrame frame) {
       _frameController.add(frame);
+      _tracker.trackMessage(frame.message);
       _distributeMessage(frame.message);
     });
     

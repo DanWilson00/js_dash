@@ -66,6 +66,6 @@ The app is designed to handle MAVLink communication through:
 - Code generation for MAVLink messages is handled by the `tool/generate.dart` script in the dart-mavlink package
 - There are different dialects of mavlink. We are using `interface/dart-mavlink/mavlink/lib/dialects/common.dart`
 - The code at `interface/mavlink` can be ignored for now
-- Development should proceed with well defined modules. Each module should have a set of tests. When modules are developed, all tests should pass.
+- Development must proceed with well defined modules. Each module MUST have a set of tests. When modules are developed, all tests MUST pass before the module is complete.
 - Communication will be via USB-serial in production but we want a way to spoof the mavlink packets for testing without the need to connect to the autopilot.
 - The target is a linux app
