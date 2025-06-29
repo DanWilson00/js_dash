@@ -31,6 +31,10 @@ dependencies:
   flutter:
     sdk: flutter
 
+  # The RUNTIME ENGINE for handling MAVLink communication
+  # This is used in your main application code.
+  dart_mavlink: ^0.1.0 # Use the latest version from pub.dev
+
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.8
