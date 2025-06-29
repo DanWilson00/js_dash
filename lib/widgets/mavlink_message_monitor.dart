@@ -59,7 +59,7 @@ class _MavlinkMessageMonitorState extends State<MavlinkMessageMonitor> {
   @override
   Widget build(BuildContext context) {
     final sortedMessages = _messageStats.entries.toList()
-      ..sort((a, b) => b.value.frequency.compareTo(a.value.frequency));
+      ..sort((a, b) => a.key.compareTo(b.key));
 
     return Container(
       width: 350,
@@ -196,18 +196,9 @@ class _MavlinkMessageMonitorState extends State<MavlinkMessageMonitor> {
                           ),
                         ),
                         const SizedBox(height: 4),
-                        Row(
-                          children: [
-                            _buildStatChip(
-                              '${stats.frequency.toStringAsFixed(1)} Hz',
-                              Colors.green,
-                            ),
-                            const SizedBox(width: 8),
-                            _buildStatChip(
-                              '${stats.count}',
-                              Colors.blue,
-                            ),
-                          ],
+                        _buildStatChip(
+                          '${stats.frequency.toStringAsFixed(1)} Hz',
+                          Colors.green,
                         ),
                       ],
                     ),
