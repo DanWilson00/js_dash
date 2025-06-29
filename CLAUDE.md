@@ -68,3 +68,4 @@ The app is designed to handle MAVLink communication through:
 - The code at `interface/mavlink` can be ignored for now
 - Development should proceed with well defined modules. Each module should have a set of tests. When modules are developed, all tests should pass.
 - Communication will be via USB-serial in production but we want a way to spoof the mavlink packets for testing without the need to connect to the autopilot.
+- The target is a linux app
