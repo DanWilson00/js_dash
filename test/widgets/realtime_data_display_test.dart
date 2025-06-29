@@ -22,6 +22,8 @@ void main() {
     });
 
     testWidgets('should build without error', (WidgetTester tester) async {
+      await tester.binding.setSurfaceSize(const Size(1200, 800));
+      
       await tester.pumpWidget(
         const MaterialApp(
           home: RealtimeDataDisplay(autoStartMonitor: false),
@@ -29,9 +31,13 @@ void main() {
       );
 
       expect(find.byType(RealtimeDataDisplay), findsOneWidget);
+      
+      await tester.binding.setSurfaceSize(null);
     });
 
     testWidgets('should show app bar with title', (WidgetTester tester) async {
+      await tester.binding.setSurfaceSize(const Size(1200, 800));
+      
       await tester.pumpWidget(
         const MaterialApp(
           home: RealtimeDataDisplay(autoStartMonitor: false),
@@ -40,9 +46,14 @@ void main() {
 
       expect(find.text('Submersible Jetski Dashboard'), findsOneWidget);
       expect(find.byType(AppBar), findsOneWidget);
+      
+      await tester.binding.setSurfaceSize(null);
     });
 
     testWidgets('should have basic UI structure', (WidgetTester tester) async {
+      // Set larger test size to accommodate three-column layout
+      await tester.binding.setSurfaceSize(const Size(1200, 800));
+      
       await tester.pumpWidget(
         const MaterialApp(
           home: RealtimeDataDisplay(autoStartMonitor: false),
@@ -57,8 +68,11 @@ void main() {
       // Should have at least one scaffold
       expect(find.byType(Scaffold), findsOneWidget);
       
-      // Should have padding container
-      expect(find.byType(Padding), findsAtLeastNWidgets(1));
+      // Should have the new three-column layout with plotting
+      expect(find.byType(Row), findsAtLeastNWidgets(1));
+      
+      // Reset size
+      await tester.binding.setSurfaceSize(null);
     });
   });
 }

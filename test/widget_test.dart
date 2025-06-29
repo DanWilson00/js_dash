@@ -5,6 +5,7 @@
 // gestures. You can also use WidgetTester to find child widgets in the widget
 // tree, read text, and verify that the values of widget properties are correct.
 
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:js_dash/main.dart';
@@ -19,10 +20,16 @@ void main() {
     MavlinkSpoofService.resetInstanceForTesting();
     MavlinkMessageTracker.resetInstanceForTesting();
     
+    // Set larger test size for three-column layout
+    await tester.binding.setSurfaceSize(const Size(1200, 800));
+    
     // Build our app and trigger a frame.
     await tester.pumpWidget(const SubmersibleJetskiApp(autoStartMonitor: false));
 
     // Verify that our app starts with the dashboard title.
     expect(find.text('Submersible Jetski Dashboard'), findsOneWidget);
+    
+    // Reset size
+    await tester.binding.setSurfaceSize(null);
   });
 }

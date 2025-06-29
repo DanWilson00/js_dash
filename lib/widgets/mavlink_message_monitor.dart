@@ -3,9 +3,14 @@ import 'package:flutter/material.dart';
 import '../services/mavlink_message_tracker.dart';
 
 class MavlinkMessageMonitor extends StatefulWidget {
-  const MavlinkMessageMonitor({super.key, this.autoStart = true});
+  const MavlinkMessageMonitor({
+    super.key, 
+    this.autoStart = true,
+    this.onFieldSelected,
+  });
 
   final bool autoStart;
+  final Function(String messageType, String fieldName)? onFieldSelected;
 
   @override
   State<MavlinkMessageMonitor> createState() => _MavlinkMessageMonitorState();
@@ -211,7 +216,7 @@ class _MavlinkMessageMonitorState extends State<MavlinkMessageMonitor> {
               ),
             ),
           ),
-          if (isExpanded) _buildExpandedContent(fields),
+          if (isExpanded) _buildExpandedContent(messageName, fields),
         ],
       ),
     );
@@ -237,7 +242,7 @@ class _MavlinkMessageMonitorState extends State<MavlinkMessageMonitor> {
     );
   }
 
-  Widget _buildExpandedContent(Map<String, dynamic> fields) {
+  Widget _buildExpandedContent(String messageName, Map<String, dynamic> fields) {
     if (fields.isEmpty) {
       return Padding(
         padding: const EdgeInsets.all(12.0),
@@ -264,32 +269,55 @@ class _MavlinkMessageMonitorState extends State<MavlinkMessageMonitor> {
       padding: const EdgeInsets.all(12.0),
       child: Column(
         children: fields.entries.map((field) {
-          return Padding(
-            padding: const EdgeInsets.symmetric(vertical: 2.0),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                SizedBox(
-                  width: 100,
-                  child: Text(
-                    field.key,
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      fontWeight: FontWeight.w500,
-                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+          return InkWell(
+            onTap: widget.onFieldSelected != null 
+                ? () => widget.onFieldSelected!(messageName, field.key)
+                : null,
+            child: Container(
+              padding: const EdgeInsets.symmetric(vertical: 2.0, horizontal: 4.0),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(4),
+                color: widget.onFieldSelected != null 
+                    ? Colors.transparent
+                    : null,
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  SizedBox(
+                    width: 100,
+                    child: Text(
+                      field.key,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        fontWeight: FontWeight.w500,
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
                     ),
                   ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    field.value.toString(),
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      fontFamily: 'monospace',
-                      color: Theme.of(context).colorScheme.primary,
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            field.value.toString(),
+                            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              fontFamily: 'monospace',
+                              color: Theme.of(context).colorScheme.primary,
+                            ),
+                          ),
+                        ),
+                        if (widget.onFieldSelected != null)
+                          Icon(
+                            Icons.touch_app,
+                            size: 12,
+                            color: Theme.of(context).colorScheme.outline,
+                          ),
+                      ],
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           );
         }).toList(),
