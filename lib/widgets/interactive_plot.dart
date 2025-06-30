@@ -222,14 +222,18 @@ class _InteractivePlotState extends State<InteractivePlot> {
         lineBarsData: [
           LineChartBarData(
             spots: spots,
-            isCurved: true,
+            isCurved: false,
             color: Theme.of(context).colorScheme.primary,
             barWidth: 2,
-            dotData: const FlDotData(show: false),
-            belowBarData: BarAreaData(
+            dotData: FlDotData(
               show: true,
-              color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.1),
+              getDotPainter: (spot, percent, barData, index) => FlDotCirclePainter(
+                radius: 2,
+                color: Theme.of(context).colorScheme.primary,
+                strokeWidth: 0,
+              ),
             ),
+            belowBarData: BarAreaData(show: false),
           ),
         ],
       ),
