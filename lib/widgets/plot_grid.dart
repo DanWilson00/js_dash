@@ -23,6 +23,15 @@ class PlotGridManagerState extends State<PlotGridManager> {
   TimeWindowOption _currentTimeWindow = TimeWindowOption.getDefault();
 
   @override
+  void initState() {
+    super.initState();
+    // Auto-select the first plot when there's only one
+    if (_plots.length == 1) {
+      _selectedPlotId = _plots.first.id;
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Column(
       children: [
@@ -122,10 +131,28 @@ class PlotGridManagerState extends State<PlotGridManager> {
   }
 
   Widget _buildPlotGrid() {
+    // Adjust aspect ratio based on layout to ensure x-axis visibility
+    double aspectRatio;
+    switch (_currentLayout.type) {
+      case PlotLayoutType.single:
+        aspectRatio = 2.5; // Single plot can be wider
+        break;
+      case PlotLayoutType.horizontal:
+        aspectRatio = 2.0; // Side by side plots
+        break;
+      case PlotLayoutType.vertical:
+        aspectRatio = 2.2; // Stacked plots
+        break;
+      case PlotLayoutType.grid2x2:
+      case PlotLayoutType.grid3x2:
+        aspectRatio = 1.8; // Grid layouts need to be more compact
+        break;
+    }
+
     return GridView.builder(
       gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: _currentLayout.columns,
-        childAspectRatio: 1.8, // More square-ish to prevent cutoff
+        childAspectRatio: aspectRatio,
         crossAxisSpacing: 8,
         mainAxisSpacing: 8,
       ),
@@ -165,6 +192,11 @@ class PlotGridManagerState extends State<PlotGridManager> {
 
       // Update layout to match plot count
       _currentLayout = PlotLayout.getDefaultLayout(count);
+      
+      // Auto-select the first plot when there's only one
+      if (count == 1 && _selectedPlotId == null) {
+        _selectedPlotId = _plots.first.id;
+      }
     });
   }
 
