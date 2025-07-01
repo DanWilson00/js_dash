@@ -475,4 +475,18 @@ class PlotGridManagerState extends State<PlotGridManager> {
     
     return fields;
   }
+  
+  // Clear all signals from all plots
+  void clearAllPlots() {
+    setState(() {
+      _plots = _plots.map((plot) => plot.copyWith(
+        yAxis: plot.yAxis.clear(),
+      )).toList();
+    });
+    
+    // Notify parent to refresh field highlighting
+    if (widget.onFieldAssignment != null) {
+      widget.onFieldAssignment!();
+    }
+  }
 }

@@ -13,6 +13,7 @@ class TimeSeriesDataManager {
   
   StreamSubscription? _messageSubscription;
   bool _isTracking = false;
+  bool _isPaused = false;
 
   // Buffer configuration
   static const int defaultBufferSize = 1000; // ~5 minutes at 3Hz
@@ -37,6 +38,8 @@ class TimeSeriesDataManager {
   }
 
   void _processMessageUpdates(Map<String, MessageStats> messageStats) {
+    if (_isPaused) return; // Don't process new data when paused
+    
     final now = DateTime.now();
     bool hasNewData = false;
 
@@ -98,6 +101,23 @@ class TimeSeriesDataManager {
 
   List<String> getAvailableFields() {
     return _dataBuffers.keys.toList()..sort();
+  }
+  
+  void pause() {
+    _isPaused = true;
+  }
+  
+  void resume() {
+    _isPaused = false;
+  }
+  
+  bool get isPaused => _isPaused;
+  
+  void clearAllData() {
+    _dataBuffers.clear();
+    if (!_dataController.isClosed) {
+      _dataController.add({});
+    }
   }
 
   List<String> getFieldsForMessage(String messageType) {

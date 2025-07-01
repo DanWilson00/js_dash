@@ -28,6 +28,7 @@ class _RealtimeDataDisplayState extends State<RealtimeDataDisplay> {
   bool _isUsingSpoof = true;
   bool _isConnected = false;
   DateTime? _lastPacketTime;
+  bool _isPaused = false;
 
   @override
   void initState() {
@@ -147,6 +148,22 @@ class _RealtimeDataDisplayState extends State<RealtimeDataDisplay> {
     });
     _initializeServices();
   }
+  
+  void _togglePause() {
+    setState(() {
+      _isPaused = !_isPaused;
+      if (_isPaused) {
+        _dataManager.pause();
+      } else {
+        _dataManager.resume();
+      }
+    });
+  }
+  
+  void _clearAllPlots() {
+    _plotGridKey.currentState?.clearAllPlots();
+    _dataManager.clearAllData();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -155,6 +172,17 @@ class _RealtimeDataDisplayState extends State<RealtimeDataDisplay> {
         title: const Text('Submersible Jetski Dashboard'),
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
         actions: [
+          IconButton(
+            icon: Icon(_isPaused ? Icons.play_arrow : Icons.pause),
+            onPressed: _togglePause,
+            tooltip: _isPaused ? 'Resume Streaming' : 'Pause Streaming',
+          ),
+          IconButton(
+            icon: const Icon(Icons.clear_all),
+            onPressed: _clearAllPlots,
+            tooltip: 'Clear All Plots',
+          ),
+          const SizedBox(width: 8),
           IconButton(
             icon: Icon(_isUsingSpoof ? Icons.bug_report : Icons.wifi),
             onPressed: _toggleMode,
@@ -195,8 +223,8 @@ class _RealtimeDataDisplayState extends State<RealtimeDataDisplay> {
   }
 
   Widget _buildConnectionStatus() {
-    final statusColor = _isConnected ? Colors.green : Colors.red;
-    final statusText = _isConnected ? 'Connected' : 'Disconnected';
+    final statusColor = _isPaused ? Colors.orange : (_isConnected ? Colors.green : Colors.red);
+    final statusText = _isPaused ? 'Paused' : (_isConnected ? 'Connected' : 'Disconnected');
     final modeText = _isUsingSpoof ? 'SPOOF MODE' : 'REAL MAVLINK';
     
     return Card(
