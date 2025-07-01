@@ -115,7 +115,7 @@ class MessageStats {
 }
 
 class MavlinkMessageTracker {
-  static const Duration _statsUpdateInterval = Duration(milliseconds: 500);
+  static const Duration _statsUpdateInterval = Duration(milliseconds: 100);
   
   static MavlinkMessageTracker? _instance;
   factory MavlinkMessageTracker() => _instance ??= MavlinkMessageTracker._internal();
