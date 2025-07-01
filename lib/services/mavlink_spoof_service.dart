@@ -1,9 +1,9 @@
 import 'dart:async';
 import 'dart:math';
 import 'package:dart_mavlink/dialects/common.dart';
-import 'mavlink_message_tracker.dart';
+import 'mavlink_data_provider.dart';
 
-class MavlinkSpoofService {
+class MavlinkSpoofService extends MavlinkDataProvider {
   static MavlinkSpoofService? _instance;
   factory MavlinkSpoofService() => _instance ??= MavlinkSpoofService._internal();
   MavlinkSpoofService._internal();
@@ -19,19 +19,6 @@ class MavlinkSpoofService {
 
   final Random _random = Random();
   bool _isRunning = false;
-  final MavlinkMessageTracker _tracker = MavlinkMessageTracker();
-  
-  final StreamController<Heartbeat> _heartbeatController = StreamController<Heartbeat>.broadcast();
-  final StreamController<SysStatus> _sysStatusController = StreamController<SysStatus>.broadcast();
-  final StreamController<Attitude> _attitudeController = StreamController<Attitude>.broadcast();
-  final StreamController<GlobalPositionInt> _gpsController = StreamController<GlobalPositionInt>.broadcast();
-  final StreamController<VfrHud> _vfrHudController = StreamController<VfrHud>.broadcast();
-
-  Stream<Heartbeat> get heartbeatStream => _heartbeatController.stream;
-  Stream<SysStatus> get sysStatusStream => _sysStatusController.stream;
-  Stream<Attitude> get attitudeStream => _attitudeController.stream;
-  Stream<GlobalPositionInt> get gpsStream => _gpsController.stream;
-  Stream<VfrHud> get vfrHudStream => _vfrHudController.stream;
 
   bool get isRunning => _isRunning;
 
@@ -76,7 +63,7 @@ class MavlinkSpoofService {
   }
 
   void _generateHeartbeat() {
-    if (!_isRunning || _heartbeatController.isClosed) return;
+    if (!_isRunning) return;
     
     final heartbeat = Heartbeat(
       type: mavTypeSubmarine, // Submarine type for submersible jetski
@@ -86,12 +73,11 @@ class MavlinkSpoofService {
       systemStatus: mavStateActive,
       mavlinkVersion: 3,
     );
-    _tracker.trackMessage(heartbeat);
-    _heartbeatController.add(heartbeat);
+    addMessage(heartbeat);
   }
 
   void _generateSysStatus() {
-    if (!_isRunning || _sysStatusController.isClosed) return;
+    if (!_isRunning) return;
     
     final batteryRemaining = 50 + _random.nextInt(50); // 50-100% battery
     final sysStatus = SysStatus(
@@ -112,12 +98,11 @@ class MavlinkSpoofService {
       onboardControlSensorsEnabledExtended: 0,
       onboardControlSensorsHealthExtended: 0,
     );
-    _tracker.trackMessage(sysStatus);
-    _sysStatusController.add(sysStatus);
+    addMessage(sysStatus);
   }
 
   void _generateAttitude() {
-    if (!_isRunning || _attitudeController.isClosed) return;
+    if (!_isRunning) return;
     
     final time = DateTime.now().millisecondsSinceEpoch;
     
@@ -141,12 +126,11 @@ class MavlinkSpoofService {
       pitchspeed: (_random.nextDouble() - 0.5) * 0.1,
       yawspeed: (_random.nextDouble() - 0.5) * 0.05,
     );
-    _tracker.trackMessage(attitude);
-    _attitudeController.add(attitude);
+    addMessage(attitude);
   }
 
   void _generateGPS() {
-    if (!_isRunning || _gpsController.isClosed) return;
+    if (!_isRunning) return;
     
     final time = DateTime.now().millisecondsSinceEpoch;
     
@@ -166,12 +150,11 @@ class MavlinkSpoofService {
       vz: ((_random.nextDouble() - 0.5) * 50).round(), // ±0.5 m/s vertical
       hdg: (_heading * 100).round(), // Convert to centidegrees
     );
-    _tracker.trackMessage(gps);
-    _gpsController.add(gps);
+    addMessage(gps);
   }
 
   void _generateVfrHud() {
-    if (!_isRunning || _vfrHudController.isClosed) return;
+    if (!_isRunning) return;
     
     _speed = 2.0 + _random.nextDouble() * 2.0; // 2-4 m/s speed variation
     _heading += (_random.nextDouble() - 0.5) * 2.0; // Gradual heading change
@@ -186,17 +169,12 @@ class MavlinkSpoofService {
       alt: _alt,
       climb: (_random.nextDouble() - 0.5) * 0.5, // ±0.5 m/s climb rate
     );
-    _tracker.trackMessage(vfrHud);
-    _vfrHudController.add(vfrHud);
+    addMessage(vfrHud);
   }
 
   void dispose() {
     stopSpoofing();
-    _heartbeatController.close();
-    _sysStatusController.close();
-    _attitudeController.close();
-    _gpsController.close();
-    _vfrHudController.close();
+    disposeStreams();
   }
 
   // For testing - reset singleton instance

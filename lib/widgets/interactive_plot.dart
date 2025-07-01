@@ -63,111 +63,136 @@ class _InteractivePlotState extends State<InteractivePlot> {
   void _updatePlotData() {
     if (!widget.configuration.yAxis.hasVisibleSignals) return;
 
-    final now = DateTime.now();
-    final startTime = now.subtract(widget.configuration.timeWindow);
-    final cutoff = now.subtract(widget.configuration.timeWindow);
+    final timeWindow = _calculateTimeWindow();
+    final dataProcessingResult = _processSignalData(timeWindow);
     
-    final newSignalSpots = <String, List<FlSpot>>{};
+    if (!dataProcessingResult.hasNewData && _signalSpots.isNotEmpty) return;
+
+    final yAxisBounds = _calculateYAxisBounds(dataProcessingResult.allValues);
+    
+    setState(() {
+      _signalSpots = dataProcessingResult.signalSpots;
+      _minY = yAxisBounds.minY;
+      _maxY = yAxisBounds.maxY;
+    });
+  }
+
+  _TimeWindow _calculateTimeWindow() {
+    final now = DateTime.now();
+    final cutoff = now.subtract(widget.configuration.timeWindow);
+    return _TimeWindow(startTime: cutoff, cutoff: cutoff);
+  }
+
+  _DataProcessingResult _processSignalData(_TimeWindow timeWindow) {
+    final signalSpots = <String, List<FlSpot>>{};
     final allValues = <double>[];
     bool hasNewData = false;
 
-    // Process each visible signal
     for (final signal in widget.configuration.yAxis.visibleSignals) {
       final fieldKey = signal.fieldKey;
       final data = _dataManager.getFieldData(signal.messageType, signal.fieldName);
       
-      // Check if we have new data for this signal
-      final lastLength = _lastDataLengths[fieldKey] ?? 0;
-      if (data.length != lastLength) {
-        _lastDataLengths[fieldKey] = data.length;
+      if (_checkForNewData(fieldKey, data.length)) {
         hasNewData = true;
       }
 
-      // Filter data by time window
-      final filteredData = data
-          .where((point) => point.timestamp.isAfter(cutoff))
-          .toList();
-
-      if (filteredData.isNotEmpty) {
-        // Convert to FlSpots with scaling
-        List<FlSpot> spots;
-        if (widget.configuration.yAxis.scalingMode == ScalingMode.independent) {
-          // Normalize to 0-100% range
-          final values = filteredData.map((p) => p.value).toList();
-          final minVal = values.reduce((a, b) => a < b ? a : b);
-          final maxVal = values.reduce((a, b) => a > b ? a : b);
-          final range = maxVal - minVal;
-          
-          spots = filteredData.map((point) {
-            final x = point.timestamp.difference(startTime).inMilliseconds.toDouble();
-            final normalizedY = range > 0 ? ((point.value - minVal) / range) * 100.0 : 50.0;
-            return FlSpot(x, normalizedY);
-          }).toList();
-          
-          // Add normalized values for independent scaling
-          allValues.addAll(spots.map((s) => s.y));
-        } else {
-          // Use raw values for unified/auto scaling
-          spots = filteredData.map((point) {
-            final x = point.timestamp.difference(startTime).inMilliseconds.toDouble();
-            return FlSpot(x, point.value);
-          }).toList();
-          
-          // Add raw values for scaling calculation
-          allValues.addAll(spots.map((s) => s.y));
-        }
-        
-        newSignalSpots[fieldKey] = spots;
-      } else {
-        newSignalSpots[fieldKey] = [];
-      }
+      final filteredData = _filterDataByTime(data, timeWindow.cutoff);
+      final spots = _convertToFlSpots(filteredData, timeWindow.startTime);
+      
+      signalSpots[fieldKey] = spots;
+      allValues.addAll(spots.map((s) => s.y));
     }
 
-    // Only update if we have new data
-    if (!hasNewData && _signalSpots.isNotEmpty) return;
+    return _DataProcessingResult(
+      signalSpots: signalSpots,
+      allValues: allValues,
+      hasNewData: hasNewData,
+    );
+  }
 
-    // Calculate Y axis bounds
-    double newMinY, newMaxY;
-    if (allValues.isNotEmpty) {
-      switch (widget.configuration.yAxis.scalingMode) {
-        case ScalingMode.autoScale:
-          newMinY = allValues.reduce((a, b) => a < b ? a : b);
-          newMaxY = allValues.reduce((a, b) => a > b ? a : b);
-          
-          // Add 10% padding
-          final range = newMaxY - newMinY;
-          if (range > 0) {
-            newMinY -= range * 0.1;
-            newMaxY += range * 0.1;
-          } else {
-            newMinY -= 1;
-            newMaxY += 1;
-          }
-          break;
-        case ScalingMode.independent:
-          // For independent scaling, use 0-100% range
-          newMinY = 0;
-          newMaxY = 100;
-          break;
-        case ScalingMode.unified:
-          // Use configured bounds or calculate from data
-          newMinY = widget.configuration.yAxis.minY ?? 
-                   allValues.reduce((a, b) => a < b ? a : b);
-          newMaxY = widget.configuration.yAxis.maxY ?? 
-                   allValues.reduce((a, b) => a > b ? a : b);
-          break;
-      }
+  bool _checkForNewData(String fieldKey, int currentLength) {
+    final lastLength = _lastDataLengths[fieldKey] ?? 0;
+    if (currentLength != lastLength) {
+      _lastDataLengths[fieldKey] = currentLength;
+      return true;
+    }
+    return false;
+  }
+
+  List<TimeSeriesPoint> _filterDataByTime(List<TimeSeriesPoint> data, DateTime cutoff) {
+    return data.where((point) => point.timestamp.isAfter(cutoff)).toList();
+  }
+
+  List<FlSpot> _convertToFlSpots(List<TimeSeriesPoint> filteredData, DateTime startTime) {
+    if (filteredData.isEmpty) return [];
+
+    if (widget.configuration.yAxis.scalingMode == ScalingMode.independent) {
+      return _createNormalizedFlSpots(filteredData, startTime);
     } else {
-      newMinY = widget.configuration.yAxis.minY ?? 0;
-      newMaxY = widget.configuration.yAxis.maxY ?? 100;
+      return _createRawFlSpots(filteredData, startTime);
+    }
+  }
+
+  List<FlSpot> _createNormalizedFlSpots(List<TimeSeriesPoint> data, DateTime startTime) {
+    final values = data.map((p) => p.value).toList();
+    final minVal = values.reduce((a, b) => a < b ? a : b);
+    final maxVal = values.reduce((a, b) => a > b ? a : b);
+    final range = maxVal - minVal;
+    
+    return data.map((point) {
+      final x = point.timestamp.difference(startTime).inMilliseconds.toDouble();
+      final normalizedY = range > 0 ? ((point.value - minVal) / range) * 100.0 : 50.0;
+      return FlSpot(x, normalizedY);
+    }).toList();
+  }
+
+  List<FlSpot> _createRawFlSpots(List<TimeSeriesPoint> data, DateTime startTime) {
+    return data.map((point) {
+      final x = point.timestamp.difference(startTime).inMilliseconds.toDouble();
+      return FlSpot(x, point.value);
+    }).toList();
+  }
+
+  _YAxisBounds _calculateYAxisBounds(List<double> allValues) {
+    if (allValues.isEmpty) {
+      return _YAxisBounds(
+        minY: widget.configuration.yAxis.minY ?? 0,
+        maxY: widget.configuration.yAxis.maxY ?? 100,
+      );
     }
 
-    // Always update for maximum responsiveness
-    setState(() {
-      _signalSpots = newSignalSpots;
-      _minY = newMinY;
-      _maxY = newMaxY;
-    });
+    switch (widget.configuration.yAxis.scalingMode) {
+      case ScalingMode.autoScale:
+        return _calculateAutoScaleBounds(allValues);
+      case ScalingMode.independent:
+        return _YAxisBounds(minY: 0, maxY: 100);
+      case ScalingMode.unified:
+        return _calculateUnifiedBounds(allValues);
+    }
+  }
+
+  _YAxisBounds _calculateAutoScaleBounds(List<double> values) {
+    double minY = values.reduce((a, b) => a < b ? a : b);
+    double maxY = values.reduce((a, b) => a > b ? a : b);
+    
+    final range = maxY - minY;
+    if (range > 0) {
+      minY -= range * 0.1;
+      maxY += range * 0.1;
+    } else {
+      minY -= 1;
+      maxY += 1;
+    }
+    
+    return _YAxisBounds(minY: minY, maxY: maxY);
+  }
+
+  _YAxisBounds _calculateUnifiedBounds(List<double> values) {
+    final minY = widget.configuration.yAxis.minY ?? 
+                values.reduce((a, b) => a < b ? a : b);
+    final maxY = widget.configuration.yAxis.maxY ?? 
+                values.reduce((a, b) => a > b ? a : b);
+    return _YAxisBounds(minY: minY, maxY: maxY);
   }
 
   @override
@@ -422,4 +447,30 @@ class _InteractivePlotState extends State<InteractivePlot> {
       ],
     );
   }
+}
+
+class _TimeWindow {
+  final DateTime startTime;
+  final DateTime cutoff;
+  
+  _TimeWindow({required this.startTime, required this.cutoff});
+}
+
+class _DataProcessingResult {
+  final Map<String, List<FlSpot>> signalSpots;
+  final List<double> allValues;
+  final bool hasNewData;
+  
+  _DataProcessingResult({
+    required this.signalSpots,
+    required this.allValues,
+    required this.hasNewData,
+  });
+}
+
+class _YAxisBounds {
+  final double minY;
+  final double maxY;
+  
+  _YAxisBounds({required this.minY, required this.maxY});
 }

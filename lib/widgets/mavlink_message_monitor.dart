@@ -21,6 +21,7 @@ class MavlinkMessageMonitor extends StatefulWidget {
 }
 
 class _MavlinkMessageMonitorState extends State<MavlinkMessageMonitor> {
+  static const double _monitorWidth = 350.0;
   final MavlinkMessageTracker _tracker = MavlinkMessageTracker();
   Map<String, MessageStats> _messageStats = {};
   StreamSubscription? _statsSubscription;
@@ -71,7 +72,7 @@ class _MavlinkMessageMonitorState extends State<MavlinkMessageMonitor> {
       ..sort((a, b) => a.key.compareTo(b.key));
 
     return Container(
-      width: 350,
+      width: _monitorWidth,
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.surface,
         border: Border(

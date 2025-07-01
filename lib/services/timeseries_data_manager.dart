@@ -128,12 +128,6 @@ class TimeSeriesDataManager {
       ..sort();
   }
 
-  void clearData() {
-    _dataBuffers.clear();
-    if (!_dataController.isClosed) {
-      _dataController.add({});
-    }
-  }
 
   void dispose() {
     stopTracking();

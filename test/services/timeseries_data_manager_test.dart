@@ -35,7 +35,7 @@ void main() {
     });
 
     test('should clear data', () {
-      dataManager.clearData();
+      dataManager.clearAllData();
       expect(dataManager.getAvailableFields(), isEmpty);
     });
 

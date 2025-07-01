@@ -2,9 +2,9 @@ import 'dart:async';
 import 'dart:io';
 import 'package:dart_mavlink/mavlink.dart';
 import 'package:dart_mavlink/dialects/common.dart';
-import 'mavlink_message_tracker.dart';
+import 'mavlink_data_provider.dart';
 
-class MavlinkService {
+class MavlinkService extends MavlinkDataProvider {
   static MavlinkService? _instance;
   factory MavlinkService() => _instance ??= MavlinkService._internal();
   MavlinkService._internal() : _dialect = MavlinkDialectCommon();
@@ -14,24 +14,13 @@ class MavlinkService {
 
   final MavlinkDialectCommon _dialect;
   MavlinkParser? _parser;
-  final MavlinkMessageTracker _tracker = MavlinkMessageTracker();
   
   RawDatagramSocket? _socket;
   StreamSubscription<RawSocketEvent>? _socketSubscription;
   
   final StreamController<MavlinkFrame> _frameController = StreamController<MavlinkFrame>.broadcast();
-  final StreamController<Heartbeat> _heartbeatController = StreamController<Heartbeat>.broadcast();
-  final StreamController<SysStatus> _sysStatusController = StreamController<SysStatus>.broadcast();
-  final StreamController<Attitude> _attitudeController = StreamController<Attitude>.broadcast();
-  final StreamController<GlobalPositionInt> _gpsController = StreamController<GlobalPositionInt>.broadcast();
-  final StreamController<VfrHud> _vfrHudController = StreamController<VfrHud>.broadcast();
 
   Stream<MavlinkFrame> get frameStream => _frameController.stream;
-  Stream<Heartbeat> get heartbeatStream => _heartbeatController.stream;
-  Stream<SysStatus> get sysStatusStream => _sysStatusController.stream;
-  Stream<Attitude> get attitudeStream => _attitudeController.stream;
-  Stream<GlobalPositionInt> get gpsStream => _gpsController.stream;
-  Stream<VfrHud> get vfrHudStream => _vfrHudController.stream;
 
   bool _isConnected = false;
   bool get isConnected => _isConnected;
@@ -45,8 +34,7 @@ class MavlinkService {
     
     _parser!.stream.listen((MavlinkFrame frame) {
       _frameController.add(frame);
-      _tracker.trackMessage(frame.message);
-      _distributeMessage(frame.message);
+      addMessage(frame.message);
     });
     
     _isInitialized = true;
@@ -76,19 +64,6 @@ class MavlinkService {
     }
   }
 
-  void _distributeMessage(MavlinkMessage message) {
-    if (message is Heartbeat) {
-      _heartbeatController.add(message);
-    } else if (message is SysStatus) {
-      _sysStatusController.add(message);
-    } else if (message is Attitude) {
-      _attitudeController.add(message);
-    } else if (message is GlobalPositionInt) {
-      _gpsController.add(message);
-    } else if (message is VfrHud) {
-      _vfrHudController.add(message);
-    }
-  }
 
   Future<void> disconnect() async {
     await _socketSubscription?.cancel();
@@ -101,11 +76,7 @@ class MavlinkService {
   void dispose() {
     disconnect();
     _frameController.close();
-    _heartbeatController.close();
-    _sysStatusController.close();
-    _attitudeController.close();
-    _gpsController.close();
-    _vfrHudController.close();
+    disposeStreams();
     _isInitialized = false;
   }
 

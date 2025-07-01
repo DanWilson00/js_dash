@@ -115,6 +115,8 @@ class MessageStats {
 }
 
 class MavlinkMessageTracker {
+  static const Duration _statsUpdateInterval = Duration(milliseconds: 500);
+  
   static MavlinkMessageTracker? _instance;
   factory MavlinkMessageTracker() => _instance ??= MavlinkMessageTracker._internal();
   MavlinkMessageTracker._internal();
@@ -133,8 +135,8 @@ class MavlinkMessageTracker {
     if (_isTracking) return;
     _isTracking = true;
     
-    // Update stats stream every 500ms
-    _updateTimer = Timer.periodic(const Duration(milliseconds: 500), (_) {
+    // Update stats stream periodically
+    _updateTimer = Timer.periodic(_statsUpdateInterval, (_) {
       if (!_statsController.isClosed) {
         _statsController.add(Map.from(_messageStats));
       }
@@ -156,68 +158,67 @@ class MavlinkMessageTracker {
     _messageStats[messageName]!.updateMessage(message);
   }
 
+  static final Map<Type, String> _messageTypeMap = {
+    Heartbeat: 'HEARTBEAT',
+    SysStatus: 'SYS_STATUS',
+    Attitude: 'ATTITUDE',
+    GlobalPositionInt: 'GLOBAL_POSITION_INT',
+    VfrHud: 'VFR_HUD',
+    SystemTime: 'SYSTEM_TIME',
+    Ping: 'PING',
+    ChangeOperatorControl: 'CHANGE_OPERATOR_CONTROL',
+    ChangeOperatorControlAck: 'CHANGE_OPERATOR_CONTROL_ACK',
+    AuthKey: 'AUTH_KEY',
+    SetMode: 'SET_MODE',
+    ParamRequestRead: 'PARAM_REQUEST_READ',
+    ParamRequestList: 'PARAM_REQUEST_LIST',
+    ParamValue: 'PARAM_VALUE',
+    ParamSet: 'PARAM_SET',
+    GpsRawInt: 'GPS_RAW_INT',
+    GpsStatus: 'GPS_STATUS',
+    ScaledImu: 'SCALED_IMU',
+    RawImu: 'RAW_IMU',
+    RawPressure: 'RAW_PRESSURE',
+    ScaledPressure: 'SCALED_PRESSURE',
+    AttitudeQuaternion: 'ATTITUDE_QUATERNION',
+    LocalPositionNed: 'LOCAL_POSITION_NED',
+    GlobalPositionIntCov: 'GLOBAL_POSITION_INT_COV',
+    RcChannelsScaled: 'RC_CHANNELS_SCALED',
+    RcChannelsRaw: 'RC_CHANNELS_RAW',
+    ServoOutputRaw: 'SERVO_OUTPUT_RAW',
+    MissionRequestPartialList: 'MISSION_REQUEST_PARTIAL_LIST',
+    MissionWritePartialList: 'MISSION_WRITE_PARTIAL_LIST',
+    MissionItem: 'MISSION_ITEM',
+    MissionRequest: 'MISSION_REQUEST',
+    MissionSetCurrent: 'MISSION_SET_CURRENT',
+    MissionCurrent: 'MISSION_CURRENT',
+    MissionRequestList: 'MISSION_REQUEST_LIST',
+    MissionCount: 'MISSION_COUNT',
+    MissionClearAll: 'MISSION_CLEAR_ALL',
+    MissionItemReached: 'MISSION_ITEM_REACHED',
+    MissionAck: 'MISSION_ACK',
+    SetGpsGlobalOrigin: 'SET_GPS_GLOBAL_ORIGIN',
+    GpsGlobalOrigin: 'GPS_GLOBAL_ORIGIN',
+    ParamMapRc: 'PARAM_MAP_RC',
+    MissionRequestInt: 'MISSION_REQUEST_INT',
+    SafetySetAllowedArea: 'SAFETY_SET_ALLOWED_AREA',
+    SafetyAllowedArea: 'SAFETY_ALLOWED_AREA',
+    AttitudeQuaternionCov: 'ATTITUDE_QUATERNION_COV',
+    NavControllerOutput: 'NAV_CONTROLLER_OUTPUT',
+    LocalPositionNedCov: 'LOCAL_POSITION_NED_COV',
+    RcChannels: 'RC_CHANNELS',
+    RequestDataStream: 'REQUEST_DATA_STREAM',
+    DataStream: 'DATA_STREAM',
+    ManualControl: 'MANUAL_CONTROL',
+    RcChannelsOverride: 'RC_CHANNELS_OVERRIDE',
+    MissionItemInt: 'MISSION_ITEM_INT',
+    CommandInt: 'COMMAND_INT',
+    CommandLong: 'COMMAND_LONG',
+    CommandAck: 'COMMAND_ACK',
+  };
+
   String _getMessageName(MavlinkMessage message) {
-    if (message is Heartbeat) return 'HEARTBEAT';
-    if (message is SysStatus) return 'SYS_STATUS';
-    if (message is Attitude) return 'ATTITUDE';
-    if (message is GlobalPositionInt) return 'GLOBAL_POSITION_INT';
-    if (message is VfrHud) return 'VFR_HUD';
-    if (message is SystemTime) return 'SYSTEM_TIME';
-    if (message is Ping) return 'PING';
-    if (message is ChangeOperatorControl) return 'CHANGE_OPERATOR_CONTROL';
-    if (message is ChangeOperatorControlAck) return 'CHANGE_OPERATOR_CONTROL_ACK';
-    if (message is AuthKey) return 'AUTH_KEY';
-    if (message is SetMode) return 'SET_MODE';
-    if (message is ParamRequestRead) return 'PARAM_REQUEST_READ';
-    if (message is ParamRequestList) return 'PARAM_REQUEST_LIST';
-    if (message is ParamValue) return 'PARAM_VALUE';
-    if (message is ParamSet) return 'PARAM_SET';
-    if (message is GpsRawInt) return 'GPS_RAW_INT';
-    if (message is GpsStatus) return 'GPS_STATUS';
-    if (message is ScaledImu) return 'SCALED_IMU';
-    if (message is RawImu) return 'RAW_IMU';
-    if (message is RawPressure) return 'RAW_PRESSURE';
-    if (message is ScaledPressure) return 'SCALED_PRESSURE';
-    if (message is AttitudeQuaternion) return 'ATTITUDE_QUATERNION';
-    if (message is LocalPositionNed) return 'LOCAL_POSITION_NED';
-    if (message is GlobalPositionIntCov) return 'GLOBAL_POSITION_INT_COV';
-    if (message is RcChannelsScaled) return 'RC_CHANNELS_SCALED';
-    if (message is RcChannelsRaw) return 'RC_CHANNELS_RAW';
-    if (message is ServoOutputRaw) return 'SERVO_OUTPUT_RAW';
-    if (message is MissionRequestPartialList) return 'MISSION_REQUEST_PARTIAL_LIST';
-    if (message is MissionWritePartialList) return 'MISSION_WRITE_PARTIAL_LIST';
-    if (message is MissionItem) return 'MISSION_ITEM';
-    if (message is MissionRequest) return 'MISSION_REQUEST';
-    if (message is MissionSetCurrent) return 'MISSION_SET_CURRENT';
-    if (message is MissionCurrent) return 'MISSION_CURRENT';
-    if (message is MissionRequestList) return 'MISSION_REQUEST_LIST';
-    if (message is MissionCount) return 'MISSION_COUNT';
-    if (message is MissionClearAll) return 'MISSION_CLEAR_ALL';
-    if (message is MissionItemReached) return 'MISSION_ITEM_REACHED';
-    if (message is MissionAck) return 'MISSION_ACK';
-    if (message is SetGpsGlobalOrigin) return 'SET_GPS_GLOBAL_ORIGIN';
-    if (message is GpsGlobalOrigin) return 'GPS_GLOBAL_ORIGIN';
-    if (message is ParamMapRc) return 'PARAM_MAP_RC';
-    if (message is MissionRequestInt) return 'MISSION_REQUEST_INT';
-    if (message is SafetySetAllowedArea) return 'SAFETY_SET_ALLOWED_AREA';
-    if (message is SafetyAllowedArea) return 'SAFETY_ALLOWED_AREA';
-    if (message is AttitudeQuaternionCov) return 'ATTITUDE_QUATERNION_COV';
-    if (message is NavControllerOutput) return 'NAV_CONTROLLER_OUTPUT';
-    if (message is GlobalPositionIntCov) return 'GLOBAL_POSITION_INT_COV';
-    if (message is LocalPositionNedCov) return 'LOCAL_POSITION_NED_COV';
-    if (message is RcChannels) return 'RC_CHANNELS';
-    if (message is RequestDataStream) return 'REQUEST_DATA_STREAM';
-    if (message is DataStream) return 'DATA_STREAM';
-    if (message is ManualControl) return 'MANUAL_CONTROL';
-    if (message is RcChannelsOverride) return 'RC_CHANNELS_OVERRIDE';
-    if (message is MissionItemInt) return 'MISSION_ITEM_INT';
-    if (message is VfrHud) return 'VFR_HUD';
-    if (message is CommandInt) return 'COMMAND_INT';
-    if (message is CommandLong) return 'COMMAND_LONG';
-    if (message is CommandAck) return 'COMMAND_ACK';
-    
-    // Fallback for unknown message types
-    return 'MSG_${message.mavlinkMessageId}';
+    return _messageTypeMap[message.runtimeType] ?? 'MSG_${message.mavlinkMessageId}';
   }
 
   void clearStats() {
