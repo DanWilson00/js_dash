@@ -28,7 +28,6 @@ class InteractivePlot extends StatefulWidget {
 class _InteractivePlotState extends State<InteractivePlot> {
   final TimeSeriesDataManager _dataManager = TimeSeriesDataManager();
   Map<String, List<FlSpot>> _signalSpots = {};
-  Map<String, double> _currentValues = {};
   double _minY = 0;
   double _maxY = 100;
   StreamSubscription? _dataSubscription;
@@ -69,7 +68,6 @@ class _InteractivePlotState extends State<InteractivePlot> {
     final cutoff = now.subtract(widget.configuration.timeWindow);
     
     final newSignalSpots = <String, List<FlSpot>>{};
-    final newCurrentValues = <String, double>{};
     final allValues = <double>[];
     bool hasNewData = false;
 
@@ -91,9 +89,6 @@ class _InteractivePlotState extends State<InteractivePlot> {
           .toList();
 
       if (filteredData.isNotEmpty) {
-        // Store current value
-        newCurrentValues[fieldKey] = filteredData.last.value;
-        
         // Convert to FlSpots with scaling
         List<FlSpot> spots;
         if (widget.configuration.yAxis.scalingMode == ScalingMode.independent) {
@@ -170,7 +165,6 @@ class _InteractivePlotState extends State<InteractivePlot> {
     // Always update for maximum responsiveness
     setState(() {
       _signalSpots = newSignalSpots;
-      _currentValues = newCurrentValues;
       _minY = newMinY;
       _maxY = newMaxY;
     });
@@ -350,8 +344,8 @@ class _InteractivePlotState extends State<InteractivePlot> {
         if (widget.configuration.yAxis.visibleSignals.length > 1)
           PlotLegendOverlay(
             signals: widget.configuration.yAxis.signals,
-            showValues: true,
-            currentValues: _currentValues,
+            showValues: false,
+            currentValues: const {},
             alignment: Alignment.topRight,
           ),
       ],
