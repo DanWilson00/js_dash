@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 import '../models/plot_configuration.dart';
@@ -23,39 +24,110 @@ class InteractivePlot extends StatefulWidget {
 
 class _InteractivePlotState extends State<InteractivePlot> {
   final TimeSeriesDataManager _dataManager = TimeSeriesDataManager();
-  List<TimeSeriesPoint> _plotData = [];
+  List<FlSpot> _spots = [];
+  double _minY = 0;
+  double _maxY = 100;
+  StreamSubscription? _dataSubscription;
+  int _lastDataLength = 0;
 
   @override
   void initState() {
     super.initState();
-    _updatePlotData();
-    _dataManager.dataStream.listen((_) {
-      if (mounted) {
+    _initializeData();
+    _setupDataListener();
+  }
+
+  @override
+  void dispose() {
+    _dataSubscription?.cancel();
+    super.dispose();
+  }
+
+  void _initializeData() {
+    if (widget.configuration.yAxis.hasData) {
+      _updatePlotData();
+    }
+  }
+
+  void _setupDataListener() {
+    _dataSubscription = _dataManager.dataStream.listen((_) {
+      if (mounted && widget.configuration.yAxis.hasData) {
         _updatePlotData();
       }
     });
   }
 
   void _updatePlotData() {
-    if (widget.configuration.yAxis.hasData) {
-      final data = _dataManager.getFieldData(
-        widget.configuration.yAxis.messageType!,
-        widget.configuration.yAxis.fieldName!,
-      );
-      
-      final now = DateTime.now();
-      final cutoff = now.subtract(widget.configuration.timeWindow);
-      
-      setState(() {
-        _plotData = data
-            .where((point) => point.timestamp.isAfter(cutoff))
-            .toList();
-      });
-    } else {
-      setState(() {
-        _plotData = [];
-      });
+    if (!widget.configuration.yAxis.hasData) return;
+
+    final data = _dataManager.getFieldData(
+      widget.configuration.yAxis.messageType!,
+      widget.configuration.yAxis.fieldName!,
+    );
+
+    // Only proceed if we have new data
+    if (data.length == _lastDataLength) return;
+    _lastDataLength = data.length;
+
+    if (data.isEmpty) {
+      if (_spots.isNotEmpty) {
+        setState(() {
+          _spots = [];
+        });
+      }
+      return;
     }
+
+    // Filter data by time window
+    final now = DateTime.now();
+    final cutoff = now.subtract(widget.configuration.timeWindow);
+    final filteredData = data
+        .where((point) => point.timestamp.isAfter(cutoff))
+        .toList();
+
+    if (filteredData.isEmpty) {
+      if (_spots.isNotEmpty) {
+        setState(() {
+          _spots = [];
+        });
+      }
+      return;
+    }
+
+    // Calculate time-based X coordinates
+    final startTime = now.subtract(widget.configuration.timeWindow);
+    final newSpots = filteredData.map((point) {
+      final x = point.timestamp.difference(startTime).inMilliseconds.toDouble();
+      return FlSpot(x, point.value);
+    }).toList();
+
+    // Calculate Y axis bounds
+    double newMinY, newMaxY;
+    if (widget.configuration.yAxis.autoScale && newSpots.isNotEmpty) {
+      final values = newSpots.map((s) => s.y).toList();
+      newMinY = values.reduce((a, b) => a < b ? a : b);
+      newMaxY = values.reduce((a, b) => a > b ? a : b);
+      
+      // Add 10% padding
+      final range = newMaxY - newMinY;
+      if (range > 0) {
+        newMinY -= range * 0.1;
+        newMaxY += range * 0.1;
+      } else {
+        newMinY -= 1;
+        newMaxY += 1;
+      }
+    } else {
+      newMinY = widget.configuration.yAxis.minY ?? 0;
+      newMaxY = widget.configuration.yAxis.maxY ?? 100;
+    }
+
+    // Always update for maximum responsiveness
+    setState(() {
+      _spots = newSpots;
+      _minY = newMinY;
+      _maxY = newMaxY;
+    });
   }
 
   @override
@@ -120,7 +192,7 @@ class _InteractivePlotState extends State<InteractivePlot> {
   }
 
   Widget _buildChart() {
-    if (_plotData.isEmpty) {
+    if (_spots.isEmpty) {
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -143,41 +215,12 @@ class _InteractivePlotState extends State<InteractivePlot> {
       );
     }
 
-    final now = DateTime.now();
-    final startTime = now.subtract(widget.configuration.timeWindow);
-    
-    final spots = _plotData.map((point) {
-      final x = point.timestamp.difference(startTime).inMilliseconds.toDouble();
-      return FlSpot(x, point.value);
-    }).toList();
-
-    // Calculate Y axis bounds
-    double minY, maxY;
-    if (widget.configuration.yAxis.autoScale && spots.isNotEmpty) {
-      final values = spots.map((s) => s.y).toList();
-      minY = values.reduce((a, b) => a < b ? a : b);
-      maxY = values.reduce((a, b) => a > b ? a : b);
-      
-      // Add 10% padding
-      final range = maxY - minY;
-      if (range > 0) {
-        minY -= range * 0.1;
-        maxY += range * 0.1;
-      } else {
-        minY -= 1;
-        maxY += 1;
-      }
-    } else {
-      minY = widget.configuration.yAxis.minY ?? 0;
-      maxY = widget.configuration.yAxis.maxY ?? 100;
-    }
-
     return LineChart(
       LineChartData(
         gridData: FlGridData(
           show: true,
           drawVerticalLine: true,
-          horizontalInterval: (maxY - minY) / 5,
+          horizontalInterval: (_maxY - _minY) / 5,
           verticalInterval: widget.configuration.timeWindow.inMilliseconds / 5,
           getDrawingHorizontalLine: (value) => FlLine(
             color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.2),
@@ -197,13 +240,13 @@ class _InteractivePlotState extends State<InteractivePlot> {
               showTitles: true,
               reservedSize: 30,
               interval: widget.configuration.timeWindow.inMilliseconds / 4,
-              getTitlesWidget: (value, meta) => _buildTimeLabel(value, startTime),
+              getTitlesWidget: (value, meta) => _buildTimeLabel(value),
             ),
           ),
           leftTitles: AxisTitles(
             sideTitles: SideTitles(
               showTitles: true,
-              interval: (maxY - minY) / 4,
+              interval: (_maxY - _minY) / 4,
               reservedSize: 60,
               getTitlesWidget: (value, meta) => _buildValueLabel(value),
             ),
@@ -217,32 +260,28 @@ class _InteractivePlotState extends State<InteractivePlot> {
         ),
         minX: 0,
         maxX: widget.configuration.timeWindow.inMilliseconds.toDouble(),
-        minY: minY,
-        maxY: maxY,
+        minY: _minY,
+        maxY: _maxY,
         lineBarsData: [
           LineChartBarData(
-            spots: spots,
+            spots: _spots,
             isCurved: false,
             color: Theme.of(context).colorScheme.primary,
             barWidth: 2,
-            dotData: FlDotData(
-              show: true,
-              getDotPainter: (spot, percent, barData, index) => FlDotCirclePainter(
-                radius: 2,
-                color: Theme.of(context).colorScheme.primary,
-                strokeWidth: 0,
-              ),
-            ),
+            dotData: FlDotData(show: false), // No dots for maximum performance
             belowBarData: BarAreaData(show: false),
           ),
         ],
       ),
+      // No animation duration - immediate updates
+      duration: Duration.zero,
     );
   }
 
-  Widget _buildTimeLabel(double value, DateTime startTime) {
-    final time = startTime.add(Duration(milliseconds: value.round()));
+  Widget _buildTimeLabel(double value) {
     final now = DateTime.now();
+    final startTime = now.subtract(widget.configuration.timeWindow);
+    final time = startTime.add(Duration(milliseconds: value.round()));
     final diff = now.difference(time);
     
     String label;

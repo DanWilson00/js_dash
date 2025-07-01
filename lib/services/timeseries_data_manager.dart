@@ -133,4 +133,18 @@ class TimeSeriesDataManager {
   Map<String, int> getDataSummary() {
     return _dataBuffers.map((key, buffer) => MapEntry(key, buffer.length));
   }
+
+  // For testing: inject synthetic data
+  void injectTestData(String messageType, String fieldName, double value) {
+    final key = '$messageType.$fieldName';
+    final now = DateTime.now();
+    final point = TimeSeriesPoint(now, value);
+    
+    _dataBuffers.putIfAbsent(key, () => CircularBuffer(defaultBufferSize));
+    _dataBuffers[key]!.add(point);
+    
+    if (!_dataController.isClosed) {
+      _dataController.add(Map.from(_dataBuffers));
+    }
+  }
 }

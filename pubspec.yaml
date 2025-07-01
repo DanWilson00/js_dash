@@ -35,8 +35,11 @@ dependencies:
   # This is used in your main application code.
   dart_mavlink: ^0.1.0 # Use the latest version from pub.dev
 
-  # Charting library for time-series plots
+  # Charting libraries for time-series plots
   fl_chart: ^0.69.0
+  
+  # Date formatting utilities
+  intl: ^0.19.0
 
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.

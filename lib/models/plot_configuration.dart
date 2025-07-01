@@ -120,13 +120,15 @@ class TimeWindowOption {
   const TimeWindowOption(this.duration, this.label);
 
   static const List<TimeWindowOption> availableWindows = [
+    TimeWindowOption(Duration(seconds: 5), '5s'),
+    TimeWindowOption(Duration(seconds: 10), '10s'),
     TimeWindowOption(Duration(seconds: 30), '30s'),
     TimeWindowOption(Duration(minutes: 1), '1m'),
+    TimeWindowOption(Duration(minutes: 2), '2m'),
     TimeWindowOption(Duration(minutes: 5), '5m'),
-    TimeWindowOption(Duration(minutes: 10), '10m'),
   ];
 
-  static TimeWindowOption getDefault() => availableWindows[2]; // 5m
+  static TimeWindowOption getDefault() => availableWindows[1]; // 10s
 
   @override
   bool operator ==(Object other) =>
