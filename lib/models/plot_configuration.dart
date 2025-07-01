@@ -1,4 +1,5 @@
 import 'dart:collection';
+import 'package:flutter/material.dart';
 
 class TimeSeriesPoint {
   final DateTime timestamp;
@@ -30,49 +31,168 @@ class CircularBuffer {
   int get length => _buffer.length;
 }
 
-class PlotAxisConfiguration {
-  final String? messageType;
-  final String? fieldName;
-  final String? units;
-  final double? minY;
-  final double? maxY;
-  final bool autoScale;
+enum ScalingMode {
+  unified,     // All signals share same Y-axis bounds
+  independent, // Each signal normalized to 0-100%
+  autoScale,   // Calculate bounds from all signals combined
+}
 
-  PlotAxisConfiguration({
-    this.messageType,
-    this.fieldName,
+class PlotSignalConfiguration {
+  final String id;
+  final String messageType;
+  final String fieldName;
+  final String? units;
+  final Color color;
+  final bool visible;
+  final String? displayName;
+  final double lineWidth;
+  final bool showDots;
+
+  PlotSignalConfiguration({
+    required this.id,
+    required this.messageType,
+    required this.fieldName,
     this.units,
-    this.minY,
-    this.maxY,
-    this.autoScale = true,
+    required this.color,
+    this.visible = true,
+    this.displayName,
+    this.lineWidth = 2.0,
+    this.showDots = false,
   });
 
-  bool get hasData => messageType != null && fieldName != null;
+  String get effectiveDisplayName => 
+    displayName ?? '$messageType.$fieldName';
 
-  String get displayName => 
-    hasData ? '$messageType.$fieldName' : 'No Data';
+  String get fieldKey => '$messageType.$fieldName';
 
-  PlotAxisConfiguration copyWith({
+  PlotSignalConfiguration copyWith({
+    String? id,
     String? messageType,
     String? fieldName,
     String? units,
-    double? minY,
-    double? maxY,
-    bool? autoScale,
+    Color? color,
+    bool? visible,
+    String? displayName,
+    double? lineWidth,
+    bool? showDots,
   }) {
-    return PlotAxisConfiguration(
+    return PlotSignalConfiguration(
+      id: id ?? this.id,
       messageType: messageType ?? this.messageType,
       fieldName: fieldName ?? this.fieldName,
       units: units ?? this.units,
+      color: color ?? this.color,
+      visible: visible ?? this.visible,
+      displayName: displayName ?? this.displayName,
+      lineWidth: lineWidth ?? this.lineWidth,
+      showDots: showDots ?? this.showDots,
+    );
+  }
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is PlotSignalConfiguration &&
+          runtimeType == other.runtimeType &&
+          id == other.id;
+
+  @override
+  int get hashCode => id.hashCode;
+}
+
+class PlotAxisConfiguration {
+  final List<PlotSignalConfiguration> signals;
+  final double? minY;
+  final double? maxY;
+  final ScalingMode scalingMode;
+
+  PlotAxisConfiguration({
+    List<PlotSignalConfiguration>? signals,
+    this.minY,
+    this.maxY,
+    this.scalingMode = ScalingMode.autoScale,
+  }) : signals = signals ?? [];
+
+  bool get hasData => signals.isNotEmpty;
+  bool get hasVisibleSignals => signals.any((s) => s.visible);
+  
+  List<PlotSignalConfiguration> get visibleSignals => 
+    signals.where((s) => s.visible).toList();
+
+  String get displayName {
+    if (!hasData) return 'No Data';
+    if (signals.length == 1) return signals.first.effectiveDisplayName;
+    return '${signals.length} signals';
+  }
+
+  // Legacy compatibility - returns first signal's data or null
+  String? get messageType => signals.isNotEmpty ? signals.first.messageType : null;
+  String? get fieldName => signals.isNotEmpty ? signals.first.fieldName : null;
+  String? get units => signals.isNotEmpty ? signals.first.units : null;
+  bool get autoScale => scalingMode == ScalingMode.autoScale;
+
+  PlotAxisConfiguration copyWith({
+    List<PlotSignalConfiguration>? signals,
+    double? minY,
+    double? maxY,
+    ScalingMode? scalingMode,
+    // Legacy compatibility parameters
+    String? messageType,
+    String? fieldName,
+    String? units,
+    bool? autoScale,
+  }) {
+    List<PlotSignalConfiguration> newSignals = signals ?? this.signals;
+    
+    // Handle legacy single-signal assignment
+    if (messageType != null && fieldName != null) {
+      final color = SignalColorPalette.getNextColor(newSignals.length);
+      final signal = PlotSignalConfiguration(
+        id: '${messageType}_${fieldName}_${DateTime.now().millisecondsSinceEpoch}',
+        messageType: messageType,
+        fieldName: fieldName,
+        units: units,
+        color: color,
+      );
+      newSignals = [signal];
+    }
+
+    ScalingMode newScalingMode = scalingMode ?? this.scalingMode;
+    if (autoScale != null) {
+      newScalingMode = autoScale ? ScalingMode.autoScale : ScalingMode.unified;
+    }
+
+    return PlotAxisConfiguration(
+      signals: newSignals,
       minY: minY ?? this.minY,
       maxY: maxY ?? this.maxY,
-      autoScale: autoScale ?? this.autoScale,
+      scalingMode: newScalingMode,
+    );
+  }
+
+  PlotAxisConfiguration addSignal(PlotSignalConfiguration signal) {
+    return copyWith(signals: [...signals, signal]);
+  }
+
+  PlotAxisConfiguration removeSignal(String signalId) {
+    return copyWith(
+      signals: signals.where((s) => s.id != signalId).toList(),
+    );
+  }
+
+  PlotAxisConfiguration updateSignal(PlotSignalConfiguration updatedSignal) {
+    return copyWith(
+      signals: signals.map((s) => 
+        s.id == updatedSignal.id ? updatedSignal : s
+      ).toList(),
     );
   }
 
   PlotAxisConfiguration clear() {
     return PlotAxisConfiguration(
-      autoScale: autoScale,
+      scalingMode: scalingMode,
+      minY: minY,
+      maxY: maxY,
     );
   }
 }
@@ -102,6 +222,19 @@ class PlotConfiguration {
       yAxis: yAxis ?? this.yAxis,
       timeWindow: timeWindow ?? this.timeWindow,
     );
+  }
+
+  // Convenience methods for signal management
+  PlotConfiguration addSignal(PlotSignalConfiguration signal) {
+    return copyWith(yAxis: yAxis.addSignal(signal));
+  }
+
+  PlotConfiguration removeSignal(String signalId) {
+    return copyWith(yAxis: yAxis.removeSignal(signalId));
+  }
+
+  PlotConfiguration updateSignal(PlotSignalConfiguration updatedSignal) {
+    return copyWith(yAxis: yAxis.updateSignal(updatedSignal));
   }
 }
 
@@ -139,6 +272,33 @@ class TimeWindowOption {
 
   @override
   int get hashCode => duration.hashCode;
+}
+
+class SignalColorPalette {
+  static const List<Color> _colors = [
+    Color(0xFF2196F3), // Blue
+    Color(0xFFFF5722), // Deep Orange
+    Color(0xFF4CAF50), // Green
+    Color(0xFF9C27B0), // Purple
+    Color(0xFFFF9800), // Orange
+    Color(0xFF00BCD4), // Cyan
+    Color(0xFFE91E63), // Pink
+    Color(0xFF795548), // Brown
+    Color(0xFF607D8B), // Blue Grey
+    Color(0xFFFFC107), // Amber
+  ];
+
+  static Color getNextColor(int index) {
+    return _colors[index % _colors.length];
+  }
+
+  static Color getColorForSignal(String signalId) {
+    // Generate consistent color based on signal ID hash
+    final hash = signalId.hashCode.abs();
+    return _colors[hash % _colors.length];
+  }
+
+  static List<Color> get availableColors => List.unmodifiable(_colors);
 }
 
 class PlotLayout {

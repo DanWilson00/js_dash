@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import '../models/plot_configuration.dart';
 import 'interactive_plot.dart';
+import 'signal_management_panel.dart';
+import 'multi_signal_selection_dialog.dart';
 
 class PlotGridManager extends StatefulWidget {
   final VoidCallback? onFieldAssignment;
@@ -37,6 +39,10 @@ class PlotGridManagerState extends State<PlotGridManager> {
       children: [
         _buildControls(),
         const SizedBox(height: 8),
+        if (_selectedPlotId != null) ...[
+          _buildSignalManagementPanel(),
+          const SizedBox(height: 8),
+        ],
         Expanded(
           child: _buildPlotGrid(),
         ),
@@ -221,6 +227,65 @@ class PlotGridManagerState extends State<PlotGridManager> {
     }
   }
 
+  Widget _buildSignalManagementPanel() {
+    final selectedPlot = _plots.firstWhere((p) => p.id == _selectedPlotId);
+    
+    return SignalManagementPanel(
+      signals: selectedPlot.yAxis.signals,
+      scalingMode: selectedPlot.yAxis.scalingMode,
+      onSignalsChanged: (newSignals) {
+        _updateSelectedPlotSignals(newSignals);
+      },
+      onSignalUpdated: (updatedSignal) {
+        _updateSignalInSelectedPlot(updatedSignal);
+      },
+      onScalingModeChanged: (newMode) {
+        _updateSelectedPlotScalingMode(newMode);
+      },
+    );
+  }
+
+  void _updateSelectedPlotSignals(List<PlotSignalConfiguration> newSignals) {
+    if (_selectedPlotId == null) return;
+    
+    final plotIndex = _plots.indexWhere((p) => p.id == _selectedPlotId);
+    if (plotIndex == -1) return;
+
+    setState(() {
+      _plots[plotIndex] = _plots[plotIndex].copyWith(
+        yAxis: _plots[plotIndex].yAxis.copyWith(
+          signals: newSignals,
+        ),
+      );
+    });
+  }
+
+  void _updateSignalInSelectedPlot(PlotSignalConfiguration updatedSignal) {
+    if (_selectedPlotId == null) return;
+    
+    final plotIndex = _plots.indexWhere((p) => p.id == _selectedPlotId);
+    if (plotIndex == -1) return;
+
+    setState(() {
+      _plots[plotIndex] = _plots[plotIndex].updateSignal(updatedSignal);
+    });
+  }
+
+  void _updateSelectedPlotScalingMode(ScalingMode newMode) {
+    if (_selectedPlotId == null) return;
+    
+    final plotIndex = _plots.indexWhere((p) => p.id == _selectedPlotId);
+    if (plotIndex == -1) return;
+
+    setState(() {
+      _plots[plotIndex] = _plots[plotIndex].copyWith(
+        yAxis: _plots[plotIndex].yAxis.copyWith(
+          scalingMode: newMode,
+        ),
+      );
+    });
+  }
+
   void _clearPlotAxis(String plotId) {
     final plotIndex = _plots.indexWhere((p) => p.id == plotId);
     if (plotIndex != -1) {
@@ -236,21 +301,57 @@ class PlotGridManagerState extends State<PlotGridManager> {
     return _plots.indexWhere((p) => p.id == plotId);
   }
 
-  // Public method to assign field to selected plot
+  // Public method to assign field to selected plot (legacy compatibility)
   void assignFieldToSelectedPlot(String messageType, String fieldName) {
     if (_selectedPlotId == null) return;
 
     final plotIndex = _plots.indexWhere((p) => p.id == _selectedPlotId);
     if (plotIndex == -1) return;
 
+    // Create a new signal for legacy compatibility
+    final signal = PlotSignalConfiguration(
+      id: '${messageType}_${fieldName}_${DateTime.now().millisecondsSinceEpoch}',
+      messageType: messageType,
+      fieldName: fieldName,
+      color: SignalColorPalette.getNextColor(_plots[plotIndex].yAxis.signals.length),
+    );
+
     setState(() {
-      _plots[plotIndex] = _plots[plotIndex].copyWith(
-        yAxis: _plots[plotIndex].yAxis.copyWith(
-          messageType: messageType,
-          fieldName: fieldName,
-        ),
-      );
+      _plots[plotIndex] = _plots[plotIndex].addSignal(signal);
     });
+  }
+
+  // Public method to add signal to selected plot
+  void addSignalToSelectedPlot(PlotSignalConfiguration signal) {
+    if (_selectedPlotId == null) return;
+
+    final plotIndex = _plots.indexWhere((p) => p.id == _selectedPlotId);
+    if (plotIndex == -1) return;
+
+    setState(() {
+      _plots[plotIndex] = _plots[plotIndex].addSignal(signal);
+    });
+  }
+
+  // Public method to show signal selection dialog for selected plot
+  void showSignalSelectionForSelectedPlot(BuildContext context) async {
+    if (_selectedPlotId == null) return;
+
+    final plotIndex = _plots.indexWhere((p) => p.id == _selectedPlotId);
+    if (plotIndex == -1) return;
+
+    final currentSignals = _plots[plotIndex].yAxis.signals;
+    final result = await showMultiSignalSelectionDialog(context, currentSignals);
+    
+    if (result != null) {
+      setState(() {
+        _plots[plotIndex] = _plots[plotIndex].copyWith(
+          yAxis: _plots[plotIndex].yAxis.copyWith(
+            signals: result,
+          ),
+        );
+      });
+    }
   }
 
   // Public method to check if a plot is selected

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 import '../models/plot_configuration.dart';
 import '../services/timeseries_data_manager.dart';
+import 'plot_legend.dart';
 
 class InteractivePlot extends StatefulWidget {
   final PlotConfiguration configuration;
@@ -24,11 +25,12 @@ class InteractivePlot extends StatefulWidget {
 
 class _InteractivePlotState extends State<InteractivePlot> {
   final TimeSeriesDataManager _dataManager = TimeSeriesDataManager();
-  List<FlSpot> _spots = [];
+  Map<String, List<FlSpot>> _signalSpots = {};
+  Map<String, double> _currentValues = {};
   double _minY = 0;
   double _maxY = 100;
   StreamSubscription? _dataSubscription;
-  int _lastDataLength = 0;
+  final Map<String, int> _lastDataLengths = {};
 
   @override
   void initState() {
@@ -58,64 +60,105 @@ class _InteractivePlotState extends State<InteractivePlot> {
   }
 
   void _updatePlotData() {
-    if (!widget.configuration.yAxis.hasData) return;
+    if (!widget.configuration.yAxis.hasVisibleSignals) return;
 
-    final data = _dataManager.getFieldData(
-      widget.configuration.yAxis.messageType!,
-      widget.configuration.yAxis.fieldName!,
-    );
-
-    // Only proceed if we have new data
-    if (data.length == _lastDataLength) return;
-    _lastDataLength = data.length;
-
-    if (data.isEmpty) {
-      if (_spots.isNotEmpty) {
-        setState(() {
-          _spots = [];
-        });
-      }
-      return;
-    }
-
-    // Filter data by time window
     final now = DateTime.now();
+    final startTime = now.subtract(widget.configuration.timeWindow);
     final cutoff = now.subtract(widget.configuration.timeWindow);
-    final filteredData = data
-        .where((point) => point.timestamp.isAfter(cutoff))
-        .toList();
+    
+    final newSignalSpots = <String, List<FlSpot>>{};
+    final newCurrentValues = <String, double>{};
+    final allValues = <double>[];
+    bool hasNewData = false;
 
-    if (filteredData.isEmpty) {
-      if (_spots.isNotEmpty) {
-        setState(() {
-          _spots = [];
-        });
+    // Process each visible signal
+    for (final signal in widget.configuration.yAxis.visibleSignals) {
+      final fieldKey = signal.fieldKey;
+      final data = _dataManager.getFieldData(signal.messageType, signal.fieldName);
+      
+      // Check if we have new data for this signal
+      final lastLength = _lastDataLengths[fieldKey] ?? 0;
+      if (data.length != lastLength) {
+        _lastDataLengths[fieldKey] = data.length;
+        hasNewData = true;
       }
-      return;
+
+      // Filter data by time window
+      final filteredData = data
+          .where((point) => point.timestamp.isAfter(cutoff))
+          .toList();
+
+      if (filteredData.isNotEmpty) {
+        // Store current value
+        newCurrentValues[fieldKey] = filteredData.last.value;
+        
+        // Convert to FlSpots with scaling
+        List<FlSpot> spots;
+        if (widget.configuration.yAxis.scalingMode == ScalingMode.independent) {
+          // Normalize to 0-100% range
+          final values = filteredData.map((p) => p.value).toList();
+          final minVal = values.reduce((a, b) => a < b ? a : b);
+          final maxVal = values.reduce((a, b) => a > b ? a : b);
+          final range = maxVal - minVal;
+          
+          spots = filteredData.map((point) {
+            final x = point.timestamp.difference(startTime).inMilliseconds.toDouble();
+            final normalizedY = range > 0 ? ((point.value - minVal) / range) * 100.0 : 50.0;
+            return FlSpot(x, normalizedY);
+          }).toList();
+          
+          // Add normalized values for independent scaling
+          allValues.addAll(spots.map((s) => s.y));
+        } else {
+          // Use raw values for unified/auto scaling
+          spots = filteredData.map((point) {
+            final x = point.timestamp.difference(startTime).inMilliseconds.toDouble();
+            return FlSpot(x, point.value);
+          }).toList();
+          
+          // Add raw values for scaling calculation
+          allValues.addAll(spots.map((s) => s.y));
+        }
+        
+        newSignalSpots[fieldKey] = spots;
+      } else {
+        newSignalSpots[fieldKey] = [];
+      }
     }
 
-    // Calculate time-based X coordinates
-    final startTime = now.subtract(widget.configuration.timeWindow);
-    final newSpots = filteredData.map((point) {
-      final x = point.timestamp.difference(startTime).inMilliseconds.toDouble();
-      return FlSpot(x, point.value);
-    }).toList();
+    // Only update if we have new data
+    if (!hasNewData && _signalSpots.isNotEmpty) return;
 
     // Calculate Y axis bounds
     double newMinY, newMaxY;
-    if (widget.configuration.yAxis.autoScale && newSpots.isNotEmpty) {
-      final values = newSpots.map((s) => s.y).toList();
-      newMinY = values.reduce((a, b) => a < b ? a : b);
-      newMaxY = values.reduce((a, b) => a > b ? a : b);
-      
-      // Add 10% padding
-      final range = newMaxY - newMinY;
-      if (range > 0) {
-        newMinY -= range * 0.1;
-        newMaxY += range * 0.1;
-      } else {
-        newMinY -= 1;
-        newMaxY += 1;
+    if (allValues.isNotEmpty) {
+      switch (widget.configuration.yAxis.scalingMode) {
+        case ScalingMode.autoScale:
+          newMinY = allValues.reduce((a, b) => a < b ? a : b);
+          newMaxY = allValues.reduce((a, b) => a > b ? a : b);
+          
+          // Add 10% padding
+          final range = newMaxY - newMinY;
+          if (range > 0) {
+            newMinY -= range * 0.1;
+            newMaxY += range * 0.1;
+          } else {
+            newMinY -= 1;
+            newMaxY += 1;
+          }
+          break;
+        case ScalingMode.independent:
+          // For independent scaling, use 0-100% range
+          newMinY = 0;
+          newMaxY = 100;
+          break;
+        case ScalingMode.unified:
+          // Use configured bounds or calculate from data
+          newMinY = widget.configuration.yAxis.minY ?? 
+                   allValues.reduce((a, b) => a < b ? a : b);
+          newMaxY = widget.configuration.yAxis.maxY ?? 
+                   allValues.reduce((a, b) => a > b ? a : b);
+          break;
       }
     } else {
       newMinY = widget.configuration.yAxis.minY ?? 0;
@@ -124,7 +167,8 @@ class _InteractivePlotState extends State<InteractivePlot> {
 
     // Always update for maximum responsiveness
     setState(() {
-      _spots = newSpots;
+      _signalSpots = newSignalSpots;
+      _currentValues = newCurrentValues;
       _minY = newMinY;
       _maxY = newMaxY;
     });
@@ -171,7 +215,7 @@ class _InteractivePlotState extends State<InteractivePlot> {
           child: Text(
             widget.configuration.yAxis.hasData
                 ? widget.configuration.yAxis.displayName
-                : 'Click to select data',
+                : 'Click to select signals',
             style: Theme.of(context).textTheme.titleSmall?.copyWith(
               fontWeight: FontWeight.bold,
               color: widget.configuration.yAxis.hasData
@@ -180,19 +224,18 @@ class _InteractivePlotState extends State<InteractivePlot> {
             ),
           ),
         ),
-        if (widget.configuration.yAxis.hasData && widget.configuration.yAxis.units != null)
-          Text(
-            widget.configuration.yAxis.units!,
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-              color: Theme.of(context).colorScheme.outline,
-            ),
+        if (widget.configuration.yAxis.hasData)
+          CompactPlotLegend(
+            signals: widget.configuration.yAxis.signals,
           ),
       ],
     );
   }
 
   Widget _buildChart() {
-    if (_spots.isEmpty) {
+    final hasAnyData = _signalSpots.values.any((spots) => spots.isNotEmpty);
+    
+    if (!hasAnyData) {
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -204,7 +247,7 @@ class _InteractivePlotState extends State<InteractivePlot> {
             ),
             const SizedBox(height: 4),
             Text(
-              widget.configuration.yAxis.hasData ? 'No data' : 'Select data',
+              widget.configuration.yAxis.hasData ? 'No data' : 'Select signals',
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
                 color: Theme.of(context).colorScheme.outline,
               ),
@@ -215,67 +258,92 @@ class _InteractivePlotState extends State<InteractivePlot> {
       );
     }
 
-    return LineChart(
-      LineChartData(
-        gridData: FlGridData(
-          show: true,
-          drawVerticalLine: true,
-          horizontalInterval: (_maxY - _minY) / 5,
-          verticalInterval: widget.configuration.timeWindow.inMilliseconds / 5,
-          getDrawingHorizontalLine: (value) => FlLine(
-            color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.2),
-            strokeWidth: 1,
-          ),
-          getDrawingVerticalLine: (value) => FlLine(
-            color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.2),
-            strokeWidth: 1,
-          ),
-        ),
-        titlesData: FlTitlesData(
-          show: true,
-          rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-          topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-          bottomTitles: AxisTitles(
-            sideTitles: SideTitles(
-              showTitles: true,
-              reservedSize: 30,
-              interval: widget.configuration.timeWindow.inMilliseconds / 4,
-              getTitlesWidget: (value, meta) => _buildTimeLabel(value),
+    return Stack(
+      children: [
+        LineChart(
+          LineChartData(
+            gridData: FlGridData(
+              show: true,
+              drawVerticalLine: true,
+              horizontalInterval: (_maxY - _minY) / 5,
+              verticalInterval: widget.configuration.timeWindow.inMilliseconds / 5,
+              getDrawingHorizontalLine: (value) => FlLine(
+                color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.2),
+                strokeWidth: 1,
+              ),
+              getDrawingVerticalLine: (value) => FlLine(
+                color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.2),
+                strokeWidth: 1,
+              ),
             ),
-          ),
-          leftTitles: AxisTitles(
-            sideTitles: SideTitles(
-              showTitles: true,
-              interval: (_maxY - _minY) / 4,
-              reservedSize: 60,
-              getTitlesWidget: (value, meta) => _buildValueLabel(value),
+            titlesData: FlTitlesData(
+              show: true,
+              rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+              topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+              bottomTitles: AxisTitles(
+                sideTitles: SideTitles(
+                  showTitles: true,
+                  reservedSize: 30,
+                  interval: widget.configuration.timeWindow.inMilliseconds / 4,
+                  getTitlesWidget: (value, meta) => _buildTimeLabel(value),
+                ),
+              ),
+              leftTitles: AxisTitles(
+                sideTitles: SideTitles(
+                  showTitles: true,
+                  interval: (_maxY - _minY) / 4,
+                  reservedSize: 60,
+                  getTitlesWidget: (value, meta) => _buildValueLabel(value),
+                ),
+              ),
             ),
+            borderData: FlBorderData(
+              show: true,
+              border: Border.all(
+                color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.3),
+              ),
+            ),
+            minX: 0,
+            maxX: widget.configuration.timeWindow.inMilliseconds.toDouble(),
+            minY: _minY,
+            maxY: _maxY,
+            lineBarsData: _buildLineChartBars(),
           ),
+          // No animation duration - immediate updates
+          duration: Duration.zero,
         ),
-        borderData: FlBorderData(
-          show: true,
-          border: Border.all(
-            color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.3),
+        // Legend overlay
+        if (widget.configuration.yAxis.visibleSignals.length > 1)
+          PlotLegendOverlay(
+            signals: widget.configuration.yAxis.signals,
+            showValues: true,
+            currentValues: _currentValues,
+            alignment: Alignment.topRight,
           ),
-        ),
-        minX: 0,
-        maxX: widget.configuration.timeWindow.inMilliseconds.toDouble(),
-        minY: _minY,
-        maxY: _maxY,
-        lineBarsData: [
+      ],
+    );
+  }
+
+  List<LineChartBarData> _buildLineChartBars() {
+    final lineBars = <LineChartBarData>[];
+    
+    for (final signal in widget.configuration.yAxis.visibleSignals) {
+      final spots = _signalSpots[signal.fieldKey] ?? [];
+      if (spots.isNotEmpty) {
+        lineBars.add(
           LineChartBarData(
-            spots: _spots,
+            spots: spots,
             isCurved: false,
-            color: Theme.of(context).colorScheme.primary,
-            barWidth: 2,
-            dotData: FlDotData(show: false), // No dots for maximum performance
+            color: signal.color,
+            barWidth: signal.lineWidth,
+            dotData: FlDotData(show: signal.showDots),
             belowBarData: BarAreaData(show: false),
           ),
-        ],
-      ),
-      // No animation duration - immediate updates
-      duration: Duration.zero,
-    );
+        );
+      }
+    }
+    
+    return lineBars;
   }
 
   Widget _buildTimeLabel(double value) {
