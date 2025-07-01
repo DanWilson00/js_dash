@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import '../services/mavlink_spoof_service.dart';
 
@@ -9,24 +10,81 @@ class HUDDisplay extends StatefulWidget {
   State<HUDDisplay> createState() => _HUDDisplayState();
 }
 
-class _HUDDisplayState extends State<HUDDisplay> {
+class _HUDDisplayState extends State<HUDDisplay> with TickerProviderStateMixin {
   final MavlinkSpoofService _spoofService = MavlinkSpoofService();
   Timer? _updateTimer;
   
+  // Animation controllers
+  late AnimationController _needleController;
+  late AnimationController _glowController;
+  late AnimationController _startupController;
+  
+  // Animated values
+  late Animation<double> _needleAnimation;
+  late Animation<double> _glowAnimation;
+  late Animation<double> _startupAnimation;
+  
+  // Data values
   double _rpm = 0.0;
+  double _targetRpm = 0.0;
   double _speed = 0.0;
+  double _heading = 0.0;
   double _portWing = 0.0;
   double _starboardWing = 0.0;
+  
+  // Speed trend tracking
+  double _lastSpeed = 0.0;
+  String _speedTrend = '→';
 
   @override
   void initState() {
     super.initState();
+    _initializeAnimations();
     _startUpdates();
+    _playStartupAnimation();
+  }
+
+  void _initializeAnimations() {
+    _needleController = AnimationController(
+      duration: const Duration(milliseconds: 300),
+      vsync: this,
+    );
+    
+    _glowController = AnimationController(
+      duration: const Duration(milliseconds: 1500),
+      vsync: this,
+    );
+    
+    _startupController = AnimationController(
+      duration: const Duration(milliseconds: 2000),
+      vsync: this,
+    );
+    
+    _needleAnimation = Tween<double>(begin: 0, end: 1).animate(
+      CurvedAnimation(parent: _needleController, curve: Curves.elasticOut),
+    );
+    
+    _glowAnimation = Tween<double>(begin: 0.3, end: 1.0).animate(
+      CurvedAnimation(parent: _glowController, curve: Curves.easeInOut),
+    );
+    
+    _startupAnimation = Tween<double>(begin: 0, end: 1).animate(
+      CurvedAnimation(parent: _startupController, curve: Curves.easeOutCubic),
+    );
+    
+    _glowController.repeat(reverse: true);
+  }
+
+  void _playStartupAnimation() {
+    _startupController.forward();
   }
 
   @override
   void dispose() {
     _updateTimer?.cancel();
+    _needleController.dispose();
+    _glowController.dispose();
+    _startupController.dispose();
     super.dispose();
   }
 
@@ -34,11 +92,30 @@ class _HUDDisplayState extends State<HUDDisplay> {
     _updateTimer = Timer.periodic(const Duration(milliseconds: 50), (_) {
       if (_spoofService.isRunning) {
         setState(() {
-          _rpm = _spoofService.currentRPM;
-          _speed = _spoofService.currentSpeed;
+          _targetRpm = _spoofService.currentRPM;
+          
+          // Track speed trend
+          final newSpeed = _spoofService.currentSpeed;
+          if ((newSpeed - _lastSpeed).abs() > 0.1) {
+            _speedTrend = newSpeed > _lastSpeed ? '↗' : '↘';
+            _lastSpeed = newSpeed;
+          } else {
+            _speedTrend = '→';
+          }
+          _speed = newSpeed;
+          
+          _heading = (_heading + (math.Random().nextDouble() - 0.5) * 2) % 360;
+          if (_heading < 0) _heading += 360;
+          
           _portWing = _spoofService.portWingPosition;
           _starboardWing = _spoofService.starboardWingPosition;
         });
+        
+        // Animate needle to target RPM
+        if ((_targetRpm - _rpm).abs() > 50) {
+          _rpm = _rpm + (_targetRpm - _rpm) * 0.15; // Smooth needle movement
+          _needleController.forward(from: 0);
+        }
       }
     });
   }
@@ -52,505 +129,791 @@ class _HUDDisplayState extends State<HUDDisplay> {
           decoration: const BoxDecoration(
             gradient: RadialGradient(
               center: Alignment.center,
-              radius: 1.2,
+              radius: 1.5,
               colors: [
-                Color(0xFF001122),
+                Color(0xFF001a2e),
+                Color(0xFF000814),
                 Color(0xFF000000),
               ],
+              stops: [0.0, 0.7, 1.0],
             ),
           ),
-          child: Stack(
-            children: [
-              // Main dashboard frame
-              Center(
-                child: SizedBox(
-                  width: MediaQuery.of(context).size.width * 0.9,
-                  height: MediaQuery.of(context).size.height * 0.8,
-                  child: CustomPaint(
-                    painter: DashboardFramePainter(),
-                    child: Padding(
-                      padding: const EdgeInsets.all(40.0),
-                      child: Column(
-                        children: [
-                          // Top section - JETSHARK title
-                          _buildTopSection(),
-                          
-                          const SizedBox(height: 30),
-                          
-                          // Main gauges row
-                          Expanded(
-                            child: Row(
-                              children: [
-                                // Left wing indicator
-                                Expanded(
-                                  flex: 2,
-                                  child: _buildWingGauge('PORT', _portWing, true),
-                                ),
-                                
-                                const SizedBox(width: 40),
-                                
-                                // Center RPM display
-                                Expanded(
-                                  flex: 3,
-                                  child: _buildCentralRPMDisplay(),
-                                ),
-                                
-                                const SizedBox(width: 40),
-                                
-                                // Right wing indicator
-                                Expanded(
-                                  flex: 2,
-                                  child: _buildWingGauge('STBD', _starboardWing, false),
-                                ),
-                              ],
-                            ),
-                          ),
-                          
-                          const SizedBox(height: 30),
-                          
-                          // Bottom speed display
-                          _buildBottomSpeedDisplay(),
-                        ],
-                      ),
-                    ),
+          child: AnimatedBuilder(
+            animation: _startupAnimation,
+            builder: (context, child) {
+              return Opacity(
+                opacity: _startupAnimation.value,
+                child: Transform.scale(
+                  scale: 0.8 + (_startupAnimation.value * 0.2),
+                  child: Stack(
+                    children: [
+                      // Scan lines effect
+                      _buildScanLines(),
+                      
+                      // Main dashboard
+                      _buildMainDashboard(),
+                      
+                      // Glass reflection overlay
+                      _buildGlassOverlay(),
+                      
+                      // Navigation hint
+                      _buildNavigationHint(),
+                    ],
                   ),
                 ),
-              ),
-              
-              // Tap to return hint
-              Positioned(
-                bottom: 20,
-                left: 0,
-                right: 0,
-                child: Center(
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF001122).withValues(alpha: 0.7),
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(
-                        color: const Color(0xFF00DDFF).withValues(alpha: 0.3),
-                        width: 1,
-                      ),
-                    ),
-                    child: Text(
-                      'TAP TO RETURN TO TELEMETRY',
-                      style: TextStyle(
-                        color: const Color(0xFF00DDFF).withValues(alpha: 0.8),
-                        fontSize: 12,
-                        fontWeight: FontWeight.w300,
-                        letterSpacing: 1.0,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ],
+              );
+            },
           ),
         ),
       ),
     );
   }
 
-  Widget _buildTopSection() {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
-          decoration: BoxDecoration(
-            gradient: LinearGradient(
-              colors: [
-                const Color(0xFF00DDFF).withValues(alpha: 0.1),
-                const Color(0xFF00DDFF).withValues(alpha: 0.05),
-              ],
+  Widget _buildScanLines() {
+    return Positioned.fill(
+      child: AnimatedBuilder(
+        animation: _glowController,
+        builder: (context, child) {
+          return CustomPaint(
+            painter: ScanLinesPainter(_glowController.value),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildMainDashboard() {
+    return Center(
+      child: SizedBox(
+        width: MediaQuery.of(context).size.width * 0.95,
+        height: MediaQuery.of(context).size.height * 0.85,
+        child: Column(
+          children: [
+            // Top brand section
+            _buildTopBrand(),
+            
+            const SizedBox(height: 40),
+            
+            // Main instrument cluster
+            Expanded(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  // Left wing indicator
+                  Expanded(
+                    flex: 2,
+                    child: _buildAdvancedWingIndicator('PORT', _portWing, true),
+                  ),
+                  
+                  const SizedBox(width: 30),
+                  
+                  // Central RPM tachometer
+                  Expanded(
+                    flex: 4,
+                    child: _buildCentralTachometer(),
+                  ),
+                  
+                  const SizedBox(width: 30),
+                  
+                  // Right wing indicator
+                  Expanded(
+                    flex: 2,
+                    child: _buildAdvancedWingIndicator('STBD', _starboardWing, false),
+                  ),
+                ],
+              ),
             ),
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(
-              color: const Color(0xFF00DDFF).withValues(alpha: 0.3),
-              width: 1,
+            
+            const SizedBox(height: 30),
+            
+            // Bottom information bar
+            _buildBottomInfoBar(),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTopBrand() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 12),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            const Color(0xFF001a2e).withValues(alpha: 0.3),
+            const Color(0xFF003a5c).withValues(alpha: 0.1),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(25),
+        border: Border.all(
+          color: const Color(0xFF00d4ff).withValues(alpha: 0.3),
+          width: 1.5,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF00d4ff).withValues(alpha: 0.1),
+            blurRadius: 20,
+            spreadRadius: 2,
+          ),
+        ],
+      ),
+      child: const Text(
+        'JETSHARK',
+        style: TextStyle(
+          color: Color(0xFF00d4ff),
+          fontSize: 22,
+          fontWeight: FontWeight.w200,
+          letterSpacing: 6.0,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCentralTachometer() {
+    final rpmPercent = ((_rpm - 800) / 2200).clamp(0.0, 1.0);
+    final isDangerZone = _rpm > 2500;
+    
+    return AnimatedBuilder(
+      animation: Listenable.merge([_needleAnimation, _glowAnimation]),
+      builder: (context, child) {
+        return Stack(
+            alignment: Alignment.center,
+            children: [
+              // Main tachometer
+              CustomPaint(
+                size: const Size(300, 300),
+                painter: TachometerPainter(
+                  rpmPercent: rpmPercent,
+                  isDanger: isDangerZone,
+                  glowIntensity: _glowAnimation.value,
+                  needleAnimation: _needleAnimation.value,
+                ),
+              ),
+              
+              // Center digital display
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF000814).withValues(alpha: 0.9),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: isDangerZone 
+                      ? Color.lerp(const Color(0xFFff4444), const Color(0xFFff8888), _glowAnimation.value)!
+                      : Color.lerp(const Color(0xFF00d4ff), const Color(0xFF66e0ff), _glowAnimation.value)!,
+                    width: 1.5,
+                  ),
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      '${_rpm.round()}',
+                      style: TextStyle(
+                        color: isDangerZone 
+                          ? Color.lerp(const Color(0xFFff4444), const Color(0xFFff8888), _glowAnimation.value)
+                          : Color.lerp(const Color(0xFF00d4ff), const Color(0xFF66e0ff), _glowAnimation.value),
+                        fontSize: 36,
+                        fontWeight: FontWeight.w100,
+                        fontFamily: 'monospace',
+                      ),
+                    ),
+                    Text(
+                      'RPM',
+                      style: TextStyle(
+                        color: const Color(0xFF00d4ff).withValues(alpha: 0.7),
+                        fontSize: 12,
+                        fontWeight: FontWeight.w300,
+                        letterSpacing: 2.0,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+        );
+      },
+    );
+  }
+
+  Widget _buildAdvancedWingIndicator(String label, double position, bool isLeft) {
+    final isWarning = position.abs() > 30;
+    final normalizedPosition = ((position + 50) / 100).clamp(0.0, 1.0);
+    
+    return Column(
+        children: [
+          // Label with status
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+            decoration: BoxDecoration(
+              color: const Color(0xFF001a2e).withValues(alpha: 0.3),
+              borderRadius: BorderRadius.circular(15),
+              border: Border.all(
+                color: isWarning 
+                  ? const Color(0xFFff4444).withValues(alpha: 0.5)
+                  : const Color(0xFF00d4ff).withValues(alpha: 0.3),
+                width: 1,
+              ),
+            ),
+            child: Text(
+              label,
+              style: TextStyle(
+                color: isWarning ? const Color(0xFFff4444) : const Color(0xFF00d4ff),
+                fontSize: 14,
+                fontWeight: FontWeight.w300,
+                letterSpacing: 2.0,
+              ),
             ),
           ),
-          child: const Text(
-            'JETSHARK',
-            style: TextStyle(
-              color: Color(0xFF00DDFF),
-              fontSize: 24,
-              fontWeight: FontWeight.w300,
-              letterSpacing: 4.0,
+          
+          const SizedBox(height: 20),
+          
+          // Advanced wing gauge
+          Expanded(
+            child: Container(
+              width: 80,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(40),
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    const Color(0xFF001a2e).withValues(alpha: 0.2),
+                    const Color(0xFF000814).withValues(alpha: 0.8),
+                    const Color(0xFF001a2e).withValues(alpha: 0.2),
+                  ],
+                ),
+                border: Border.all(
+                  color: isWarning 
+                    ? const Color(0xFFff4444).withValues(alpha: 0.4)
+                    : const Color(0xFF00d4ff).withValues(alpha: 0.3),
+                  width: 2,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: (isWarning ? const Color(0xFFff4444) : const Color(0xFF00d4ff))
+                        .withValues(alpha: 0.1),
+                    blurRadius: 15,
+                    spreadRadius: 2,
+                  ),
+                ],
+              ),
+              child: Stack(
+                children: [
+                  // Gauge markings
+                  CustomPaint(
+                    size: Size(80, MediaQuery.of(context).size.height * 0.4),
+                    painter: WingGaugePainter(),
+                  ),
+                  
+                  // Position indicator
+                  AnimatedPositioned(
+                    duration: const Duration(milliseconds: 200),
+                    curve: Curves.easeOut,
+                    top: normalizedPosition * (MediaQuery.of(context).size.height * 0.35) + 40,
+                    left: 20,
+                    right: 20,
+                    child: Container(
+                      height: 12,
+                      decoration: BoxDecoration(
+                        color: isWarning ? const Color(0xFFff4444) : const Color(0xFF00d4ff),
+                        borderRadius: BorderRadius.circular(6),
+                        boxShadow: [
+                          BoxShadow(
+                            color: (isWarning ? const Color(0xFFff4444) : const Color(0xFF00d4ff))
+                                .withValues(alpha: 0.6),
+                            blurRadius: 8,
+                            spreadRadius: 1,
+                          ),
+                        ],
+                      ),
+                      child: Center(
+                        child: Container(
+                          width: 25,
+                          height: 2,
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.9),
+                            borderRadius: BorderRadius.circular(1),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
+          ),
+          
+          const SizedBox(height: 15),
+          
+          // Position readout
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            decoration: BoxDecoration(
+              color: const Color(0xFF000814).withValues(alpha: 0.8),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(
+                color: const Color(0xFF00d4ff).withValues(alpha: 0.3),
+                width: 1,
+              ),
+            ),
+            child: Text(
+              '${position.round()}°',
+              style: TextStyle(
+                color: isWarning ? const Color(0xFFff4444) : const Color(0xFF00d4ff),
+                fontSize: 18,
+                fontWeight: FontWeight.w300,
+                fontFamily: 'monospace',
+              ),
+            ),
+          ),
+        ],
+    );
+  }
+
+  Widget _buildBottomInfoBar() {
+    final speedKnots = _speed * 1.94384;
+    final headingStr = _getHeadingString(_heading);
+    
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 20),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            const Color(0xFF001a2e).withValues(alpha: 0.4),
+            const Color(0xFF000814).withValues(alpha: 0.8),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(30),
+        border: Border.all(
+          color: const Color(0xFF00d4ff).withValues(alpha: 0.3),
+          width: 1.5,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF00d4ff).withValues(alpha: 0.1),
+            blurRadius: 20,
+            spreadRadius: 2,
+          ),
+        ],
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+        children: [
+          // Speed with trend
+          _buildInfoPanel(
+            value: speedKnots.toStringAsFixed(1),
+            unit: 'KT',
+            label: 'SPEED',
+            trend: _speedTrend,
+          ),
+          
+          // Vertical divider
+          Container(
+            width: 1,
+            height: 50,
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  Colors.transparent,
+                  const Color(0xFF00d4ff).withValues(alpha: 0.3),
+                  Colors.transparent,
+                ],
+              ),
+            ),
+          ),
+          
+          // Heading
+          _buildInfoPanel(
+            value: _heading.round().toString(),
+            unit: '°',
+            label: 'HEADING',
+            trend: headingStr,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildInfoPanel({
+    required String value,
+    required String unit,
+    required String label,
+    required String trend,
+  }) {
+    return Column(
+      children: [
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.baseline,
+          textBaseline: TextBaseline.alphabetic,
+          children: [
+            Text(
+              value,
+              style: const TextStyle(
+                color: Color(0xFF00d4ff),
+                fontSize: 32,
+                fontWeight: FontWeight.w100,
+                fontFamily: 'monospace',
+              ),
+            ),
+            const SizedBox(width: 4),
+            Text(
+              unit,
+              style: TextStyle(
+                color: const Color(0xFF00d4ff).withValues(alpha: 0.7),
+                fontSize: 14,
+                fontWeight: FontWeight.w300,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Text(
+              trend,
+              style: TextStyle(
+                color: const Color(0xFF00d4ff).withValues(alpha: 0.6),
+                fontSize: 16,
+                fontWeight: FontWeight.w300,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 4),
+        Text(
+          label,
+          style: TextStyle(
+            color: const Color(0xFF00d4ff).withValues(alpha: 0.6),
+            fontSize: 10,
+            fontWeight: FontWeight.w300,
+            letterSpacing: 1.5,
           ),
         ),
       ],
     );
   }
 
-  Widget _buildCentralRPMDisplay() {
-    final rpmPercent = ((_rpm - 800) / 2200).clamp(0.0, 1.0);
-    final isDanger = _rpm > 2500;
-    
-    return Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          // Large RPM number
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 20),
-            decoration: BoxDecoration(
-              gradient: RadialGradient(
-                colors: [
-                  const Color(0xFF001122).withValues(alpha: 0.3),
-                  const Color(0xFF000000).withValues(alpha: 0.8),
-                ],
-              ),
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(
-                color: isDanger ? const Color(0xFFFF4444) : const Color(0xFF00DDFF),
-                width: 2,
-              ),
-              boxShadow: [
-                BoxShadow(
-                  color: (isDanger ? const Color(0xFFFF4444) : const Color(0xFF00DDFF))
-                      .withValues(alpha: 0.3),
-                  blurRadius: 20,
-                  spreadRadius: 5,
-                ),
-              ],
-            ),
-            child: Column(
-              children: [
-                Text(
-                  '${_rpm.round()}',
-                  style: TextStyle(
-                    color: isDanger ? const Color(0xFFFF4444) : const Color(0xFF00DDFF),
-                    fontSize: 72,
-                    fontWeight: FontWeight.w100,
-                    fontFamily: 'monospace',
-                  ),
-                ),
-                Text(
-                  'RPM',
-                  style: TextStyle(
-                    color: const Color(0xFF00DDFF).withValues(alpha: 0.7),
-                    fontSize: 16,
-                    fontWeight: FontWeight.w300,
-                    letterSpacing: 3.0,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          
-          const SizedBox(height: 20),
-          
-          // RPM progress bar
-          Container(
-            width: 300,
-            height: 8,
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(4),
-              color: const Color(0xFF001122),
-            ),
-            child: Stack(
-              children: [
-                // Background segments
-                Row(
-                  children: List.generate(10, (index) {
-                    return Expanded(
-                      child: Container(
-                        margin: const EdgeInsets.symmetric(horizontal: 1),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF001122),
-                          borderRadius: BorderRadius.circular(2),
-                        ),
-                      ),
-                    );
-                  }),
-                ),
-                // Active progress
-                FractionallySizedBox(
-                  alignment: Alignment.centerLeft,
-                  widthFactor: rpmPercent,
-                  child: Container(
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(4),
-                      gradient: LinearGradient(
-                        colors: rpmPercent > 0.8 ? [
-                          const Color(0xFFFF4444),
-                          const Color(0xFFFF8888),
-                        ] : rpmPercent > 0.6 ? [
-                          const Color(0xFFFFDD00),
-                          const Color(0xFFFFFF88),
-                        ] : [
-                          const Color(0xFF00DDFF),
-                          const Color(0xFF88DDFF),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-    );
+  String _getHeadingString(double heading) {
+    final dirs = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
+    final index = ((heading + 22.5) / 45).floor() % 8;
+    return dirs[index];
   }
 
-  Widget _buildWingGauge(String label, double position, bool isLeft) {
-    final isWarning = position.abs() > 30;
-    final normalizedPosition = ((position + 50) / 100).clamp(0.0, 1.0);
-    
-    return Column(
-        children: [
-          // Wing label
-          Text(
-            label,
-            style: TextStyle(
-              color: isWarning ? const Color(0xFFFF4444) : const Color(0xFF00DDFF),
-              fontSize: 18,
-              fontWeight: FontWeight.w300,
-              letterSpacing: 2.0,
-            ),
+  Widget _buildGlassOverlay() {
+    return Positioned.fill(
+      child: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              Colors.white.withValues(alpha: 0.02),
+              Colors.transparent,
+              Colors.white.withValues(alpha: 0.01),
+            ],
+            stops: const [0.0, 0.5, 1.0],
           ),
-          
-          const SizedBox(height: 20),
-          
-          // Wing gauge
-          Expanded(
-            child: Container(
-              width: 120,
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(60),
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [
-                    const Color(0xFF001122).withValues(alpha: 0.3),
-                    const Color(0xFF000000).withValues(alpha: 0.8),
-                  ],
-                ),
-                border: Border.all(
-                  color: isWarning ? const Color(0xFFFF4444) : const Color(0xFF00DDFF).withValues(alpha: 0.3),
-                  width: 2,
-                ),
-              ),
-              child: Stack(
-                children: [
-                  // Gauge marks
-                  ...List.generate(5, (index) {
-                    final markPosition = 0.1 + (index * 0.2);
-                    return Positioned(
-                      top: markPosition * MediaQuery.of(context).size.height * 0.4,
-                      left: 20,
-                      right: 20,
-                      child: Container(
-                        height: 1,
-                        color: const Color(0xFF00DDFF).withValues(alpha: 0.3),
-                      ),
-                    );
-                  }),
-                  
-                  // Center reference
-                  Positioned(
-                    top: MediaQuery.of(context).size.height * 0.2,
-                    left: 10,
-                    right: 10,
-                    child: Container(
-                      height: 2,
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFFFDD00),
-                        borderRadius: BorderRadius.circular(1),
-                        boxShadow: [
-                          BoxShadow(
-                            color: const Color(0xFFFFDD00).withValues(alpha: 0.5),
-                            blurRadius: 4,
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  
-                  // Wing position indicator
-                  Positioned(
-                    top: normalizedPosition * MediaQuery.of(context).size.height * 0.3 + 50,
-                    left: 30,
-                    right: 30,
-                    child: Container(
-                      height: 16,
-                      decoration: BoxDecoration(
-                        color: isWarning ? const Color(0xFFFF4444) : const Color(0xFF00DDFF),
-                        borderRadius: BorderRadius.circular(8),
-                        boxShadow: [
-                          BoxShadow(
-                            color: (isWarning ? const Color(0xFFFF4444) : const Color(0xFF00DDFF))
-                                .withValues(alpha: 0.6),
-                            blurRadius: 8,
-                            spreadRadius: 2,
-                          ),
-                        ],
-                      ),
-                      child: Center(
-                        child: Container(
-                          width: 40,
-                          height: 2,
-                          color: Colors.white.withValues(alpha: 0.9),
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          
-          const SizedBox(height: 20),
-          
-          // Position value
-          Text(
-            '${position.round()}°',
-            style: TextStyle(
-              color: isWarning ? const Color(0xFFFF4444) : const Color(0xFF00DDFF),
-              fontSize: 24,
-              fontWeight: FontWeight.w300,
-              fontFamily: 'monospace',
-            ),
-          ),
-        ],
-    );
-  }
-
-  Widget _buildBottomSpeedDisplay() {
-    final speedKnots = _speed * 1.94384;
-    
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 16),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [
-            const Color(0xFF001122).withValues(alpha: 0.3),
-            const Color(0xFF000000).withValues(alpha: 0.8),
-          ],
-        ),
-        borderRadius: BorderRadius.circular(25),
-        border: Border.all(
-          color: const Color(0xFF00DDFF).withValues(alpha: 0.3),
-          width: 1,
         ),
       ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Text(
-            speedKnots.toStringAsFixed(1),
-            style: const TextStyle(
-              color: Color(0xFF00DDFF),
-              fontSize: 48,
-              fontWeight: FontWeight.w100,
-              fontFamily: 'monospace',
+    );
+  }
+
+  Widget _buildNavigationHint() {
+    return Positioned(
+      bottom: 20,
+      left: 0,
+      right: 0,
+      child: Center(
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+          decoration: BoxDecoration(
+            color: const Color(0xFF001a2e).withValues(alpha: 0.8),
+            borderRadius: BorderRadius.circular(25),
+            border: Border.all(
+              color: const Color(0xFF00d4ff).withValues(alpha: 0.3),
+              width: 1,
             ),
           ),
-          const SizedBox(width: 12),
-          Text(
-            'KT',
+          child: Text(
+            'TAP TO RETURN TO TELEMETRY',
             style: TextStyle(
-              color: const Color(0xFF00DDFF).withValues(alpha: 0.7),
-              fontSize: 18,
+              color: const Color(0xFF00d4ff).withValues(alpha: 0.8),
+              fontSize: 11,
               fontWeight: FontWeight.w300,
-              letterSpacing: 1.0,
+              letterSpacing: 1.5,
             ),
           ),
-        ],
+        ),
       ),
     );
   }
 }
 
-class DashboardFramePainter extends CustomPainter {
+class TachometerPainter extends CustomPainter {
+  final double rpmPercent;
+  final bool isDanger;
+  final double glowIntensity;
+  final double needleAnimation;
+
+  TachometerPainter({
+    required this.rpmPercent,
+    required this.isDanger,
+    required this.glowIntensity,
+    required this.needleAnimation,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = Offset(size.width / 2, size.height / 2);
+    final radius = size.width * 0.4;
+    
+    // Draw tachometer arc background
+    _drawTachometerArc(canvas, center, radius);
+    
+    // Draw tick marks and numbers
+    _drawTickMarks(canvas, center, radius);
+    
+    // Draw color zones
+    _drawColorZones(canvas, center, radius);
+    
+    // Draw needle
+    _drawNeedle(canvas, center, radius);
+  }
+
+  void _drawTachometerArc(Canvas canvas, Offset center, double radius) {
+    final paint = Paint()
+      ..color = const Color(0xFF001a2e).withValues(alpha: 0.6)
+      ..strokeWidth = 8
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round;
+
+    const startAngle = math.pi * 0.75; // 7 o'clock
+    const sweepAngle = math.pi * 1.5; // 270 degrees
+
+    canvas.drawArc(
+      Rect.fromCircle(center: center, radius: radius),
+      startAngle,
+      sweepAngle,
+      false,
+      paint,
+    );
+  }
+
+  void _drawTickMarks(Canvas canvas, Offset center, double radius) {
+    final paint = Paint()
+      ..color = const Color(0xFF00d4ff).withValues(alpha: 0.6)
+      ..strokeWidth = 2
+      ..strokeCap = StrokeCap.round;
+
+    final textPainter = TextPainter(
+      textDirection: TextDirection.ltr,
+    );
+
+    for (int i = 0; i <= 8; i++) {
+      final angle = math.pi * 0.75 + (math.pi * 1.5 * i / 8);
+      final rpm = 800 + (i * 275); // 800 to 3000 RPM
+      
+      // Major tick
+      final startPoint = Offset(
+        center.dx + (radius - 15) * math.cos(angle),
+        center.dy + (radius - 15) * math.sin(angle),
+      );
+      final endPoint = Offset(
+        center.dx + radius * math.cos(angle),
+        center.dy + radius * math.sin(angle),
+      );
+      
+      canvas.drawLine(startPoint, endPoint, paint);
+      
+      // RPM numbers
+      if (i % 2 == 0) {
+        final textOffset = Offset(
+          center.dx + (radius - 35) * math.cos(angle),
+          center.dy + (radius - 35) * math.sin(angle),
+        );
+        
+        textPainter.text = TextSpan(
+          text: '${(rpm / 100).round()}',
+          style: TextStyle(
+            color: const Color(0xFF00d4ff).withValues(alpha: 0.7),
+            fontSize: 14,
+            fontWeight: FontWeight.w300,
+          ),
+        );
+        textPainter.layout();
+        textPainter.paint(
+          canvas, 
+          textOffset - Offset(textPainter.width / 2, textPainter.height / 2),
+        );
+      }
+    }
+  }
+
+  void _drawColorZones(Canvas canvas, Offset center, double radius) {
+    const startAngle = math.pi * 0.75;
+    const totalSweep = math.pi * 1.5;
+    
+    // Green zone (800-2000 RPM) - 54.5% of total
+    final greenSweep = totalSweep * 0.545;
+    final greenPaint = Paint()
+      ..color = const Color(0xFF00ff88).withValues(alpha: 0.3)
+      ..strokeWidth = 6
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round;
+    
+    canvas.drawArc(
+      Rect.fromCircle(center: center, radius: radius + 10),
+      startAngle,
+      greenSweep,
+      false,
+      greenPaint,
+    );
+    
+    // Amber zone (2000-2500 RPM) - 22.7% of total
+    final amberSweep = totalSweep * 0.227;
+    final amberPaint = Paint()
+      ..color = const Color(0xFFffd700).withValues(alpha: 0.4)
+      ..strokeWidth = 6
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round;
+    
+    canvas.drawArc(
+      Rect.fromCircle(center: center, radius: radius + 10),
+      startAngle + greenSweep,
+      amberSweep,
+      false,
+      amberPaint,
+    );
+    
+    // Red zone (2500+ RPM) - 22.7% of total
+    final redSweep = totalSweep * 0.227;
+    final redPaint = Paint()
+      ..color = Color.lerp(
+        const Color(0xFFff4444).withValues(alpha: 0.4),
+        const Color(0xFFff4444).withValues(alpha: 0.8),
+        glowIntensity,
+      )!
+      ..strokeWidth = 6
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round;
+    
+    canvas.drawArc(
+      Rect.fromCircle(center: center, radius: radius + 10),
+      startAngle + greenSweep + amberSweep,
+      redSweep,
+      false,
+      redPaint,
+    );
+  }
+
+  void _drawNeedle(Canvas canvas, Offset center, double radius) {
+    const startAngle = math.pi * 0.75;
+    const totalSweep = math.pi * 1.5;
+    final needleAngle = startAngle + (totalSweep * rpmPercent);
+    
+    final needlePaint = Paint()
+      ..color = isDanger 
+        ? Color.lerp(const Color(0xFFff4444), const Color(0xFFff8888), glowIntensity)!
+        : const Color(0xFF00d4ff)
+      ..strokeWidth = 3
+      ..strokeCap = StrokeCap.round;
+    
+    // Needle shadow
+    final shadowPaint = Paint()
+      ..color = Colors.black.withValues(alpha: 0.3)
+      ..strokeWidth = 4
+      ..strokeCap = StrokeCap.round;
+    
+    final needleEnd = Offset(
+      center.dx + (radius - 20) * math.cos(needleAngle),
+      center.dy + (radius - 20) * math.sin(needleAngle),
+    );
+    
+    final shadowEnd = Offset(
+      center.dx + (radius - 18) * math.cos(needleAngle) + 2,
+      center.dy + (radius - 18) * math.sin(needleAngle) + 2,
+    );
+    
+    // Draw shadow
+    canvas.drawLine(center + const Offset(2, 2), shadowEnd, shadowPaint);
+    
+    // Draw needle
+    canvas.drawLine(center, needleEnd, needlePaint);
+    
+    // Center hub
+    final hubPaint = Paint()
+      ..color = isDanger 
+        ? Color.lerp(const Color(0xFFff4444), const Color(0xFFff8888), glowIntensity)!
+        : const Color(0xFF00d4ff)
+      ..style = PaintingStyle.fill;
+    
+    canvas.drawCircle(center, 6, hubPaint);
+    
+    // Center hub highlight
+    final highlightPaint = Paint()
+      ..color = Colors.white.withValues(alpha: 0.3)
+      ..style = PaintingStyle.fill;
+    
+    canvas.drawCircle(center - const Offset(2, 2), 3, highlightPaint);
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => true;
+}
+
+class WingGaugePainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
-      ..color = const Color(0xFF00DDFF).withValues(alpha: 0.3)
-      ..strokeWidth = 2
-      ..style = PaintingStyle.stroke;
-    
-    final glowPaint = Paint()
-      ..color = const Color(0xFF00DDFF).withValues(alpha: 0.1)
-      ..strokeWidth = 6
-      ..style = PaintingStyle.stroke
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 3);
-    
-    // Create rounded rectangle path
-    final rect = RRect.fromRectAndRadius(
-      Rect.fromLTWH(0, 0, size.width, size.height),
-      const Radius.circular(30),
-    );
-    
-    // Draw glow effect
-    canvas.drawRRect(rect, glowPaint);
-    
-    // Draw main frame
-    canvas.drawRRect(rect, paint);
-    
-    // Draw corner accent lines
-    _drawCornerAccents(canvas, size);
-  }
+      ..color = const Color(0xFF00d4ff).withValues(alpha: 0.3)
+      ..strokeWidth = 1;
 
-  void _drawCornerAccents(Canvas canvas, Size size) {
-    final accentPaint = Paint()
-      ..color = const Color(0xFF00DDFF)
-      ..strokeWidth = 3
-      ..style = PaintingStyle.stroke;
+    // Draw gauge marks
+    for (int i = 0; i <= 4; i++) {
+      final y = size.height * (0.1 + i * 0.2);
+      canvas.drawLine(
+        Offset(size.width * 0.2, y),
+        Offset(size.width * 0.8, y),
+        paint,
+      );
+    }
     
-    const double accentLength = 30;
+    // Center reference line
+    final centerPaint = Paint()
+      ..color = const Color(0xFFffd700).withValues(alpha: 0.6)
+      ..strokeWidth = 2;
     
-    // Top left
     canvas.drawLine(
-      const Offset(30, 30),
-      const Offset(30 + accentLength, 30),
-      accentPaint,
-    );
-    canvas.drawLine(
-      const Offset(30, 30),
-      const Offset(30, 30 + accentLength),
-      accentPaint,
-    );
-    
-    // Top right
-    canvas.drawLine(
-      Offset(size.width - 30, 30),
-      Offset(size.width - 30 - accentLength, 30),
-      accentPaint,
-    );
-    canvas.drawLine(
-      Offset(size.width - 30, 30),
-      Offset(size.width - 30, 30 + accentLength),
-      accentPaint,
-    );
-    
-    // Bottom left
-    canvas.drawLine(
-      Offset(30, size.height - 30),
-      Offset(30 + accentLength, size.height - 30),
-      accentPaint,
-    );
-    canvas.drawLine(
-      Offset(30, size.height - 30),
-      Offset(30, size.height - 30 - accentLength),
-      accentPaint,
-    );
-    
-    // Bottom right
-    canvas.drawLine(
-      Offset(size.width - 30, size.height - 30),
-      Offset(size.width - 30 - accentLength, size.height - 30),
-      accentPaint,
-    );
-    canvas.drawLine(
-      Offset(size.width - 30, size.height - 30),
-      Offset(size.width - 30, size.height - 30 - accentLength),
-      accentPaint,
+      Offset(size.width * 0.1, size.height * 0.5),
+      Offset(size.width * 0.9, size.height * 0.5),
+      centerPaint,
     );
   }
 
   @override
   bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
+class ScanLinesPainter extends CustomPainter {
+  final double animationValue;
+  
+  ScanLinesPainter(this.animationValue);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = const Color(0xFF00d4ff).withValues(alpha: 0.02 * animationValue)
+      ..strokeWidth = 1;
+
+    // Subtle horizontal scan lines
+    for (double y = 0; y < size.height; y += 3) {
+      canvas.drawLine(
+        Offset(0, y),
+        Offset(size.width, y),
+        paint,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => true;
 }
