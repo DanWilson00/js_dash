@@ -100,7 +100,6 @@ class _MultiSignalSelectionDialogState extends State<MultiSignalSelectionDialog>
                     final messageType = parts.length > 1 ? parts[0] : 'Unknown';
                     final fieldName = parts.length > 1 ? parts[1] : fieldKey;
                     final isSelected = _selectedFields[fieldKey] ?? false;
-                    final existingSignal = _existingSignals[fieldKey];
 
                     return Card(
                       margin: const EdgeInsets.symmetric(vertical: 2),
@@ -116,25 +115,14 @@ class _MultiSignalSelectionDialogState extends State<MultiSignalSelectionDialog>
                           style: const TextStyle(fontWeight: FontWeight.bold),
                         ),
                         subtitle: Text(messageType),
-                        secondary: existingSignal != null
-                            ? Container(
-                                width: 20,
-                                height: 20,
-                                decoration: BoxDecoration(
-                                  color: existingSignal.color,
-                                  shape: BoxShape.circle,
-                                ),
-                              )
-                            : Container(
-                                width: 20,
-                                height: 20,
-                                decoration: BoxDecoration(
-                                  color: SignalColorPalette.getNextColor(
-                                    _getSelectedCount(),
-                                  ),
-                                  shape: BoxShape.circle,
-                                ),
-                              ),
+                        secondary: Container(
+                          width: 20,
+                          height: 20,
+                          decoration: BoxDecoration(
+                            color: _getPreviewColor(fieldKey),
+                            shape: BoxShape.circle,
+                          ),
+                        ),
                         dense: true,
                       ),
                     );
@@ -182,6 +170,41 @@ class _MultiSignalSelectionDialogState extends State<MultiSignalSelectionDialog>
     return _selectedFields.values.where((selected) => selected).length;
   }
 
+  Color _getPreviewColor(String fieldKey) {
+    // If signal already exists, use its color
+    final existingSignal = _existingSignals[fieldKey];
+    if (existingSignal != null) {
+      return existingSignal.color;
+    }
+    
+    // For new signals, calculate what color they would get
+    final usedColors = <Color>{};
+    int newSignalIndex = 0;
+    
+    // Collect colors from existing signals that are selected
+    for (final entry in _selectedFields.entries) {
+      if (entry.value) {
+        final existing = _existingSignals[entry.key];
+        if (existing != null) {
+          usedColors.add(existing.color);
+        } else if (entry.key != fieldKey) {
+          // This is another new signal that would be processed before this one
+          newSignalIndex++;
+        }
+      }
+    }
+    
+    // Find next available color for this new signal
+    Color previewColor = SignalColorPalette.getColorForSignal(fieldKey);
+    int colorIndex = 0;
+    while (usedColors.contains(previewColor) && colorIndex < SignalColorPalette.availableColors.length) {
+      previewColor = SignalColorPalette.getNextColor(usedColors.length + newSignalIndex + colorIndex);
+      colorIndex++;
+    }
+    
+    return previewColor;
+  }
+
   void _clearAll() {
     setState(() {
       _selectedFields.clear();
@@ -198,27 +221,44 @@ class _MultiSignalSelectionDialogState extends State<MultiSignalSelectionDialog>
 
   void _applySelection() {
     final selectedSignals = <PlotSignalConfiguration>[];
-    int colorIndex = 0;
+    final usedColors = <Color>{};
 
+    // First pass: collect existing signals and their colors
     for (final fieldKey in _availableFields) {
       if (_selectedFields[fieldKey] == true) {
-        final parts = fieldKey.split('.');
-        final messageType = parts.length > 1 ? parts[0] : 'Unknown';
-        final fieldName = parts.length > 1 ? parts[1] : fieldKey;
-
-        // Use existing signal if available, otherwise create new one
         final existingSignal = _existingSignals[fieldKey];
         if (existingSignal != null) {
           selectedSignals.add(existingSignal);
-        } else {
+          usedColors.add(existingSignal.color);
+        }
+      }
+    }
+
+    // Second pass: create new signals with unused colors
+    for (final fieldKey in _availableFields) {
+      if (_selectedFields[fieldKey] == true) {
+        final existingSignal = _existingSignals[fieldKey];
+        if (existingSignal == null) {
+          final parts = fieldKey.split('.');
+          final messageType = parts.length > 1 ? parts[0] : 'Unknown';
+          final fieldName = parts.length > 1 ? parts[1] : fieldKey;
+          
+          // Find next available color
+          Color signalColor = SignalColorPalette.getColorForSignal(fieldKey);
+          int colorIndex = 0;
+          while (usedColors.contains(signalColor) && colorIndex < SignalColorPalette.availableColors.length) {
+            signalColor = SignalColorPalette.getNextColor(selectedSignals.length + colorIndex);
+            colorIndex++;
+          }
+          usedColors.add(signalColor);
+
           final signal = PlotSignalConfiguration(
             id: '${messageType}_${fieldName}_${DateTime.now().millisecondsSinceEpoch}',
             messageType: messageType,
             fieldName: fieldName,
-            color: SignalColorPalette.getNextColor(colorIndex),
+            color: signalColor,
           );
           selectedSignals.add(signal);
-          colorIndex++;
         }
       }
     }
