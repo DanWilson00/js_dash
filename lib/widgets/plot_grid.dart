@@ -386,24 +386,46 @@ class PlotGridManagerState extends State<PlotGridManager> {
     return _plots.indexWhere((p) => p.id == plotId);
   }
 
-  // Public method to assign field to selected plot (legacy compatibility)
+  // Public method to toggle field in selected plot
   void assignFieldToSelectedPlot(String messageType, String fieldName) {
     if (_selectedPlotId == null) return;
 
     final plotIndex = _plots.indexWhere((p) => p.id == _selectedPlotId);
     if (plotIndex == -1) return;
 
-    // Create a new signal for legacy compatibility
-    final signal = PlotSignalConfiguration(
-      id: '${messageType}_${fieldName}_${DateTime.now().millisecondsSinceEpoch}',
-      messageType: messageType,
-      fieldName: fieldName,
-      color: SignalColorPalette.getNextColor(_plots[plotIndex].yAxis.signals.length),
-    );
+    final fieldKey = '$messageType.$fieldName';
+    final currentPlot = _plots[plotIndex];
+    final existingSignalIndex = currentPlot.yAxis.signals
+        .indexWhere((s) => s.fieldKey == fieldKey);
 
     setState(() {
-      _plots[plotIndex] = _plots[plotIndex].addSignal(signal);
+      if (existingSignalIndex != -1) {
+        // Signal exists, remove it
+        final updatedSignals = List<PlotSignalConfiguration>.from(
+          currentPlot.yAxis.signals
+        );
+        updatedSignals.removeAt(existingSignalIndex);
+        
+        _plots[plotIndex] = currentPlot.copyWith(
+          yAxis: currentPlot.yAxis.copyWith(signals: updatedSignals),
+        );
+      } else {
+        // Signal doesn't exist, add it
+        final signal = PlotSignalConfiguration(
+          id: '${messageType}_${fieldName}_${DateTime.now().millisecondsSinceEpoch}',
+          messageType: messageType,
+          fieldName: fieldName,
+          color: SignalColorPalette.getNextColor(_plots[plotIndex].yAxis.signals.length),
+        );
+        
+        _plots[plotIndex] = _plots[plotIndex].addSignal(signal);
+      }
     });
+    
+    // Notify parent to refresh field highlighting
+    if (widget.onFieldAssignment != null) {
+      widget.onFieldAssignment!();
+    }
   }
 
   // Public method to add signal to selected plot
@@ -427,5 +449,30 @@ class PlotGridManagerState extends State<PlotGridManager> {
     if (_selectedPlotId == null) return null;
     final index = _getPlotIndex(_selectedPlotId!);
     return 'Plot ${index + 1}';
+  }
+
+  // Get all plotted fields across all plots
+  Set<String> get allPlottedFields {
+    final fields = <String>{};
+    for (final plot in _plots) {
+      for (final signal in plot.yAxis.signals) {
+        fields.add(signal.fieldKey);
+      }
+    }
+    return fields;
+  }
+
+  // Get fields and colors for the selected plot
+  Map<String, Color> get selectedPlotFields {
+    if (_selectedPlotId == null) return {};
+    
+    final plot = _plots.firstWhere((p) => p.id == _selectedPlotId);
+    final fields = <String, Color>{};
+    
+    for (final signal in plot.yAxis.signals) {
+      fields[signal.fieldKey] = signal.color;
+    }
+    
+    return fields;
   }
 }

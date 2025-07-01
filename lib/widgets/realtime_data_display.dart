@@ -171,6 +171,8 @@ class _RealtimeDataDisplayState extends State<RealtimeDataDisplay> {
                 MavlinkMessageMonitor(
                   autoStart: widget.autoStartMonitor,
                   onFieldSelected: _onFieldSelected,
+                  plottedFields: _plotGridKey.currentState?.allPlottedFields ?? {},
+                  selectedPlotFields: _plotGridKey.currentState?.selectedPlotFields ?? {},
                 ),
                 Expanded(
                   child: Padding(
@@ -178,7 +180,8 @@ class _RealtimeDataDisplayState extends State<RealtimeDataDisplay> {
                     child: PlotGridManager(
                       key: _plotGridKey,
                       onFieldAssignment: () {
-                        // Optional callback when field is assigned
+                        // Force refresh to update field highlighting
+                        setState(() {});
                       },
                     ),
                   ),

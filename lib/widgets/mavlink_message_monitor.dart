@@ -7,10 +7,14 @@ class MavlinkMessageMonitor extends StatefulWidget {
     super.key, 
     this.autoStart = true,
     this.onFieldSelected,
+    this.plottedFields = const {},
+    this.selectedPlotFields = const {},
   });
 
   final bool autoStart;
   final Function(String messageType, String fieldName)? onFieldSelected;
+  final Set<String> plottedFields; // All fields plotted across all plots
+  final Map<String, Color> selectedPlotFields; // Fields in selected plot with their colors
 
   @override
   State<MavlinkMessageMonitor> createState() => _MavlinkMessageMonitorState();
@@ -269,6 +273,11 @@ class _MavlinkMessageMonitorState extends State<MavlinkMessageMonitor> {
       padding: const EdgeInsets.all(12.0),
       child: Column(
         children: fields.entries.map((field) {
+          final fieldKey = '$messageName.${field.key}';
+          final isPlotted = widget.plottedFields.contains(fieldKey);
+          final isInSelectedPlot = widget.selectedPlotFields.containsKey(fieldKey);
+          final fieldColor = widget.selectedPlotFields[fieldKey];
+          
           return InkWell(
             onTap: widget.onFieldSelected != null 
                 ? () => widget.onFieldSelected!(messageName, field.key)
@@ -277,8 +286,11 @@ class _MavlinkMessageMonitorState extends State<MavlinkMessageMonitor> {
               padding: const EdgeInsets.symmetric(vertical: 2.0, horizontal: 4.0),
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(4),
-                color: widget.onFieldSelected != null 
-                    ? Colors.transparent
+                color: isInSelectedPlot 
+                    ? fieldColor!.withValues(alpha: 0.1)
+                    : (isPlotted ? Theme.of(context).colorScheme.surfaceContainerHighest : Colors.transparent),
+                border: isInSelectedPlot
+                    ? Border.all(color: fieldColor!.withValues(alpha: 0.3), width: 1)
                     : null,
               ),
               child: Row(
@@ -309,9 +321,9 @@ class _MavlinkMessageMonitorState extends State<MavlinkMessageMonitor> {
                         ),
                         if (widget.onFieldSelected != null)
                           Icon(
-                            Icons.touch_app,
-                            size: 12,
-                            color: Theme.of(context).colorScheme.outline,
+                            isInSelectedPlot ? Icons.remove_circle : (isPlotted ? Icons.add_circle_outline : Icons.add_circle),
+                            size: 16,
+                            color: isInSelectedPlot ? fieldColor : Theme.of(context).colorScheme.primary,
                           ),
                       ],
                     ),
