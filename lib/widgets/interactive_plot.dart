@@ -295,6 +295,7 @@ class _InteractivePlotState extends State<InteractivePlot> {
       children: [
         LineChart(
           LineChartData(
+            lineTouchData: LineTouchData(enabled: false), // Disable touch to allow GestureDetector to work
             gridData: FlGridData(
               show: true,
               drawVerticalLine: true,
