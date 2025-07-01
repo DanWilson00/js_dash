@@ -10,6 +10,7 @@ class InteractivePlot extends StatefulWidget {
   final bool isAxisSelected;
   final VoidCallback? onAxisTap;
   final VoidCallback? onClearAxis;
+  final VoidCallback? onLegendTap;
 
   const InteractivePlot({
     super.key,
@@ -17,6 +18,7 @@ class InteractivePlot extends StatefulWidget {
     this.isAxisSelected = false,
     this.onAxisTap,
     this.onClearAxis,
+    this.onLegendTap,
   });
 
   @override
@@ -224,10 +226,41 @@ class _InteractivePlotState extends State<InteractivePlot> {
             ),
           ),
         ),
-        if (widget.configuration.yAxis.hasData)
-          CompactPlotLegend(
-            signals: widget.configuration.yAxis.signals,
-          ),
+        GestureDetector(
+          onTap: widget.onLegendTap,
+          child: widget.configuration.yAxis.hasData
+              ? CompactPlotLegend(
+                  signals: widget.configuration.yAxis.signals,
+                )
+              : Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.5),
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.add,
+                        size: 14,
+                        color: Theme.of(context).colorScheme.primary,
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        'Add Signals',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: Theme.of(context).colorScheme.primary,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+        ),
       ],
     );
   }

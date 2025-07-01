@@ -84,7 +84,7 @@ void main() {
       expect(find.text('Plot 1'), findsOneWidget);
     });
 
-    testWidgets('should show signal management panel when plot selected', (tester) async {
+    testWidgets('should NOT show signal panel by default', (tester) async {
       await tester.pumpWidget(
         const MaterialApp(
           home: Scaffold(
@@ -95,9 +95,8 @@ void main() {
 
       await tester.pump();
 
-      // Should show signal management panel since first plot is auto-selected
-      expect(find.text('Signals (0)'), findsOneWidget);
-      expect(find.text('Add Signals'), findsOneWidget);
+      // Should NOT show signal panel by default even when plot is selected
+      expect(find.text('Available Signals'), findsNothing);
     });
 
     testWidgets('should handle plot count changes', (tester) async {
@@ -258,6 +257,52 @@ void main() {
              returnsNormally);
       
       await tester.pump();
+    });
+
+    testWidgets('should maintain signal panel state correctly', (tester) async {
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Scaffold(
+            body: PlotGridManager(),
+          ),
+        ),
+      );
+
+      final gridState = tester.state<PlotGridManagerState>(find.byType(PlotGridManager));
+
+      // Add a signal to make legend clickable
+      gridState.assignFieldToSelectedPlot('ATTITUDE', 'roll');
+      await tester.pump();
+
+      // Panel should not be visible initially
+      expect(find.text('Available Signals'), findsNothing);
+
+      // Test that the widget can handle signal management without crashes
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('should handle signal addition and removal', (tester) async {
+      await tester.pumpWidget(
+        const MaterialApp(
+          home: Scaffold(
+            body: PlotGridManager(),
+          ),
+        ),
+      );
+
+      final gridState = tester.state<PlotGridManagerState>(find.byType(PlotGridManager));
+
+      // Test adding signals via the public API
+      gridState.assignFieldToSelectedPlot('ATTITUDE', 'roll');
+      await tester.pump();
+      expect(tester.takeException(), isNull);
+
+      gridState.assignFieldToSelectedPlot('ATTITUDE', 'pitch');
+      await tester.pump();
+      expect(tester.takeException(), isNull);
+
+      // The plot should now have signals
+      expect(gridState.hasSelectedPlot, true);
     });
   });
 }

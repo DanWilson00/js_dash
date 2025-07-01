@@ -96,33 +96,54 @@ class CompactPlotLegend extends StatelessWidget {
       return const SizedBox.shrink();
     }
 
-    return Row(
-      children: [
-        ...visibleSignals.take(3).map((signal) => 
-          Padding(
-            padding: const EdgeInsets.only(right: 4),
-            child: GestureDetector(
-              onTap: onSignalTap != null ? () => onSignalTap!(signal) : null,
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.5),
+        ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            Icons.tune,
+            size: 14,
+            color: Theme.of(context).colorScheme.primary,
+          ),
+          const SizedBox(width: 6),
+          ...visibleSignals.take(3).map((signal) => 
+            Padding(
+              padding: const EdgeInsets.only(right: 4),
               child: Container(
-                width: 8,
-                height: 8,
+                width: 10,
+                height: 10,
                 decoration: BoxDecoration(
                   color: signal.color,
                   shape: BoxShape.circle,
+                  border: Border.all(
+                    color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.3),
+                    width: 0.5,
+                  ),
                 ),
               ),
             ),
           ),
-        ),
-        if (visibleSignals.length > 3)
-          Text(
-            '+${visibleSignals.length - 3}',
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-              color: Theme.of(context).colorScheme.outline,
-              fontSize: 10,
+          if (visibleSignals.length > 3) ...[
+            const SizedBox(width: 2),
+            Text(
+              '+${visibleSignals.length - 3}',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: Theme.of(context).colorScheme.outline,
+                fontSize: 10,
+                fontWeight: FontWeight.w500,
+              ),
             ),
-          ),
-      ],
+          ],
+        ],
+      ),
     );
   }
 }
