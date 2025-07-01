@@ -26,8 +26,8 @@ void main() {
     // Build our app and trigger a frame.
     await tester.pumpWidget(const SubmersibleJetskiApp(autoStartMonitor: false));
 
-    // Verify that our app starts with the dashboard title.
-    expect(find.text('Submersible Jetski Dashboard'), findsOneWidget);
+    // Verify that our app starts with the connection status indicator.
+    expect(find.textContaining('SPOOF MODE'), findsOneWidget);
     
     // Reset size
     await tester.binding.setSurfaceSize(null);

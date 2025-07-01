@@ -21,6 +21,12 @@ class MavlinkSpoofService extends MavlinkDataProvider {
   bool _isRunning = false;
 
   bool get isRunning => _isRunning;
+  
+  // Getters for HUD data
+  double get currentRPM => _rpm;
+  double get currentSpeed => _speed;
+  double get portWingPosition => _portWingPosition;
+  double get starboardWingPosition => _starboardWingPosition;
 
   double _roll = 0.0;
   double _pitch = 0.0;
@@ -31,6 +37,9 @@ class MavlinkSpoofService extends MavlinkDataProvider {
   double _speed = 2.5; // 2.5 m/s cruising speed
   final int _batteryVoltage = 24000; // 24V in millivolts
   double _heading = 0.0;
+  double _rpm = 0.0;
+  double _portWingPosition = 0.0; // -100 to +100 (degrees or percentage)
+  double _starboardWingPosition = 0.0; // -100 to +100 (degrees or percentage)
 
   void startSpoofing({Duration? interval}) {
     if (_isRunning) return;
@@ -161,11 +170,23 @@ class MavlinkSpoofService extends MavlinkDataProvider {
     if (_heading < 0) _heading += 360;
     if (_heading >= 360) _heading -= 360;
 
+    // Generate RPM based on throttle (simulated engine RPM)
+    final currentThrottle = 40 + _random.nextInt(40); // 40-80% throttle
+    _rpm = 800 + (currentThrottle / 100.0) * 2200; // 800-3000 RPM based on throttle
+    _rpm += (_random.nextDouble() - 0.5) * 100; // Add some variation
+
+    // Generate wing positions (simulated control surfaces)
+    _portWingPosition += (_random.nextDouble() - 0.5) * 10; // Gradual changes
+    _portWingPosition = _portWingPosition.clamp(-50.0, 50.0); // -50 to +50 degrees
+    
+    _starboardWingPosition += (_random.nextDouble() - 0.5) * 10;
+    _starboardWingPosition = _starboardWingPosition.clamp(-50.0, 50.0);
+
     final vfrHud = VfrHud(
       airspeed: _speed, // Actually water speed for submersible
       groundspeed: _speed,
       heading: _heading.round(),
-      throttle: 40 + _random.nextInt(40), // 40-80% throttle
+      throttle: currentThrottle,
       alt: _alt,
       climb: (_random.nextDouble() - 0.5) * 0.5, // ±0.5 m/s climb rate
     );

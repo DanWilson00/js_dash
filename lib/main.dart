@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'widgets/realtime_data_display.dart';
+import 'widgets/main_navigation.dart';
 
 void main() {
   runApp(const SubmersibleJetskiApp());
@@ -20,8 +20,14 @@ class SubmersibleJetskiApp extends StatelessWidget {
           brightness: Brightness.dark,
         ),
         useMaterial3: true,
+        fontFamily: 'Roboto',
+        textTheme: const TextTheme(
+          bodyLarge: TextStyle(fontWeight: FontWeight.w300),
+          bodyMedium: TextStyle(fontWeight: FontWeight.w300),
+          bodySmall: TextStyle(fontWeight: FontWeight.w300),
+        ),
       ),
-      home: RealtimeDataDisplay(autoStartMonitor: autoStartMonitor),
+      home: MainNavigation(autoStartMonitor: autoStartMonitor),
       debugShowCheckedModeBanner: false,
     );
   }

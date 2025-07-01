@@ -168,30 +168,39 @@ class _RealtimeDataDisplayState extends State<RealtimeDataDisplay> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Submersible Jetski Dashboard'),
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-        actions: [
-          IconButton(
-            icon: Icon(_isPaused ? Icons.play_arrow : Icons.pause),
-            onPressed: _togglePause,
-            tooltip: _isPaused ? 'Resume Streaming' : 'Pause Streaming',
-          ),
-          IconButton(
-            icon: const Icon(Icons.clear_all),
-            onPressed: _clearAllPlots,
-            tooltip: 'Clear All Plots',
-          ),
-          const SizedBox(width: 8),
-          IconButton(
-            icon: Icon(_isUsingSpoof ? Icons.bug_report : Icons.wifi),
-            onPressed: _toggleMode,
-            tooltip: _isUsingSpoof ? 'Switch to Real MAVLink' : 'Switch to Spoof Mode',
-          ),
-        ],
-      ),
       body: Column(
         children: [
+          // Floating action buttons in top-right corner
+          SizedBox(
+            width: double.infinity,
+            child: Align(
+              alignment: Alignment.topRight,
+              child: Padding(
+                padding: const EdgeInsets.all(8.0),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    IconButton(
+                      icon: Icon(_isPaused ? Icons.play_arrow : Icons.pause),
+                      onPressed: _togglePause,
+                      tooltip: _isPaused ? 'Resume Streaming' : 'Pause Streaming',
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.clear_all),
+                      onPressed: _clearAllPlots,
+                      tooltip: 'Clear All Plots',
+                    ),
+                    const SizedBox(width: 8),
+                    IconButton(
+                      icon: Icon(_isUsingSpoof ? Icons.bug_report : Icons.wifi),
+                      onPressed: _toggleMode,
+                      tooltip: _isUsingSpoof ? 'Switch to Real MAVLink' : 'Switch to Spoof Mode',
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
           _buildConnectionStatus(),
           Expanded(
             child: Row(
