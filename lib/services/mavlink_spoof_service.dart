@@ -37,7 +37,8 @@ class MavlinkSpoofService extends MavlinkDataProvider {
   double _speed = 2.5; // 2.5 m/s cruising speed
   final int _batteryVoltage = 24000; // 24V in millivolts
   double _heading = 0.0;
-  double _rpm = 0.0;
+  double _rpm = 1000.0;
+  double _rpmDirection = 1.0; // 1 for increasing, -1 for decreasing
   double _portWingPosition = 0.0; // -100 to +100 (degrees or percentage)
   double _starboardWingPosition = 0.0; // -100 to +100 (degrees or percentage)
 
@@ -170,18 +171,36 @@ class MavlinkSpoofService extends MavlinkDataProvider {
     if (_heading < 0) _heading += 360;
     if (_heading >= 360) _heading -= 360;
 
-    // Generate RPM based on throttle (simulated engine RPM)
-    final currentThrottle = 40 + _random.nextInt(40); // 40-80% throttle
-    _rpm = 800 + (currentThrottle / 100.0) * 2200; // 800-3000 RPM based on throttle
-    _rpm += (_random.nextDouble() - 0.5) * 100; // Add some variation
+    // Generate RPM with slow strobing pattern
+    const minRpm = 800.0;
+    const maxRpm = 6500.0;
+    const rpmStep = 50.0; // RPM change per update
+    
+    // Update RPM in strobing pattern
+    _rpm += _rpmDirection * rpmStep;
+    
+    // Reverse direction at limits
+    if (_rpm >= maxRpm) {
+      _rpm = maxRpm;
+      _rpmDirection = -1.0;
+    } else if (_rpm <= minRpm) {
+      _rpm = minRpm;
+      _rpmDirection = 1.0;
+    }
+    
+    // Add small random variation
+    _rpm += (_random.nextDouble() - 0.5) * 50;
 
     // Generate wing positions (simulated control surfaces)
-    _portWingPosition += (_random.nextDouble() - 0.5) * 10; // Gradual changes
-    _portWingPosition = _portWingPosition.clamp(-50.0, 50.0); // -50 to +50 degrees
+    _portWingPosition += (_random.nextDouble() - 0.5) * 5; // Gradual changes
+    _portWingPosition = _portWingPosition.clamp(-20.0, 20.0); // -20 to +20 degrees
     
-    _starboardWingPosition += (_random.nextDouble() - 0.5) * 10;
-    _starboardWingPosition = _starboardWingPosition.clamp(-50.0, 50.0);
+    _starboardWingPosition += (_random.nextDouble() - 0.5) * 5;
+    _starboardWingPosition = _starboardWingPosition.clamp(-20.0, 20.0);
 
+    // Calculate throttle based on current RPM
+    final currentThrottle = ((_rpm - minRpm) / (maxRpm - minRpm) * 100).round().clamp(0, 100);
+    
     final vfrHud = VfrHud(
       airspeed: _speed, // Actually water speed for submersible
       groundspeed: _speed,

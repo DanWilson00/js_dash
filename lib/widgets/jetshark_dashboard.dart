@@ -91,12 +91,17 @@ class _JetsharkDashboardState extends State<JetsharkDashboard> with TickerProvid
           _targetRpm = _spoofService.currentRPM;
           _speed = _spoofService.currentSpeed * 1.94384; // Convert to knots
           
+          // Debug: Print RPM value to console (reduced frequency)
+          if (_targetRpm.round() % 100 == 0) {
+            print('RPM: ${_rpm.round()}/${_targetRpm.round()}, Percent: ${(_rpm/7000*100).round()}%');
+          }
+          
           _targetLeftWing = _spoofService.portWingPosition;
           _targetRightWing = _spoofService.starboardWingPosition;
           
-          // Smooth RPM animation
-          if ((_targetRpm - _rpm).abs() > 10) {
-            _rpm = _rpm + (_targetRpm - _rpm) * 0.1;
+          // Smooth RPM animation - always update
+          _rpm = _rpm + (_targetRpm - _rpm) * 0.08;
+          if ((_targetRpm - _rpm).abs() > 5) {
             _rpmController.forward(from: 0);
           }
           
@@ -168,7 +173,7 @@ class _JetsharkDashboardState extends State<JetsharkDashboard> with TickerProvid
   Widget _buildDashboardContent(BoxConstraints constraints) {
     final screenWidth = constraints.maxWidth;
     final screenHeight = constraints.maxHeight;
-    final centerGaugeSize = math.min(screenWidth * 0.5, screenHeight * 0.6);
+    final centerGaugeSize = math.min(screenWidth * 0.75, screenHeight * 0.85);
     
     return Column(
       children: [
@@ -193,7 +198,7 @@ class _JetsharkDashboardState extends State<JetsharkDashboard> with TickerProvid
               
               // Center RPM gauge with speed
               Expanded(
-                flex: 3,
+                flex: 4,
                 child: _buildCentralRPMGauge(centerGaugeSize),
               ),
               
@@ -219,7 +224,7 @@ class _JetsharkDashboardState extends State<JetsharkDashboard> with TickerProvid
     final fontSize = (screenWidth * 0.028).clamp(20.0, 36.0);
     
     return Container(
-      height: screenHeight * 0.1,
+      height: screenHeight * 0.06,
       alignment: Alignment.center,
       child: Text(
         'JETSHARK',
@@ -234,11 +239,12 @@ class _JetsharkDashboardState extends State<JetsharkDashboard> with TickerProvid
   }
 
   Widget _buildCentralRPMGauge(double gaugeSize) {
-    final rpmPercent = (_rpm / 3000).clamp(0.0, 1.0);
+    // RPM range: 0 to 7000 RPM
+    final rpmPercent = (_rpm / 7000).clamp(0.0, 1.0);
     
     return Center(
       child: AnimatedBuilder(
-        animation: _rpmAnimation,
+        animation: Listenable.merge([_rpmAnimation, _pulseAnimation]),
         builder: (context, child) {
           return SizedBox(
             width: gaugeSize,
@@ -250,7 +256,7 @@ class _JetsharkDashboardState extends State<JetsharkDashboard> with TickerProvid
                 CustomPaint(
                   size: Size(gaugeSize, gaugeSize),
                   painter: RPMGaugePainter(
-                    rpmPercent: rpmPercent * _rpmAnimation.value,
+                    rpmPercent: rpmPercent, // Remove animation multiplication
                     rpm: _rpm,
                     pulseValue: _pulseAnimation.value,
                   ),
@@ -264,8 +270,8 @@ class _JetsharkDashboardState extends State<JetsharkDashboard> with TickerProvid
                       _speed.round().toString().padLeft(2, '0'),
                       style: TextStyle(
                         color: Colors.white,
-                        fontSize: gaugeSize * 0.22,
-                        fontWeight: FontWeight.w100,
+                        fontSize: gaugeSize * 0.24,
+                        fontWeight: FontWeight.w200,
                         fontFamily: 'monospace',
                       ),
                     ),
@@ -279,6 +285,17 @@ class _JetsharkDashboardState extends State<JetsharkDashboard> with TickerProvid
                         letterSpacing: 1,
                       ),
                     ),
+                    SizedBox(height: gaugeSize * 0.04),
+                    // Show actual RPM value below speed
+                    Text(
+                      '${_rpm.round()} RPM',
+                      style: TextStyle(
+                        color: const Color(0xFF4a90e2),
+                        fontSize: gaugeSize * 0.05,
+                        fontWeight: FontWeight.w300,
+                        fontFamily: 'monospace',
+                      ),
+                    ),
                   ],
                 ),
               ],
@@ -290,28 +307,24 @@ class _JetsharkDashboardState extends State<JetsharkDashboard> with TickerProvid
   }
 
   Widget _buildWingIndicator(String label, double angle, double screenWidth, double screenHeight, bool isLeft) {
-    final normalizedAngle = (angle + 50) / 100; // -50 to +50 becomes 0 to 1
+    // Clamp angle to ±20 degrees and normalize: 0 degrees at center (0.5)
+    final clampedAngle = angle.clamp(-20.0, 20.0);
+    final normalizedAngle = (clampedAngle + 20) / 40;
     
-    return Padding(
-      padding: EdgeInsets.symmetric(
-        horizontal: screenWidth * 0.02,
-        vertical: screenHeight * 0.05,
+    return Container(
+      height: screenHeight * 0.88,
+      margin: EdgeInsets.symmetric(
+        horizontal: screenWidth * 0.005,
+        vertical: screenHeight * 0.01,
       ),
-      child: Column(
-        children: [
-          // Wing gauge
-          Expanded(
-            child: CustomPaint(
-              size: Size.infinite,
-              painter: WingIndicatorPainter(
-                angle: normalizedAngle,
-                isLeft: isLeft,
-                label: label,
-                degrees: angle.round(),
-              ),
-            ),
-          ),
-        ],
+      child: CustomPaint(
+        size: Size.infinite,
+        painter: WingIndicatorPainter(
+          angle: normalizedAngle,
+          isLeft: isLeft,
+          label: label,
+          degrees: clampedAngle.round(),
+        ),
       ),
     );
   }
@@ -373,11 +386,16 @@ class RPMGaugePainter extends CustomPainter {
     const totalAngle = math.pi * 1.5;
     final sweepAngle = totalAngle * rpmPercent;
     
+    // Debug output (reduced frequency)
+    if (rpmPercent > 0.1 && (rpmPercent * 100).round() % 10 == 0) {
+      print('Drawing RPM arc: ${(rpmPercent * 100).round()}% sweep=${(sweepAngle * 180 / math.pi).round()}°');
+    }
+    
     // Background track
     final trackPaint = Paint()
       ..color = const Color(0xFF1a1a1a)
       ..style = PaintingStyle.stroke
-      ..strokeWidth = radius * 0.03
+      ..strokeWidth = radius * 0.04
       ..strokeCap = StrokeCap.round;
     
     canvas.drawArc(
@@ -392,15 +410,15 @@ class RPMGaugePainter extends CustomPainter {
     if (rpmPercent > 0) {
       final progressPaint = Paint()
         ..style = PaintingStyle.stroke
-        ..strokeWidth = radius * 0.03
+        ..strokeWidth = radius * 0.04
         ..strokeCap = StrokeCap.round;
       
-      // Color based on RPM
-      if (rpmPercent < 0.7) {
+      // Color based on RPM percentage - restored blue styling
+      if (rpmPercent < 0.6) { // Under 4200 RPM
         progressPaint.color = const Color(0xFF4a90e2); // Blue
-      } else if (rpmPercent < 0.85) {
+      } else if (rpmPercent < 0.85) { // 4200-5950 RPM  
         progressPaint.color = const Color(0xFFf5a623); // Orange
-      } else {
+      } else { // Over 5950 RPM
         progressPaint.color = const Color(0xFFd0021b); // Red
       }
       
@@ -417,7 +435,7 @@ class RPMGaugePainter extends CustomPainter {
   void _drawTickMarks(Canvas canvas, Offset center, double radius) {
     const startAngle = -math.pi * 1.25;
     const totalAngle = math.pi * 1.5;
-    const tickCount = 11; // 0 to 100 in increments of 10
+    const tickCount = 15; // 0 to 7000 in increments of 500
     
     final textPainter = TextPainter(
       textDirection: TextDirection.ltr,
@@ -426,13 +444,15 @@ class RPMGaugePainter extends CustomPainter {
     for (int i = 0; i < tickCount; i++) {
       final angle = startAngle + (totalAngle * i / (tickCount - 1));
       final tickRadius = radius * 0.88;
+      final rpmValue = i * 500; // 0, 500, 1000, ..., 7000
+      final isMajor = rpmValue % 1000 == 0;
       
       // Draw tick marks
       final tickPaint = Paint()
         ..color = const Color(0xFF606060)
-        ..strokeWidth = 1.5;
+        ..strokeWidth = isMajor ? 2.5 : 1.5;
       
-      final tickLength = radius * 0.04;
+      final tickLength = isMajor ? radius * 0.05 : radius * 0.025;
       final start = Offset(
         center.dx + (tickRadius + tickLength) * math.cos(angle),
         center.dy + (tickRadius + tickLength) * math.sin(angle),
@@ -444,40 +464,42 @@ class RPMGaugePainter extends CustomPainter {
       
       canvas.drawLine(start, end, tickPaint);
       
-      // Draw numbers
-      final value = (i * 300).toString(); // 0 to 3000 RPM
-      textPainter.text = TextSpan(
-        text: value,
-        style: TextStyle(
-          color: const Color(0xFF808080),
-          fontSize: radius * 0.06,
-          fontWeight: FontWeight.w300,
-        ),
-      );
-      textPainter.layout();
-      
-      final textRadius = radius * 0.72;
-      final textOffset = Offset(
-        center.dx + textRadius * math.cos(angle) - textPainter.width / 2,
-        center.dy + textRadius * math.sin(angle) - textPainter.height / 2,
-      );
-      textPainter.paint(canvas, textOffset);
+      // Draw numbers only for major ticks (every 1000 RPM)
+      if (isMajor) {
+        final displayValue = rpmValue >= 1000 ? (rpmValue / 1000).round() : 0;
+        textPainter.text = TextSpan(
+          text: displayValue.toString(),
+          style: TextStyle(
+            color: const Color(0xFF808080),
+            fontSize: radius * 0.06,
+            fontWeight: FontWeight.w300,
+          ),
+        );
+        textPainter.layout();
+        
+        final textRadius = radius * 0.72;
+        final textOffset = Offset(
+          center.dx + textRadius * math.cos(angle) - textPainter.width / 2,
+          center.dy + textRadius * math.sin(angle) - textPainter.height / 2,
+        );
+        textPainter.paint(canvas, textOffset);
+      }
     }
     
     // RPM label
     textPainter.text = TextSpan(
-      text: 'RPM',
+      text: 'RPM x1000',
       style: TextStyle(
         color: const Color(0xFF606060),
-        fontSize: radius * 0.05,
-        fontWeight: FontWeight.w400,
+        fontSize: radius * 0.04,
+        fontWeight: FontWeight.w300,
         letterSpacing: 1,
       ),
     );
     textPainter.layout();
     textPainter.paint(
       canvas,
-      center + Offset(-textPainter.width / 2, radius * 0.35),
+      center + Offset(-textPainter.width / 2, radius * 0.4),
     );
   }
 
@@ -513,8 +535,8 @@ class WingIndicatorPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    // Draw curved scale
-    _drawCurvedScale(canvas, size);
+    // Draw vertical scale
+    _drawVerticalScale(canvas, size);
     
     // Draw position indicator
     _drawPositionIndicator(canvas, size);
@@ -523,82 +545,309 @@ class WingIndicatorPainter extends CustomPainter {
     _drawLabelAndValue(canvas, size);
   }
 
-  void _drawCurvedScale(Canvas canvas, Size size) {
-    final center = Offset(size.width / 2, size.height * 0.7);
-    final radius = size.width * 0.4;
-    final startAngle = isLeft ? math.pi * 0.7 : math.pi * 0.3;
-    final sweepAngle = isLeft ? math.pi * 0.5 : -math.pi * 0.5;
+  void _drawVerticalScale(Canvas canvas, Size size) {
+    final trackWidth = size.width * 0.09;
+    final trackHeight = size.height * 0.75;
+    final centerX = size.width / 2;
+    final startY = size.height * 0.12;
+    final centerY = startY + trackHeight / 2;
     
-    // Background arc
-    final bgPaint = Paint()
-      ..color = const Color(0xFF1a1a1a)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = size.width * 0.06
-      ..strokeCap = StrokeCap.round;
+    // Reverse curve direction: left wing curves left, right wing curves right
+    final curveAmount = isLeft ? -size.width * 0.08 : size.width * 0.08;
     
-    canvas.drawArc(
-      Rect.fromCircle(center: center, radius: radius),
-      startAngle,
-      sweepAngle,
-      false,
-      bgPaint,
+    // Create sophisticated curved track
+    final bgPath = Path();
+    bgPath.moveTo(centerX - trackWidth/2, startY);
+    bgPath.quadraticBezierTo(
+      centerX + curveAmount - trackWidth/2,
+      centerY,
+      centerX - trackWidth/2,
+      startY + trackHeight,
     );
+    bgPath.lineTo(centerX + trackWidth/2, startY + trackHeight);
+    bgPath.quadraticBezierTo(
+      centerX + curveAmount + trackWidth/2,
+      centerY,
+      centerX + trackWidth/2,
+      startY,
+    );
+    bgPath.close();
     
-    // Draw scale marks
-    final tickPaint = Paint()
-      ..color = const Color(0xFF404040)
+    // Background with sophisticated gradient
+    final bgPaint = Paint()
+      ..shader = LinearGradient(
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+        colors: [
+          const Color(0xFF1a1a1a),
+          const Color(0xFF0d0d0d),
+          const Color(0xFF1a1a1a),
+        ],
+        stops: const [0.0, 0.5, 1.0],
+      ).createShader(Rect.fromLTWH(
+        centerX - trackWidth,
+        startY,
+        trackWidth * 2,
+        trackHeight,
+      ))
+      ..style = PaintingStyle.fill;
+    
+    canvas.drawPath(bgPath, bgPaint);
+    
+    // Inner shadow for depth
+    final shadowPaint = Paint()
+      ..color = Colors.black.withValues(alpha: 0.4)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.inner, 3);
+    
+    canvas.drawPath(bgPath, shadowPaint);
+    
+    // Draw sophisticated scale marks with degree labels
+    _drawScaleMarks(canvas, size, centerX, startY, trackHeight, curveAmount);
+    
+    // Subtle border highlights
+    final borderPaint = Paint()
+      ..color = const Color(0xFF2a2a2a)
+      ..style = PaintingStyle.stroke
       ..strokeWidth = 1;
     
-    for (int i = 0; i <= 10; i++) {
-      final tickAngle = startAngle + (sweepAngle * i / 10);
-      final innerRadius = radius - size.width * 0.04;
-      final outerRadius = radius + size.width * 0.04;
+    canvas.drawPath(bgPath, borderPaint);
+    
+    // Zero degree center line
+    _drawCenterLine(canvas, size, centerX, centerY, curveAmount);
+  }
+  
+  void _drawScaleMarks(Canvas canvas, Size size, double centerX, double startY, double trackHeight, double curveAmount) {
+    final textPainter = TextPainter(textDirection: TextDirection.ltr);
+    
+    // Define degree marks: -20 to +20 in 5 degree increments
+    final degreeMarks = [-20, -15, -10, -5, 0, 5, 10, 15, 20];
+    
+    for (int i = 0; i < degreeMarks.length; i++) {
+      final degree = degreeMarks[i];
+      final t = (degree + 20) / 40.0; // Convert to 0-1 range
+      final y = startY + (trackHeight * t);
       
-      final start = Offset(
-        center.dx + innerRadius * math.cos(tickAngle),
-        center.dy + innerRadius * math.sin(tickAngle),
-      );
-      final end = Offset(
-        center.dx + outerRadius * math.cos(tickAngle),
-        center.dy + outerRadius * math.sin(tickAngle),
+      // Calculate curved x position
+      final curveProgress = 4 * t * (1 - t);
+      final x = centerX + (curveAmount * curveProgress);
+      
+      final isZero = degree == 0;
+      final isMajor = degree % 10 == 0 || isZero;
+      
+      // Subtle tick mark styling
+      final tickPaint = Paint()
+        ..color = isZero 
+            ? const Color(0xFF808080)
+            : isMajor 
+                ? const Color(0xFF606060) 
+                : const Color(0xFF404040)
+        ..strokeWidth = isZero ? 2.0 : isMajor ? 1.5 : 1.0;
+      
+      final tickLength = isZero 
+          ? size.width * 0.035 
+          : isMajor 
+              ? size.width * 0.025 
+              : size.width * 0.015;
+      
+      canvas.drawLine(
+        Offset(x - tickLength, y),
+        Offset(x + tickLength, y),
+        tickPaint,
       );
       
-      canvas.drawLine(start, end, tickPaint);
+      // Add degree labels for major marks only
+      if (isMajor && degree != 0) {
+        textPainter.text = TextSpan(
+          text: '${degree.abs()}',
+          style: TextStyle(
+            color: const Color(0xFF606060),
+            fontSize: size.width * 0.035,
+            fontWeight: FontWeight.w300,
+          ),
+        );
+        textPainter.layout();
+        
+        final textX = x + (isLeft ? -size.width * 0.07 : size.width * 0.04);
+        final textY = y - textPainter.height / 2;
+        
+        textPainter.paint(canvas, Offset(textX, textY));
+      }
     }
+  }
+  
+  void _drawCenterLine(Canvas canvas, Size size, double centerX, double centerY, double curveAmount) {
+    // Subtle zero degree reference line
+    final centerLinePaint = Paint()
+      ..color = const Color(0xFF707070)
+      ..strokeWidth = 1.2;
+    
+    final curveProgress = 4 * 0.5 * (1 - 0.5); // At center (t = 0.5)
+    final centerLineX = centerX + (curveAmount * curveProgress);
+    
+    canvas.drawLine(
+      Offset(centerLineX - size.width * 0.05, centerY),
+      Offset(centerLineX + size.width * 0.05, centerY),
+      centerLinePaint,
+    );
+    
+    // Understated zero degree text
+    final textPainter = TextPainter(
+      text: TextSpan(
+        text: '0',
+        style: TextStyle(
+          color: const Color(0xFF707070),
+          fontSize: size.width * 0.04,
+          fontWeight: FontWeight.w300,
+        ),
+      ),
+      textDirection: TextDirection.ltr,
+    );
+    textPainter.layout();
+    
+    final textX = centerLineX + (isLeft ? -size.width * 0.1 : size.width * 0.065);
+    final textY = centerY - textPainter.height / 2;
+    
+    textPainter.paint(canvas, Offset(textX, textY));
   }
 
   void _drawPositionIndicator(Canvas canvas, Size size) {
-    final center = Offset(size.width / 2, size.height * 0.7);
-    final radius = size.width * 0.4;
-    final startAngle = isLeft ? math.pi * 0.7 : math.pi * 0.3;
-    final sweepAngle = isLeft ? math.pi * 0.5 : -math.pi * 0.5;
-    final currentAngle = startAngle + (sweepAngle * angle);
+    final trackWidth = size.width * 0.09;
+    final trackHeight = size.height * 0.75;
+    final centerX = size.width / 2;
+    final startY = size.height * 0.12;
+    final centerY = startY + trackHeight / 2;
+    final curveAmount = isLeft ? -size.width * 0.08 : size.width * 0.08;
     
-    // Position arc
-    final progressPaint = Paint()
-      ..color = degrees.abs() > 30 ? const Color(0xFFd0021b) : const Color(0xFF4a90e2)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = size.width * 0.06
-      ..strokeCap = StrokeCap.round;
+    // Calculate position along the curve (0 to 1)
+    final t = angle;
+    final positionY = startY + (trackHeight * t);
+    final curveProgress = 4 * t * (1 - t);
+    final positionX = centerX + (curveAmount * curveProgress);
     
-    canvas.drawArc(
-      Rect.fromCircle(center: center, radius: radius),
-      startAngle,
-      currentAngle - startAngle,
-      false,
-      progressPaint,
-    );
+    // Center position (0.5 = zero degrees)
+    final centerT = 0.5;
     
-    // Indicator dot
-    final dotRadius = size.width * 0.05;
-    final dotX = center.dx + radius * math.cos(currentAngle);
-    final dotY = center.dy + radius * math.sin(currentAngle);
+    // Draw progress fill from center to current position
+    if ((t - centerT).abs() > 0.01) { // Only draw if not at center
+      final fillPath = Path();
+      
+      // Determine direction of fill
+      final fillUp = t < centerT; // true if moving toward top (negative angle)
+      final startFillT = centerT;
+      final endFillT = t;
+      
+      // Calculate center position on curve
+      final centerCurveProgress = 4 * centerT * (1 - centerT);
+      final centerFillX = centerX + (curveAmount * centerCurveProgress);
+      
+      // Start path from center
+      fillPath.moveTo(centerFillX - trackWidth/2, centerY);
+      
+      // Create smooth path from center to current position
+      final segments = math.max(20, ((t - centerT).abs() * 40).ceil());
+      
+      for (int i = 1; i <= segments; i++) {
+        final progress = i / segments;
+        final segmentT = startFillT + ((endFillT - startFillT) * progress);
+        final segmentY = startY + (trackHeight * segmentT);
+        final segmentCurveProgress = 4 * segmentT * (1 - segmentT);
+        final segmentX = centerX + (curveAmount * segmentCurveProgress);
+        
+        fillPath.lineTo(segmentX - trackWidth/2, segmentY);
+      }
+      
+      // Return path on the other side
+      for (int i = segments; i >= 0; i--) {
+        final progress = i / segments;
+        final segmentT = startFillT + ((endFillT - startFillT) * progress);
+        final segmentY = startY + (trackHeight * segmentT);
+        final segmentCurveProgress = 4 * segmentT * (1 - segmentT);
+        final segmentX = centerX + (curveAmount * segmentCurveProgress);
+        
+        fillPath.lineTo(segmentX + trackWidth/2, segmentY);
+      }
+      fillPath.close();
+      
+      // Subtle progress color
+      Color progressColor;
+      if (degrees.abs() > 15) {
+        progressColor = const Color(0xFF909090);
+      } else {
+        progressColor = const Color(0xFF606060);
+      }
+      
+      // Calculate proper gradient bounds
+      final gradientStart = math.min(centerY, positionY);
+      final gradientHeight = (centerY - positionY).abs();
+      
+      final progressPaint = Paint()
+        ..shader = LinearGradient(
+          begin: fillUp ? Alignment.bottomCenter : Alignment.topCenter,
+          end: fillUp ? Alignment.topCenter : Alignment.bottomCenter,
+          colors: [
+            progressColor.withValues(alpha: 0.8),
+            progressColor.withValues(alpha: 0.6),
+            progressColor.withValues(alpha: 0.4),
+          ],
+        ).createShader(Rect.fromLTWH(
+          centerX - trackWidth,
+          gradientStart,
+          trackWidth * 2,
+          math.max(gradientHeight, 1),
+        ));
+      
+      canvas.drawPath(fillPath, progressPaint);
+    }
     
-    final dotPaint = Paint()
-      ..color = Colors.white
+    // Refined position indicator
+    final indicatorSize = size.width * 0.04;
+    
+    // Subtle indicator with minimal color variation
+    final indicatorColor = degrees.abs() > 15 
+        ? const Color(0xFFc0c0c0)
+        : const Color(0xFFa0a0a0);
+    
+    // Minimal outer highlight
+    final highlightPaint = Paint()
+      ..color = indicatorColor.withValues(alpha: 0.3)
       ..style = PaintingStyle.fill;
     
-    canvas.drawCircle(Offset(dotX, dotY), dotRadius, dotPaint);
+    canvas.drawCircle(
+      Offset(positionX, positionY), 
+      indicatorSize * 1.8, 
+      highlightPaint,
+    );
+    
+    // Main indicator with subtle gradient
+    final indicatorPaint = Paint()
+      ..shader = RadialGradient(
+        center: const Alignment(-0.3, -0.3),
+        colors: [
+          indicatorColor,
+          indicatorColor.withValues(alpha: 0.7),
+        ],
+      ).createShader(Rect.fromCircle(
+        center: Offset(positionX, positionY),
+        radius: indicatorSize,
+      ));
+    
+    canvas.drawCircle(
+      Offset(positionX, positionY), 
+      indicatorSize, 
+      indicatorPaint,
+    );
+    
+    // Refined border
+    final borderPaint = Paint()
+      ..color = const Color(0xFF505050)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 0.8;
+    
+    canvas.drawCircle(
+      Offset(positionX, positionY), 
+      indicatorSize, 
+      borderPaint,
+    );
   }
 
   void _drawLabelAndValue(Canvas canvas, Size size) {
@@ -606,35 +855,94 @@ class WingIndicatorPainter extends CustomPainter {
       textDirection: TextDirection.ltr,
     );
     
-    // Label
+    // Sophisticated label at top
     textPainter.text = TextSpan(
       text: label,
       style: TextStyle(
-        color: const Color(0xFF808080),
-        fontSize: size.width * 0.08,
-        fontWeight: FontWeight.w300,
-        letterSpacing: 1,
+        color: const Color(0xFF909090),
+        fontSize: size.width * 0.055,
+        fontWeight: FontWeight.w400,
+        letterSpacing: 1.2,
       ),
     );
     textPainter.layout();
     textPainter.paint(
       canvas,
-      Offset((size.width - textPainter.width) / 2, size.height * 0.05),
+      Offset((size.width - textPainter.width) / 2, size.height * 0.02),
     );
     
-    // Value
+    // Subtle value color coding
+    Color valueColor;
+    if (degrees.abs() > 15) {
+      valueColor = const Color(0xFFb0b0b0); // Slightly dimmed for high angles
+    } else {
+      valueColor = Colors.white; // White for normal range
+    }
+    
+    // Show signed value with proper formatting
+    final displayValue = degrees >= 0 ? '+$degrees' : '$degrees';
+    
     textPainter.text = TextSpan(
-      text: '${degrees.abs()}°',
+      text: '$displayValue°',
       style: TextStyle(
-        color: Colors.white,
-        fontSize: size.width * 0.12,
-        fontWeight: FontWeight.w200,
+        color: valueColor,
+        fontSize: size.width * 0.09,
+        fontWeight: FontWeight.w300,
+        fontFamily: 'monospace',
       ),
     );
     textPainter.layout();
     textPainter.paint(
       canvas,
-      Offset((size.width - textPainter.width) / 2, size.height * 0.85),
+      Offset((size.width - textPainter.width) / 2, size.height * 0.905),
+    );
+    
+    // Subtle range indicators at extremes
+    final extremePaint = Paint()
+      ..color = const Color(0xFF404040)
+      ..strokeWidth = 0.8;
+    
+    // +20 degree line (top)
+    canvas.drawLine(
+      Offset(size.width * 0.2, size.height * 0.12),
+      Offset(size.width * 0.8, size.height * 0.12),
+      extremePaint,
+    );
+    
+    // -20 degree line (bottom)
+    canvas.drawLine(
+      Offset(size.width * 0.2, size.height * 0.87),
+      Offset(size.width * 0.8, size.height * 0.87),
+      extremePaint,
+    );
+    
+    // Understated range labels
+    textPainter.text = TextSpan(
+      text: '+20',
+      style: TextStyle(
+        color: const Color(0xFF505050),
+        fontSize: size.width * 0.03,
+        fontWeight: FontWeight.w300,
+      ),
+    );
+    textPainter.layout();
+    textPainter.paint(
+      canvas,
+      Offset(size.width * 0.05, size.height * 0.11),
+    );
+    
+    textPainter.text = TextSpan(
+      text: '-20',
+      style: TextStyle(
+        color: const Color(0xFF505050),
+        fontSize: size.width * 0.03,
+        fontWeight: FontWeight.w300,
+      ),
+    );
+    textPainter.layout();
+    textPainter.paint(
+      canvas,
+      Offset(size.width * 0.05, size.height * 0.87),
     );
   }
 
