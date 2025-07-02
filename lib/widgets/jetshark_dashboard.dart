@@ -91,10 +91,6 @@ class _JetsharkDashboardState extends State<JetsharkDashboard> with TickerProvid
           _targetRpm = _spoofService.currentRPM;
           _speed = _spoofService.currentSpeed * 1.94384; // Convert to knots
           
-          // Debug: Print RPM value to console (reduced frequency)
-          if (_targetRpm.round() % 100 == 0) {
-            print('RPM: ${_rpm.round()}/${_targetRpm.round()}, Percent: ${(_rpm/7000*100).round()}%');
-          }
           
           _targetLeftWing = _spoofService.portWingPosition;
           _targetRightWing = _spoofService.starboardWingPosition;
@@ -317,14 +313,19 @@ class _JetsharkDashboardState extends State<JetsharkDashboard> with TickerProvid
         horizontal: screenWidth * 0.005,
         vertical: screenHeight * 0.01,
       ),
-      child: CustomPaint(
-        size: Size.infinite,
-        painter: WingIndicatorPainter(
-          angle: normalizedAngle,
-          isLeft: isLeft,
-          label: label,
-          degrees: clampedAngle.round(),
-        ),
+      child: AnimatedBuilder(
+        animation: _pulseAnimation,
+        builder: (context, child) {
+          return CustomPaint(
+            size: Size.infinite,
+            painter: WingIndicatorPainter(
+              angle: normalizedAngle,
+              isLeft: isLeft,
+              label: label,
+              degrees: clampedAngle.round(),
+            ),
+          );
+        },
       ),
     );
   }
@@ -386,10 +387,6 @@ class RPMGaugePainter extends CustomPainter {
     const totalAngle = math.pi * 1.5;
     final sweepAngle = totalAngle * rpmPercent;
     
-    // Debug output (reduced frequency)
-    if (rpmPercent > 0.1 && (rpmPercent * 100).round() % 10 == 0) {
-      print('Drawing RPM arc: ${(rpmPercent * 100).round()}% sweep=${(sweepAngle * 180 / math.pi).round()}°');
-    }
     
     // Background track
     final trackPaint = Paint()
@@ -532,6 +529,20 @@ class WingIndicatorPainter extends CustomPainter {
     required this.label,
     required this.degrees,
   });
+  
+  // Shared curve calculation to ensure perfect alignment
+  Offset _getCurvePosition(double t, Size size) {
+    final trackHeight = size.height * 0.75;
+    final centerX = size.width / 2;
+    final startY = size.height * 0.12;
+    final curveAmount = isLeft ? -size.width * 0.08 : size.width * 0.08;
+    
+    final y = startY + (trackHeight * t);
+    final curveProgress = 4 * t * (1 - t);
+    final x = centerX + (curveAmount * curveProgress);
+    
+    return Offset(x, y);
+  }
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -547,30 +558,29 @@ class WingIndicatorPainter extends CustomPainter {
 
   void _drawVerticalScale(Canvas canvas, Size size) {
     final trackWidth = size.width * 0.09;
-    final trackHeight = size.height * 0.75;
-    final centerX = size.width / 2;
-    final startY = size.height * 0.12;
-    final centerY = startY + trackHeight / 2;
     
-    // Reverse curve direction: left wing curves left, right wing curves right
-    final curveAmount = isLeft ? -size.width * 0.08 : size.width * 0.08;
-    
-    // Create sophisticated curved track
+    // Create sophisticated curved track using shared curve calculation
     final bgPath = Path();
-    bgPath.moveTo(centerX - trackWidth/2, startY);
-    bgPath.quadraticBezierTo(
-      centerX + curveAmount - trackWidth/2,
-      centerY,
-      centerX - trackWidth/2,
-      startY + trackHeight,
-    );
-    bgPath.lineTo(centerX + trackWidth/2, startY + trackHeight);
-    bgPath.quadraticBezierTo(
-      centerX + curveAmount + trackWidth/2,
-      centerY,
-      centerX + trackWidth/2,
-      startY,
-    );
+    
+    // Left edge of track
+    final leftEdgePoints = <Offset>[];
+    final rightEdgePoints = <Offset>[];
+    
+    for (int i = 0; i <= 50; i++) {
+      final t = i / 50.0;
+      final centerPos = _getCurvePosition(t, size);
+      leftEdgePoints.add(Offset(centerPos.dx - trackWidth/2, centerPos.dy));
+      rightEdgePoints.add(Offset(centerPos.dx + trackWidth/2, centerPos.dy));
+    }
+    
+    // Build path
+    bgPath.moveTo(leftEdgePoints.first.dx, leftEdgePoints.first.dy);
+    for (final point in leftEdgePoints.skip(1)) {
+      bgPath.lineTo(point.dx, point.dy);
+    }
+    for (final point in rightEdgePoints.reversed) {
+      bgPath.lineTo(point.dx, point.dy);
+    }
     bgPath.close();
     
     // Background with sophisticated gradient
@@ -585,10 +595,10 @@ class WingIndicatorPainter extends CustomPainter {
         ],
         stops: const [0.0, 0.5, 1.0],
       ).createShader(Rect.fromLTWH(
-        centerX - trackWidth,
-        startY,
+        size.width / 2 - trackWidth,
+        size.height * 0.12,
         trackWidth * 2,
-        trackHeight,
+        size.height * 0.75,
       ))
       ..style = PaintingStyle.fill;
     
@@ -602,7 +612,7 @@ class WingIndicatorPainter extends CustomPainter {
     canvas.drawPath(bgPath, shadowPaint);
     
     // Draw sophisticated scale marks with degree labels
-    _drawScaleMarks(canvas, size, centerX, startY, trackHeight, curveAmount);
+    _drawScaleMarks(canvas, size);
     
     // Subtle border highlights
     final borderPaint = Paint()
@@ -613,10 +623,10 @@ class WingIndicatorPainter extends CustomPainter {
     canvas.drawPath(bgPath, borderPaint);
     
     // Zero degree center line
-    _drawCenterLine(canvas, size, centerX, centerY, curveAmount);
+    _drawCenterLine(canvas, size);
   }
   
-  void _drawScaleMarks(Canvas canvas, Size size, double centerX, double startY, double trackHeight, double curveAmount) {
+  void _drawScaleMarks(Canvas canvas, Size size) {
     final textPainter = TextPainter(textDirection: TextDirection.ltr);
     
     // Define degree marks: -20 to +20 in 5 degree increments
@@ -625,11 +635,7 @@ class WingIndicatorPainter extends CustomPainter {
     for (int i = 0; i < degreeMarks.length; i++) {
       final degree = degreeMarks[i];
       final t = (degree + 20) / 40.0; // Convert to 0-1 range
-      final y = startY + (trackHeight * t);
-      
-      // Calculate curved x position
-      final curveProgress = 4 * t * (1 - t);
-      final x = centerX + (curveAmount * curveProgress);
+      final curvePos = _getCurvePosition(t, size);
       
       final isZero = degree == 0;
       final isMajor = degree % 10 == 0 || isZero;
@@ -650,8 +656,8 @@ class WingIndicatorPainter extends CustomPainter {
               : size.width * 0.015;
       
       canvas.drawLine(
-        Offset(x - tickLength, y),
-        Offset(x + tickLength, y),
+        Offset(curvePos.dx - tickLength, curvePos.dy),
+        Offset(curvePos.dx + tickLength, curvePos.dy),
         tickPaint,
       );
       
@@ -667,26 +673,26 @@ class WingIndicatorPainter extends CustomPainter {
         );
         textPainter.layout();
         
-        final textX = x + (isLeft ? -size.width * 0.07 : size.width * 0.04);
-        final textY = y - textPainter.height / 2;
+        final textX = curvePos.dx + (isLeft ? -size.width * 0.07 : size.width * 0.04);
+        final textY = curvePos.dy - textPainter.height / 2;
         
         textPainter.paint(canvas, Offset(textX, textY));
       }
     }
   }
   
-  void _drawCenterLine(Canvas canvas, Size size, double centerX, double centerY, double curveAmount) {
+  void _drawCenterLine(Canvas canvas, Size size) {
     // Subtle zero degree reference line
     final centerLinePaint = Paint()
       ..color = const Color(0xFF707070)
       ..strokeWidth = 1.2;
     
-    final curveProgress = 4 * 0.5 * (1 - 0.5); // At center (t = 0.5)
-    final centerLineX = centerX + (curveAmount * curveProgress);
+    // Get center position using shared curve calculation
+    final centerPos = _getCurvePosition(0.5, size);
     
     canvas.drawLine(
-      Offset(centerLineX - size.width * 0.05, centerY),
-      Offset(centerLineX + size.width * 0.05, centerY),
+      Offset(centerPos.dx - size.width * 0.05, centerPos.dy),
+      Offset(centerPos.dx + size.width * 0.05, centerPos.dy),
       centerLinePaint,
     );
     
@@ -704,67 +710,49 @@ class WingIndicatorPainter extends CustomPainter {
     );
     textPainter.layout();
     
-    final textX = centerLineX + (isLeft ? -size.width * 0.1 : size.width * 0.065);
-    final textY = centerY - textPainter.height / 2;
+    final textX = centerPos.dx + (isLeft ? -size.width * 0.1 : size.width * 0.065);
+    final textY = centerPos.dy - textPainter.height / 2;
     
     textPainter.paint(canvas, Offset(textX, textY));
   }
 
   void _drawPositionIndicator(Canvas canvas, Size size) {
     final trackWidth = size.width * 0.09;
-    final trackHeight = size.height * 0.75;
-    final centerX = size.width / 2;
-    final startY = size.height * 0.12;
-    final centerY = startY + trackHeight / 2;
-    final curveAmount = isLeft ? -size.width * 0.08 : size.width * 0.08;
     
-    // Calculate position along the curve (0 to 1)
+    // Calculate positions using shared curve calculation
     final t = angle;
-    final positionY = startY + (trackHeight * t);
-    final curveProgress = 4 * t * (1 - t);
-    final positionX = centerX + (curveAmount * curveProgress);
-    
-    // Center position (0.5 = zero degrees)
+    final currentPos = _getCurvePosition(t, size);
     final centerT = 0.5;
+    final centerPos = _getCurvePosition(centerT, size);
     
     // Draw progress fill from center to current position
     if ((t - centerT).abs() > 0.01) { // Only draw if not at center
       final fillPath = Path();
       
-      // Determine direction of fill
-      final fillUp = t < centerT; // true if moving toward top (negative angle)
-      final startFillT = centerT;
-      final endFillT = t;
+      // Determine fill range
+      final startT = math.min(t, centerT);
+      final endT = math.max(t, centerT);
       
-      // Calculate center position on curve
-      final centerCurveProgress = 4 * centerT * (1 - centerT);
-      final centerFillX = centerX + (curveAmount * centerCurveProgress);
+      // Build fill path using exact curve positions
+      final leftEdgePoints = <Offset>[];
+      final rightEdgePoints = <Offset>[];
       
-      // Start path from center
-      fillPath.moveTo(centerFillX - trackWidth/2, centerY);
+      final segments = math.max(20, ((endT - startT) * 100).ceil());
       
-      // Create smooth path from center to current position
-      final segments = math.max(20, ((t - centerT).abs() * 40).ceil());
-      
-      for (int i = 1; i <= segments; i++) {
-        final progress = i / segments;
-        final segmentT = startFillT + ((endFillT - startFillT) * progress);
-        final segmentY = startY + (trackHeight * segmentT);
-        final segmentCurveProgress = 4 * segmentT * (1 - segmentT);
-        final segmentX = centerX + (curveAmount * segmentCurveProgress);
-        
-        fillPath.lineTo(segmentX - trackWidth/2, segmentY);
+      for (int i = 0; i <= segments; i++) {
+        final segmentT = startT + ((endT - startT) * i / segments);
+        final pos = _getCurvePosition(segmentT, size);
+        leftEdgePoints.add(Offset(pos.dx - trackWidth/2, pos.dy));
+        rightEdgePoints.add(Offset(pos.dx + trackWidth/2, pos.dy));
       }
       
-      // Return path on the other side
-      for (int i = segments; i >= 0; i--) {
-        final progress = i / segments;
-        final segmentT = startFillT + ((endFillT - startFillT) * progress);
-        final segmentY = startY + (trackHeight * segmentT);
-        final segmentCurveProgress = 4 * segmentT * (1 - segmentT);
-        final segmentX = centerX + (curveAmount * segmentCurveProgress);
-        
-        fillPath.lineTo(segmentX + trackWidth/2, segmentY);
+      // Build fill path
+      fillPath.moveTo(leftEdgePoints.first.dx, leftEdgePoints.first.dy);
+      for (final point in leftEdgePoints.skip(1)) {
+        fillPath.lineTo(point.dx, point.dy);
+      }
+      for (final point in rightEdgePoints.reversed) {
+        fillPath.lineTo(point.dx, point.dy);
       }
       fillPath.close();
       
@@ -777,20 +765,20 @@ class WingIndicatorPainter extends CustomPainter {
       }
       
       // Calculate proper gradient bounds
-      final gradientStart = math.min(centerY, positionY);
-      final gradientHeight = (centerY - positionY).abs();
+      final gradientStart = math.min(centerPos.dy, currentPos.dy);
+      final gradientHeight = (centerPos.dy - currentPos.dy).abs();
       
       final progressPaint = Paint()
         ..shader = LinearGradient(
-          begin: fillUp ? Alignment.bottomCenter : Alignment.topCenter,
-          end: fillUp ? Alignment.topCenter : Alignment.bottomCenter,
+          begin: t < centerT ? Alignment.bottomCenter : Alignment.topCenter,
+          end: t < centerT ? Alignment.topCenter : Alignment.bottomCenter,
           colors: [
             progressColor.withValues(alpha: 0.8),
             progressColor.withValues(alpha: 0.6),
             progressColor.withValues(alpha: 0.4),
           ],
         ).createShader(Rect.fromLTWH(
-          centerX - trackWidth,
+          currentPos.dx - trackWidth,
           gradientStart,
           trackWidth * 2,
           math.max(gradientHeight, 1),
@@ -813,7 +801,7 @@ class WingIndicatorPainter extends CustomPainter {
       ..style = PaintingStyle.fill;
     
     canvas.drawCircle(
-      Offset(positionX, positionY), 
+      currentPos, 
       indicatorSize * 1.8, 
       highlightPaint,
     );
@@ -827,12 +815,12 @@ class WingIndicatorPainter extends CustomPainter {
           indicatorColor.withValues(alpha: 0.7),
         ],
       ).createShader(Rect.fromCircle(
-        center: Offset(positionX, positionY),
+        center: currentPos,
         radius: indicatorSize,
       ));
     
     canvas.drawCircle(
-      Offset(positionX, positionY), 
+      currentPos, 
       indicatorSize, 
       indicatorPaint,
     );
@@ -844,7 +832,7 @@ class WingIndicatorPainter extends CustomPainter {
       ..strokeWidth = 0.8;
     
     canvas.drawCircle(
-      Offset(positionX, positionY), 
+      currentPos, 
       indicatorSize, 
       borderPaint,
     );
