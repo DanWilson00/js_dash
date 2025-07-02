@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'realtime_data_display.dart';
 import 'hud_display.dart';
+import 'jetshark_dashboard.dart';
 import '../services/mavlink_spoof_service.dart';
 
 class MainNavigation extends StatefulWidget {
@@ -41,13 +42,14 @@ class _MainNavigationState extends State<MainNavigation> {
     final pages = [
       RealtimeDataDisplay(autoStartMonitor: widget.autoStartMonitor),
       const HUDDisplay(),
+      const JetsharkDashboard(),
     ];
 
     return Scaffold(
       body: GestureDetector(
         onTap: () {
           // Allow tapping anywhere on HUD to go back to telemetry
-          if (_selectedIndex == 1) {
+          if (_selectedIndex == 1 || _selectedIndex == 2) {
             _onItemTapped(0);
           }
         },
@@ -56,7 +58,7 @@ class _MainNavigationState extends State<MainNavigation> {
           children: pages,
         ),
       ),
-      bottomNavigationBar: _selectedIndex == 1 ? null : _buildBottomNavBar(),
+      bottomNavigationBar: (_selectedIndex == 1 || _selectedIndex == 2) ? null : _buildBottomNavBar(),
     );
   }
 
@@ -94,6 +96,10 @@ class _MainNavigationState extends State<MainNavigation> {
           BottomNavigationBarItem(
             icon: Icon(Icons.speed),
             label: 'HUD',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.dashboard),
+            label: 'JETSHARK',
           ),
         ],
       ),
