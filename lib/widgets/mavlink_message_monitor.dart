@@ -117,8 +117,8 @@ class _MavlinkMessageMonitorState extends State<MavlinkMessageMonitor> {
           const SizedBox(width: 8),
           Expanded(
             child: Text(
-              'MAVLink Monitor',
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+              'Monitor',
+              style: Theme.of(context).textTheme.titleLarge?.copyWith(
                 fontWeight: FontWeight.bold,
               ),
             ),

@@ -177,7 +177,7 @@ class PlotLegendOverlay extends StatelessWidget {
         alignment: alignment,
         child: Container(
           margin: const EdgeInsets.all(8),
-          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
           decoration: BoxDecoration(
             color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.85),
             borderRadius: BorderRadius.circular(4),
@@ -217,9 +217,9 @@ class PlotLegendOverlay extends StatelessWidget {
             ),
             const SizedBox(width: 4),
             Text(
-              _getShortName(signal.effectiveDisplayName),
+              signal.effectiveDisplayName,
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                fontSize: 10,
+                fontSize: 12,
                 fontWeight: FontWeight.w500,
               ),
             ),
@@ -239,15 +239,4 @@ class PlotLegendOverlay extends StatelessWidget {
     );
   }
 
-  String _getShortName(String fullName) {
-    // Abbreviate long names to fit in overlay
-    if (fullName.length <= 12) return fullName;
-    
-    final parts = fullName.split('.');
-    if (parts.length >= 2) {
-      return '${parts[0].substring(0, 3)}...${parts[1]}';
-    }
-    
-    return '${fullName.substring(0, 9)}...';
-  }
 }

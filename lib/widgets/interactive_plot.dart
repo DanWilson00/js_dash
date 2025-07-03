@@ -366,7 +366,7 @@ class _InteractivePlotState extends State<InteractivePlot> {
           duration: Duration.zero,
         ),
         // Legend overlay
-        if (widget.configuration.yAxis.visibleSignals.length > 1)
+        if (widget.configuration.yAxis.visibleSignals.isNotEmpty)
           PlotLegendOverlay(
             signals: widget.configuration.yAxis.signals,
             showValues: false,

@@ -257,7 +257,7 @@ class _RealtimeDataDisplayState extends State<RealtimeDataDisplay> {
             if (_lastPacketTime != null)
               Flexible(
                 child: Text(
-                  'Last packet: ${_formatTime(_lastPacketTime!)}',
+                  _formatTime(_lastPacketTime!),
                   style: Theme.of(context).textTheme.bodySmall,
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -272,6 +272,7 @@ class _RealtimeDataDisplayState extends State<RealtimeDataDisplay> {
   String _formatTime(DateTime time) {
     final now = DateTime.now();
     final diff = now.difference(time).inSeconds;
+    if (diff == 0) return '';
     return '${diff}s ago';
   }
 }
