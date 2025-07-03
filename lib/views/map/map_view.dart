@@ -5,6 +5,7 @@ import 'dart:async';
 import 'package:dart_mavlink/dialects/common.dart';
 import '../../services/settings_manager.dart';
 import '../../services/mavlink_spoof_service.dart';
+import '../../services/bing_maps_service.dart';
 
 class MapView extends StatefulWidget {
   const MapView({
@@ -26,7 +27,7 @@ class _MapViewState extends State<MapView> {
   static const LatLng _defaultCenter = LatLng(37.7749, -122.4194);
   
   // Map layers
-  String _currentLayer = 'satellite';
+  BingMapType _currentLayer = BingMapType.aerial;
   
   // Vehicle location (updated by MAVLink data)
   LatLng? _vehicleLocation;
@@ -117,17 +118,17 @@ class _MapViewState extends State<MapView> {
 
   String _getTileUrl() {
     switch (_currentLayer) {
-      case 'satellite':
-        // OpenStreetMap satellite-style (free alternative)
-        return 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
-      case 'hybrid':
-        // OpenStreetMap standard
-        return 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
-      case 'road':
-        // OpenStreetMap standard
+      case BingMapType.aerial:
+        // ESRI World Imagery (free satellite imagery)
+        return 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}';
+      case BingMapType.aerialWithLabels:
+        // ESRI World Imagery with reference overlay
+        return 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}';
+      case BingMapType.road:
+        // OpenStreetMap for roads
         return 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
       default:
-        return 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
+        return 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}';
     }
   }
 
@@ -164,9 +165,9 @@ class _MapViewState extends State<MapView> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                _buildLayerButton('Satellite', 'satellite'),
-                _buildLayerButton('Hybrid', 'hybrid'),
-                _buildLayerButton('Road', 'road'),
+                _buildLayerButton('Satellite', BingMapType.aerial),
+                _buildLayerButton('Hybrid', BingMapType.aerialWithLabels),
+                _buildLayerButton('Road', BingMapType.road),
               ],
             ),
           ),
@@ -230,7 +231,7 @@ class _MapViewState extends State<MapView> {
     );
   }
 
-  Widget _buildLayerButton(String label, String layerType) {
+  Widget _buildLayerButton(String label, BingMapType layerType) {
     final bool isSelected = _currentLayer == layerType;
     return SizedBox(
       width: 80,
