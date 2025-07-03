@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:js_dash/models/plot_configuration.dart';
-import 'package:js_dash/widgets/signal_properties_panel.dart';
+import 'package:js_dash/views/telemetry/signal_properties_panel.dart';
 
 void main() {
   group('SignalPropertiesPanel Widget Tests', () {

@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../models/plot_configuration.dart';
+import '../../models/plot_configuration.dart';
 import 'interactive_plot.dart';
 import 'signal_properties_panel.dart';
 import 'signal_selector_panel.dart';

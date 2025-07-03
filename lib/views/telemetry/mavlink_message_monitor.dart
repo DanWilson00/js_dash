@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import '../services/mavlink_message_tracker.dart';
+import '../../services/mavlink_message_tracker.dart';
 
 class MavlinkMessageMonitor extends StatefulWidget {
   const MavlinkMessageMonitor({

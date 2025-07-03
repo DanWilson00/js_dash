@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'widgets/main_navigation.dart';
+import 'views/navigation/main_navigation.dart';
 
 void main() {
   runApp(const SubmersibleJetskiApp());

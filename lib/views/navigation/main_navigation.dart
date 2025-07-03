@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'realtime_data_display.dart';
-import 'jetshark_dashboard.dart';
-import '../services/mavlink_spoof_service.dart';
+import '../telemetry/realtime_data_display.dart';
+import '../dashboard/jetshark_dashboard.dart';
+import '../../services/mavlink_spoof_service.dart';
 
 class MainNavigation extends StatefulWidget {
   final bool autoStartMonitor;

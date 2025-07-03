@@ -1,8 +1,8 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import '../services/mavlink_service.dart';
-import '../services/mavlink_spoof_service.dart';
-import '../services/timeseries_data_manager.dart';
+import '../../services/mavlink_service.dart';
+import '../../services/mavlink_spoof_service.dart';
+import '../../services/timeseries_data_manager.dart';
 import 'mavlink_message_monitor.dart';
 import 'plot_grid.dart';
 

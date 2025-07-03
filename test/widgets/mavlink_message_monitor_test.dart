@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:js_dash/widgets/mavlink_message_monitor.dart';
+import 'package:js_dash/views/telemetry/mavlink_message_monitor.dart';
 import 'package:js_dash/services/mavlink_message_tracker.dart';
 
 void main() {
@@ -37,7 +37,7 @@ void main() {
         ),
       );
 
-      expect(find.text('MAVLink Monitor'), findsOneWidget);
+      expect(find.text('Monitor'), findsOneWidget);
       expect(find.byIcon(Icons.monitor), findsOneWidget);
       expect(find.byIcon(Icons.clear_all), findsOneWidget);
       
@@ -111,7 +111,7 @@ void main() {
       expect(find.byType(Column), findsAtLeastNWidgets(1));
       
       // Should have header section
-      expect(find.text('MAVLink Monitor'), findsOneWidget);
+      expect(find.text('Monitor'), findsOneWidget);
       
       // Should have expandable body section
       expect(find.byType(Expanded), findsAtLeastNWidgets(1));

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:js_dash/models/plot_configuration.dart';
-import 'package:js_dash/widgets/interactive_plot.dart';
+import 'package:js_dash/views/telemetry/interactive_plot.dart';
 import 'package:js_dash/services/timeseries_data_manager.dart';
 
 void main() {

@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../models/plot_configuration.dart';
+import '../../models/plot_configuration.dart';
 
 class PlotLegend extends StatelessWidget {
   final List<PlotSignalConfiguration> signals;

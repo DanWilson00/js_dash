@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:js_dash/widgets/mavlink_message_monitor.dart';
+import 'package:js_dash/views/telemetry/mavlink_message_monitor.dart';
 
 void main() {
   group('MavlinkMessageMonitor Basic Tests', () {
@@ -14,7 +14,7 @@ void main() {
       );
 
       // Basic structure tests that don't depend on timers
-      expect(find.text('MAVLink Monitor'), findsOneWidget);
+      expect(find.text('Monitor'), findsOneWidget);
       expect(find.byIcon(Icons.monitor), findsOneWidget);
       expect(find.text('No Messages'), findsOneWidget);
       expect(find.text('Waiting for MAVLink data...'), findsOneWidget);

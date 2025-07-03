@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:js_dash/widgets/plot_grid.dart';
+import 'package:js_dash/views/telemetry/plot_grid.dart';
 import 'package:js_dash/services/timeseries_data_manager.dart';
 import 'package:js_dash/models/plot_configuration.dart';
 

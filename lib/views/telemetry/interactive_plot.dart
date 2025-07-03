@@ -1,8 +1,8 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
-import '../models/plot_configuration.dart';
-import '../services/timeseries_data_manager.dart';
+import '../../models/plot_configuration.dart';
+import '../../services/timeseries_data_manager.dart';
 import 'plot_legend.dart';
 
 class InteractivePlot extends StatefulWidget {

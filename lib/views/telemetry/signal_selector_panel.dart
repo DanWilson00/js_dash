@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import '../models/plot_configuration.dart';
-import '../services/timeseries_data_manager.dart';
+import '../../models/plot_configuration.dart';
+import '../../services/timeseries_data_manager.dart';
 
 class SignalSelectorPanel extends StatefulWidget {
   final List<PlotSignalConfiguration> activeSignals;

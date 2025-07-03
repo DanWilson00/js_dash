@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
-import '../services/mavlink_spoof_service.dart';
+import '../../services/mavlink_spoof_service.dart';
 
 class HUDDisplay extends StatefulWidget {
   const HUDDisplay({super.key});

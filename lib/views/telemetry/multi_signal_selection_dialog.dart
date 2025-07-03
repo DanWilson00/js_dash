@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import '../models/plot_configuration.dart';
-import '../services/timeseries_data_manager.dart';
+import '../../models/plot_configuration.dart';
+import '../../services/timeseries_data_manager.dart';
 
 class MultiSignalSelectionDialog extends StatefulWidget {
   final List<PlotSignalConfiguration> currentSignals;

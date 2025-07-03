@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:js_dash/widgets/realtime_data_display.dart';
+import 'package:js_dash/views/telemetry/realtime_data_display.dart';
 import 'package:js_dash/services/mavlink_service.dart';
 import 'package:js_dash/services/mavlink_spoof_service.dart';
 import 'package:js_dash/services/mavlink_message_tracker.dart';
