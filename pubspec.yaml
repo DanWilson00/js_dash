@@ -41,6 +41,15 @@ dependencies:
   # Date formatting utilities
   intl: ^0.19.0
 
+  # Settings persistence
+  shared_preferences: ^2.2.2
+  
+  # Window management for desktop
+  window_manager: ^0.3.7
+  
+  # JSON serialization
+  json_annotation: ^4.9.0
+
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.8
@@ -48,6 +57,10 @@ dependencies:
 dev_dependencies:
   flutter_test:
     sdk: flutter
+
+  # JSON code generation
+  json_serializable: ^6.7.1
+  build_runner: ^2.4.7
 
   # The "flutter_lints" package below contains a set of recommended lints to
   # encourage good coding practices. The lint set provided by the package is

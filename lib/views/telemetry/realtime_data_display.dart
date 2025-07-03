@@ -3,12 +3,18 @@ import 'package:flutter/material.dart';
 import '../../services/mavlink_service.dart';
 import '../../services/mavlink_spoof_service.dart';
 import '../../services/timeseries_data_manager.dart';
+import '../../services/settings_manager.dart';
 import 'mavlink_message_monitor.dart';
 import 'plot_grid.dart';
 
 class RealtimeDataDisplay extends StatefulWidget {
-  const RealtimeDataDisplay({super.key, this.autoStartMonitor = true});
+  const RealtimeDataDisplay({
+    super.key, 
+    required this.settingsManager,
+    this.autoStartMonitor = true,
+  });
 
+  final SettingsManager settingsManager;
   final bool autoStartMonitor;
 
   @override
@@ -25,14 +31,19 @@ class _RealtimeDataDisplayState extends State<RealtimeDataDisplay> {
   
   // Current telemetry data (kept for message tracking functionality)
   
-  bool _isUsingSpoof = true;
+  late bool _isUsingSpoof;
   bool _isConnected = false;
   DateTime? _lastPacketTime;
-  bool _isPaused = false;
+  late bool _isPaused;
 
   @override
   void initState() {
     super.initState();
+    
+    // Initialize from settings
+    _isUsingSpoof = widget.settingsManager.connection.useSpoofMode;
+    _isPaused = widget.settingsManager.connection.isPaused;
+    
     _initializeServices();
   }
 
@@ -146,6 +157,10 @@ class _RealtimeDataDisplayState extends State<RealtimeDataDisplay> {
       _isConnected = false;
       _lastPacketTime = null;
     });
+    
+    // Save connection mode to settings
+    widget.settingsManager.updateConnectionMode(_isUsingSpoof);
+    
     _initializeServices();
   }
   
@@ -158,6 +173,9 @@ class _RealtimeDataDisplayState extends State<RealtimeDataDisplay> {
         _dataManager.resume();
       }
     });
+    
+    // Save pause state to settings
+    widget.settingsManager.updatePauseState(_isPaused);
   }
   
   void _clearAllPlots() {
@@ -216,6 +234,7 @@ class _RealtimeDataDisplayState extends State<RealtimeDataDisplay> {
                     padding: const EdgeInsets.all(8.0),
                     child: PlotGridManager(
                       key: _plotGridKey,
+                      settingsManager: widget.settingsManager,
                       onFieldAssignment: () {
                         // Force refresh to update field highlighting
                         setState(() {});

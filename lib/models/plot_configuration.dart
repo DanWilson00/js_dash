@@ -1,5 +1,9 @@
 import 'dart:collection';
 import 'package:flutter/material.dart';
+import 'package:json_annotation/json_annotation.dart';
+import 'json_converters.dart';
+
+part 'plot_configuration.g.dart';
 
 class TimeSeriesPoint {
   final DateTime timestamp;
@@ -43,11 +47,13 @@ enum ScalingMode {
   autoScale,   // Calculate bounds from all signals combined
 }
 
+@JsonSerializable()
 class PlotSignalConfiguration {
   final String id;
   final String messageType;
   final String fieldName;
   final String? units;
+  @ColorConverter()
   final Color color;
   final bool visible;
   final String? displayName;
@@ -65,6 +71,9 @@ class PlotSignalConfiguration {
     this.lineWidth = 2.0,
     this.showDots = false,
   });
+
+  factory PlotSignalConfiguration.fromJson(Map<String, dynamic> json) => _$PlotSignalConfigurationFromJson(json);
+  Map<String, dynamic> toJson() => _$PlotSignalConfigurationToJson(this);
 
   String get effectiveDisplayName => 
     displayName ?? '$messageType.$fieldName';
@@ -106,6 +115,7 @@ class PlotSignalConfiguration {
   int get hashCode => id.hashCode;
 }
 
+@JsonSerializable()
 class PlotAxisConfiguration {
   final List<PlotSignalConfiguration> signals;
   final double? minY;
@@ -118,6 +128,9 @@ class PlotAxisConfiguration {
     this.maxY,
     this.scalingMode = ScalingMode.autoScale,
   }) : signals = signals ?? [];
+
+  factory PlotAxisConfiguration.fromJson(Map<String, dynamic> json) => _$PlotAxisConfigurationFromJson(json);
+  Map<String, dynamic> toJson() => _$PlotAxisConfigurationToJson(this);
 
   bool get hasData => signals.isNotEmpty;
   bool get hasVisibleSignals => signals.any((s) => s.visible);
@@ -203,10 +216,12 @@ class PlotAxisConfiguration {
   }
 }
 
+@JsonSerializable()
 class PlotConfiguration {
   final String id;
   final String title;
   final PlotAxisConfiguration yAxis;
+  @DurationConverter()
   final Duration timeWindow;
 
   PlotConfiguration({
@@ -215,6 +230,9 @@ class PlotConfiguration {
     PlotAxisConfiguration? yAxis,
     this.timeWindow = const Duration(minutes: 5),
   }) : yAxis = yAxis ?? PlotAxisConfiguration();
+
+  factory PlotConfiguration.fromJson(Map<String, dynamic> json) => _$PlotConfigurationFromJson(json);
+  Map<String, dynamic> toJson() => _$PlotConfigurationToJson(this);
 
   PlotConfiguration copyWith({
     String? id,

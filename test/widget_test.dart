@@ -12,6 +12,7 @@ import 'package:js_dash/main.dart';
 import 'package:js_dash/services/mavlink_service.dart';
 import 'package:js_dash/services/mavlink_spoof_service.dart';
 import 'package:js_dash/services/mavlink_message_tracker.dart';
+import 'package:js_dash/services/settings_manager.dart';
 
 void main() {
   testWidgets('Submersible Jetski App smoke test', (WidgetTester tester) async {
@@ -24,7 +25,11 @@ void main() {
     await tester.binding.setSurfaceSize(const Size(1200, 800));
     
     // Build our app and trigger a frame.
-    await tester.pumpWidget(const SubmersibleJetskiApp(autoStartMonitor: false));
+    final settingsManager = SettingsManager();
+    await tester.pumpWidget(SubmersibleJetskiApp(
+      settingsManager: settingsManager,
+      autoStartMonitor: false,
+    ));
 
     // Verify that our app starts with the connection status indicator.
     expect(find.textContaining('SPOOF MODE'), findsOneWidget);

@@ -1,14 +1,17 @@
 import 'package:flutter/material.dart';
 import '../../models/plot_configuration.dart';
+import '../../services/settings_manager.dart';
 import 'interactive_plot.dart';
 import 'signal_properties_panel.dart';
 import 'signal_selector_panel.dart';
 
 class PlotGridManager extends StatefulWidget {
+  final SettingsManager settingsManager;
   final VoidCallback? onFieldAssignment;
 
   const PlotGridManager({
     super.key,
+    required this.settingsManager,
     this.onFieldAssignment,
   });
 
@@ -17,22 +20,85 @@ class PlotGridManager extends StatefulWidget {
 }
 
 class PlotGridManagerState extends State<PlotGridManager> {
-  List<PlotConfiguration> _plots = [
-    PlotConfiguration(id: 'plot_0'),
-  ];
-  PlotLayout _currentLayout = PlotLayout.single;
+  late List<PlotConfiguration> _plots;
+  late PlotLayout _currentLayout;
   String? _selectedPlotId;
-  TimeWindowOption _currentTimeWindow = TimeWindowOption.getDefault();
-  bool _showPropertiesPanel = false; // ignore: prefer_final_fields
-  bool _showSelectorPanel = false; // ignore: prefer_final_fields
+  late TimeWindowOption _currentTimeWindow;
+  late bool _showPropertiesPanel;
+  late bool _showSelectorPanel;
 
   @override
   void initState() {
     super.initState();
+    
+    // Load from settings
+    _loadFromSettings();
+    
     // Auto-select the first plot when there's only one
     if (_plots.length == 1) {
       _selectedPlotId = _plots.first.id;
     }
+  }
+  
+  void _loadFromSettings() {
+    final plotSettings = widget.settingsManager.plots;
+    
+    // Load plots (ensure we have at least one)
+    _plots = plotSettings.configurations.isNotEmpty 
+        ? plotSettings.configurations 
+        : [PlotConfiguration(id: 'plot_0')];
+    
+    // Load layout
+    _currentLayout = _getLayoutFromString(plotSettings.layout);
+    
+    // Load time window
+    _currentTimeWindow = _getTimeWindowFromString(plotSettings.timeWindow);
+    
+    // Load panel visibility
+    _showPropertiesPanel = plotSettings.propertiesPanelVisible;
+    _showSelectorPanel = plotSettings.selectorPanelVisible;
+    
+    // Load selected plot
+    final selectedIndex = plotSettings.selectedPlotIndex;
+    if (selectedIndex < _plots.length) {
+      _selectedPlotId = _plots[selectedIndex].id;
+    }
+  }
+  
+  PlotLayout _getLayoutFromString(String layout) {
+    switch (layout) {
+      case 'single': return PlotLayout.single;
+      case 'horizontal': return PlotLayout.horizontal;
+      case 'vertical': return PlotLayout.vertical;
+      case 'grid2x2': return PlotLayout.grid2x2;
+      case 'grid3x2': return PlotLayout.grid3x2;
+      default: return PlotLayout.single;
+    }
+  }
+  
+  TimeWindowOption _getTimeWindowFromString(String timeWindow) {
+    return TimeWindowOption.availableWindows.firstWhere(
+      (option) => option.label == timeWindow,
+      orElse: () => TimeWindowOption.getDefault(),
+    );
+  }
+  
+  void _saveToSettings() {
+    final selectedIndex = _selectedPlotId != null 
+        ? _plots.indexWhere((plot) => plot.id == _selectedPlotId)
+        : 0;
+    
+    widget.settingsManager.updatePlots(
+      widget.settingsManager.plots.copyWith(
+        plotCount: _plots.length,
+        layout: _currentLayout.type.name,
+        timeWindow: _currentTimeWindow.label,
+        configurations: _plots,
+        selectedPlotIndex: selectedIndex.clamp(0, _plots.length - 1),
+        propertiesPanelVisible: _showPropertiesPanel,
+        selectorPanelVisible: _showSelectorPanel,
+      ),
+    );
   }
 
   @override
@@ -98,6 +164,7 @@ class PlotGridManagerState extends State<PlotGridManager> {
                   setState(() {
                     _currentLayout = layout;
                   });
+                  _saveToSettings();
                 }
               },
               isDense: true,
@@ -211,6 +278,8 @@ class PlotGridManagerState extends State<PlotGridManager> {
         _selectedPlotId = _plots.first.id;
       }
     });
+    
+    _saveToSettings();
   }
 
   void _updateTimeWindow(TimeWindowOption window) {
@@ -222,12 +291,16 @@ class PlotGridManagerState extends State<PlotGridManager> {
         timeWindow: window.duration,
       )).toList();
     });
+    
+    _saveToSettings();
   }
 
   void _selectPlot(String plotId) {
     setState(() {
       _selectedPlotId = _selectedPlotId == plotId ? null : plotId;
     });
+    
+    _saveToSettings();
     
     if (widget.onFieldAssignment != null) {
       widget.onFieldAssignment!();
@@ -284,6 +357,8 @@ class PlotGridManagerState extends State<PlotGridManager> {
         ),
       );
     });
+    
+    _saveToSettings();
   }
 
   void _toggleSignalPanel(String plotId) {
@@ -299,6 +374,8 @@ class PlotGridManagerState extends State<PlotGridManager> {
       }
     });
     
+    _saveToSettings();
+    
     if (widget.onFieldAssignment != null) {
       widget.onFieldAssignment!();
     }
@@ -311,6 +388,8 @@ class PlotGridManagerState extends State<PlotGridManager> {
         _showPropertiesPanel = false; // Hide properties panel if open
       }
     });
+    
+    _saveToSettings();
   }
 
   void _updateSignalInSelectedPlot(PlotSignalConfiguration updatedSignal) {
@@ -322,6 +401,8 @@ class PlotGridManagerState extends State<PlotGridManager> {
     setState(() {
       _plots[plotIndex] = _plots[plotIndex].updateSignal(updatedSignal);
     });
+    
+    _saveToSettings();
   }
 
   void _removeSignalFromSelectedPlot(String signalId) {
@@ -333,6 +414,8 @@ class PlotGridManagerState extends State<PlotGridManager> {
     setState(() {
       _plots[plotIndex] = _plots[plotIndex].removeSignal(signalId);
     });
+    
+    _saveToSettings();
   }
 
   void _toggleSignalInSelectedPlot(String messageType, String fieldName) {
@@ -369,6 +452,8 @@ class PlotGridManagerState extends State<PlotGridManager> {
         _plots[plotIndex] = currentPlot.addSignal(newSignal);
       }
     });
+    
+    _saveToSettings();
   }
 
   void _clearPlotAxis(String plotId) {
@@ -379,6 +464,8 @@ class PlotGridManagerState extends State<PlotGridManager> {
           yAxis: _plots[plotIndex].yAxis.clear(),
         );
       });
+      
+      _saveToSettings();
     }
   }
 
@@ -422,6 +509,8 @@ class PlotGridManagerState extends State<PlotGridManager> {
       }
     });
     
+    _saveToSettings();
+    
     // Notify parent to refresh field highlighting
     if (widget.onFieldAssignment != null) {
       widget.onFieldAssignment!();
@@ -438,6 +527,8 @@ class PlotGridManagerState extends State<PlotGridManager> {
     setState(() {
       _plots[plotIndex] = _plots[plotIndex].addSignal(signal);
     });
+    
+    _saveToSettings();
   }
 
 
@@ -483,6 +574,8 @@ class PlotGridManagerState extends State<PlotGridManager> {
         yAxis: plot.yAxis.clear(),
       )).toList();
     });
+    
+    _saveToSettings();
     
     // Notify parent to refresh field highlighting
     if (widget.onFieldAssignment != null) {

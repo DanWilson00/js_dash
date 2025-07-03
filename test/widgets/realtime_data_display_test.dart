@@ -4,6 +4,7 @@ import 'package:js_dash/views/telemetry/realtime_data_display.dart';
 import 'package:js_dash/services/mavlink_service.dart';
 import 'package:js_dash/services/mavlink_spoof_service.dart';
 import 'package:js_dash/services/mavlink_message_tracker.dart';
+import 'package:js_dash/services/settings_manager.dart';
 
 void main() {
   group('RealtimeDataDisplay Widget', () {
@@ -24,9 +25,13 @@ void main() {
     testWidgets('should build without error', (WidgetTester tester) async {
       await tester.binding.setSurfaceSize(const Size(1200, 800));
       
+      final settingsManager = SettingsManager();
       await tester.pumpWidget(
-        const MaterialApp(
-          home: RealtimeDataDisplay(autoStartMonitor: false),
+        MaterialApp(
+          home: RealtimeDataDisplay(
+            settingsManager: settingsManager,
+            autoStartMonitor: false,
+          ),
         ),
       );
 
@@ -38,9 +43,13 @@ void main() {
     testWidgets('should show app bar with title', (WidgetTester tester) async {
       await tester.binding.setSurfaceSize(const Size(1200, 800));
       
+      final settingsManager = SettingsManager();
       await tester.pumpWidget(
-        const MaterialApp(
-          home: RealtimeDataDisplay(autoStartMonitor: false),
+        MaterialApp(
+          home: RealtimeDataDisplay(
+            settingsManager: settingsManager,
+            autoStartMonitor: false,
+          ),
         ),
       );
 
@@ -54,9 +63,13 @@ void main() {
       // Set larger test size to accommodate three-column layout
       await tester.binding.setSurfaceSize(const Size(1200, 800));
       
+      final settingsManager = SettingsManager();
       await tester.pumpWidget(
-        const MaterialApp(
-          home: RealtimeDataDisplay(autoStartMonitor: false),
+        MaterialApp(
+          home: RealtimeDataDisplay(
+            settingsManager: settingsManager,
+            autoStartMonitor: false,
+          ),
         ),
       );
 

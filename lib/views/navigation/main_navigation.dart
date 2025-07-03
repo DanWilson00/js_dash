@@ -2,23 +2,33 @@ import 'package:flutter/material.dart';
 import '../telemetry/realtime_data_display.dart';
 import '../dashboard/jetshark_dashboard.dart';
 import '../../services/mavlink_spoof_service.dart';
+import '../../services/settings_manager.dart';
 
 class MainNavigation extends StatefulWidget {
+  final SettingsManager settingsManager;
   final bool autoStartMonitor;
   
-  const MainNavigation({super.key, this.autoStartMonitor = true});
+  const MainNavigation({
+    super.key, 
+    required this.settingsManager,
+    this.autoStartMonitor = true,
+  });
 
   @override
   State<MainNavigation> createState() => _MainNavigationState();
 }
 
 class _MainNavigationState extends State<MainNavigation> {
-  int _selectedIndex = 0;
+  late int _selectedIndex;
   final MavlinkSpoofService _spoofService = MavlinkSpoofService();
 
   @override
   void initState() {
     super.initState();
+    
+    // Restore selected view from settings
+    _selectedIndex = widget.settingsManager.navigation.selectedViewIndex;
+    
     if (widget.autoStartMonitor) {
       _spoofService.startSpoofing();
     }
@@ -34,12 +44,18 @@ class _MainNavigationState extends State<MainNavigation> {
     setState(() {
       _selectedIndex = index;
     });
+    
+    // Save selected view to settings
+    widget.settingsManager.updateSelectedViewIndex(index);
   }
 
   @override
   Widget build(BuildContext context) {
     final pages = [
-      RealtimeDataDisplay(autoStartMonitor: widget.autoStartMonitor),
+      RealtimeDataDisplay(
+        settingsManager: widget.settingsManager,
+        autoStartMonitor: widget.autoStartMonitor,
+      ),
       const JetsharkDashboard(),
     ];
 
