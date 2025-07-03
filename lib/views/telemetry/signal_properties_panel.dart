@@ -115,15 +115,14 @@ class SignalPropertiesPanel extends StatelessWidget {
   }
 
   Widget _buildSignalsList(BuildContext context) {
-    return SizedBox(
-      height: 200,
-      child: ListView.builder(
-        itemCount: signals.length,
-        itemBuilder: (context, index) {
-          final signal = signals[index];
-          return _buildSignalPropertyTile(context, signal);
-        },
-      ),
+    return ListView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      itemCount: signals.length,
+      itemBuilder: (context, index) {
+        final signal = signals[index];
+        return _buildSignalPropertyTile(context, signal);
+      },
     );
   }
 
@@ -151,10 +150,6 @@ class SignalPropertiesPanel extends StatelessWidget {
           style: Theme.of(context).textTheme.bodyMedium?.copyWith(
             fontWeight: FontWeight.bold,
           ),
-        ),
-        subtitle: Text(
-          '${signal.messageType}.${signal.fieldName}',
-          style: Theme.of(context).textTheme.bodySmall,
         ),
         trailing: Row(
           mainAxisSize: MainAxisSize.min,
