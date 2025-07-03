@@ -27,6 +27,12 @@ class CircularBuffer {
     _buffer.clear();
   }
 
+  void removeOldData(DateTime cutoff) {
+    while (_buffer.isNotEmpty && _buffer.first.timestamp.isBefore(cutoff)) {
+      _buffer.removeFirst();
+    }
+  }
+
   bool get isEmpty => _buffer.isEmpty;
   int get length => _buffer.length;
 }

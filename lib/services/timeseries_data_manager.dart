@@ -16,7 +16,7 @@ class TimeSeriesDataManager {
   bool _isPaused = false;
 
   // Buffer configuration
-  static const int defaultBufferSize = 1000; // ~5 minutes at 3Hz
+  static const int defaultBufferSize = 2000; // ~10 minutes at 3Hz, covers 5m window + margin
   static const Duration maxAge = Duration(minutes: 10);
 
   Stream<Map<String, CircularBuffer>> get dataStream => _dataController.stream;
@@ -87,10 +87,7 @@ class TimeSeriesDataManager {
     final cutoff = now.subtract(maxAge);
     
     for (final buffer in _dataBuffers.values) {
-      while (buffer.points.isNotEmpty && 
-             buffer.points.first.timestamp.isBefore(cutoff)) {
-        buffer.points.removeAt(0);
-      }
+      buffer.removeOldData(cutoff);
     }
   }
 
