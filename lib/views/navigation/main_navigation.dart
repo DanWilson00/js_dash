@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../telemetry/realtime_data_display.dart';
 import '../dashboard/jetshark_dashboard.dart';
+import '../map/map_view.dart';
 import '../../services/mavlink_spoof_service.dart';
 import '../../services/settings_manager.dart';
 
@@ -56,6 +57,7 @@ class _MainNavigationState extends State<MainNavigation> {
         settingsManager: widget.settingsManager,
         autoStartMonitor: widget.autoStartMonitor,
       ),
+      MapView(settingsManager: widget.settingsManager),
       const JetsharkDashboard(),
     ];
 
@@ -63,7 +65,7 @@ class _MainNavigationState extends State<MainNavigation> {
       body: GestureDetector(
         onTap: () {
           // Allow tapping anywhere on Jetshark dashboard to go back to telemetry
-          if (_selectedIndex == 1) {
+          if (_selectedIndex == 2) {
             _onItemTapped(0);
           }
         },
@@ -72,7 +74,7 @@ class _MainNavigationState extends State<MainNavigation> {
           children: pages,
         ),
       ),
-      bottomNavigationBar: _selectedIndex == 1 ? null : _buildBottomNavBar(),
+      bottomNavigationBar: _selectedIndex == 2 ? null : _buildBottomNavBar(),
     );
   }
 
@@ -106,6 +108,10 @@ class _MainNavigationState extends State<MainNavigation> {
           BottomNavigationBarItem(
             icon: Icon(Icons.timeline),
             label: 'TELEMETRY',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.map),
+            label: 'MAP',
           ),
           BottomNavigationBarItem(
             icon: Icon(Icons.dashboard),
