@@ -131,6 +131,8 @@ class _InteractivePlotState extends State<InteractivePlot> {
                 _timeOffset = 0.0;
                 _pauseWindowStartTime = null;
               });
+              // Force immediate update to jump to current time
+              _scheduleUpdate();
             }
           }
           wasPaused = isPaused;
