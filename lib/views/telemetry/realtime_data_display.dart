@@ -211,7 +211,7 @@ class _RealtimeDataDisplayState extends State<RealtimeDataDisplay> {
                     IconButton(
                       icon: Icon(_isPaused ? Icons.play_arrow : Icons.pause),
                       onPressed: _togglePause,
-                      tooltip: _isPaused ? 'Resume Streaming' : 'Pause Streaming',
+                      tooltip: _isPaused ? 'Resume Streaming' : 'Pause Streaming (enables zoom & hover)',
                     ),
                     IconButton(
                       icon: const Icon(Icons.clear_all),

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 import '../../models/plot_configuration.dart';
@@ -28,6 +29,7 @@ class InteractivePlot extends StatefulWidget {
 class _InteractivePlotState extends State<InteractivePlot> {
   final TimeSeriesDataManager _dataManager = TimeSeriesDataManager();
   Map<String, List<FlSpot>> _signalSpots = {};
+  Map<String, Map<double, double>> _originalValues = {}; // signal -> x -> original value
   double _minY = 0;
   double _maxY = 100;
   StreamSubscription? _dataSubscription;
@@ -37,6 +39,21 @@ class _InteractivePlotState extends State<InteractivePlot> {
   Timer? _updateTimer;
   bool _pendingUpdate = false;
   static const _updateInterval = Duration(milliseconds: 100); // 10 FPS to match parent
+  
+  // Zoom and pan state
+  double _zoomLevel = 1.0;
+  double _timeOffset = 0.0; // Offset from the right edge in milliseconds
+  static const double _minZoom = 0.1;
+  static const double _maxZoom = 10.0;
+  
+  // Drag selection state
+  Offset? _dragStart;
+  Offset? _dragEnd;
+  bool _isDragging = false;
+  
+  // Hover state
+  double? _hoveredX;
+  final Map<String, double> _hoveredValues = {};
 
   @override
   void initState() {
@@ -81,9 +98,21 @@ class _InteractivePlotState extends State<InteractivePlot> {
   }
 
   void _setupDataListener() {
+    // Track previous pause state to detect changes
+    bool wasPaused = _dataManager.isPaused;
+    
     _dataSubscription = _dataManager.dataStream.listen(
       (_) {
         if (mounted && widget.configuration.yAxis.hasData) {
+          // Reset zoom when transitioning from paused to playing
+          if (wasPaused && !_dataManager.isPaused) {
+            setState(() {
+              _zoomLevel = 1.0;
+              _timeOffset = 0.0;
+            });
+          }
+          wasPaused = _dataManager.isPaused;
+          
           _scheduleUpdate();
         }
       },
@@ -146,6 +175,7 @@ class _InteractivePlotState extends State<InteractivePlot> {
     
     setState(() {
       _signalSpots = dataProcessingResult.signalSpots;
+      _originalValues = dataProcessingResult.originalValues;
       _minY = yAxisBounds.minY;
       _maxY = yAxisBounds.maxY;
     });
@@ -153,12 +183,16 @@ class _InteractivePlotState extends State<InteractivePlot> {
 
   _TimeWindow _calculateTimeWindow() {
     final now = DateTime.now();
+    
+    // Always use the full time window for data retrieval
+    // Zoom only affects display, not data filtering
     final cutoff = now.subtract(widget.configuration.timeWindow);
     return _TimeWindow(startTime: cutoff, cutoff: cutoff);
   }
 
   _DataProcessingResult _processSignalData(_TimeWindow timeWindow) {
     final signalSpots = <String, List<FlSpot>>{};
+    final originalValues = <String, Map<double, double>>{};
     final allValues = <double>[];
     bool hasNewData = false;
 
@@ -171,14 +205,22 @@ class _InteractivePlotState extends State<InteractivePlot> {
       }
 
       final filteredData = _filterDataByTime(data, timeWindow.cutoff);
-      final spots = _convertToFlSpots(filteredData, timeWindow.startTime);
+      final spotsAndValues = _convertToFlSpotsWithValues(filteredData, timeWindow.startTime);
       
-      signalSpots[fieldKey] = spots;
-      allValues.addAll(spots.map((s) => s.y));
+      signalSpots[fieldKey] = spotsAndValues.spots;
+      originalValues[fieldKey] = spotsAndValues.originalValues;
+      
+      // For Y-axis bounds calculation, use original values not normalized ones
+      if (widget.configuration.yAxis.scalingMode != ScalingMode.independent) {
+        allValues.addAll(spotsAndValues.spots.map((s) => s.y));
+      } else {
+        allValues.addAll(spotsAndValues.originalValues.values);
+      }
     }
 
     return _DataProcessingResult(
       signalSpots: signalSpots,
+      originalValues: originalValues,
       allValues: allValues,
       hasNewData: hasNewData,
     );
@@ -201,17 +243,26 @@ class _InteractivePlotState extends State<InteractivePlot> {
     return data.where((point) => point.timestamp.isAfter(cutoff)).toList();
   }
 
-  List<FlSpot> _convertToFlSpots(List<TimeSeriesPoint> filteredData, DateTime startTime) {
-    if (filteredData.isEmpty) return [];
+  _SpotsAndValues _convertToFlSpotsWithValues(
+    List<TimeSeriesPoint> filteredData, 
+    DateTime startTime,
+  ) {
+    if (filteredData.isEmpty) {
+      return _SpotsAndValues(spots: [], originalValues: {});
+    }
 
     // Apply data decimation for large datasets to improve performance
     final decimatedData = _decimateData(filteredData);
-
+    final originalValues = <double, double>{};
+    
+    List<FlSpot> spots;
     if (widget.configuration.yAxis.scalingMode == ScalingMode.independent) {
-      return _createNormalizedFlSpots(decimatedData, startTime);
+      spots = _createNormalizedFlSpotsWithValues(decimatedData, startTime, originalValues);
     } else {
-      return _createRawFlSpots(decimatedData, startTime);
+      spots = _createRawFlSpotsWithValues(decimatedData, startTime, originalValues);
     }
+    
+    return _SpotsAndValues(spots: spots, originalValues: originalValues);
   }
   
   List<TimeSeriesPoint> _decimateData(List<TimeSeriesPoint> data) {
@@ -289,7 +340,11 @@ class _InteractivePlotState extends State<InteractivePlot> {
     return result;
   }
 
-  List<FlSpot> _createNormalizedFlSpots(List<TimeSeriesPoint> data, DateTime startTime) {
+  List<FlSpot> _createNormalizedFlSpotsWithValues(
+    List<TimeSeriesPoint> data, 
+    DateTime startTime,
+    Map<double, double> originalValues,
+  ) {
     if (data.isEmpty) return [];
     
     final values = data.map((p) => p.value).toList();
@@ -300,13 +355,19 @@ class _InteractivePlotState extends State<InteractivePlot> {
     return data.map((point) {
       final x = point.timestamp.difference(startTime).inMilliseconds.toDouble();
       final normalizedY = range > 0 ? ((point.value - minVal) / range) * 100.0 : 50.0;
+      originalValues[x] = point.value; // Store original value
       return FlSpot(x, normalizedY);
     }).toList();
   }
 
-  List<FlSpot> _createRawFlSpots(List<TimeSeriesPoint> data, DateTime startTime) {
+  List<FlSpot> _createRawFlSpotsWithValues(
+    List<TimeSeriesPoint> data, 
+    DateTime startTime,
+    Map<double, double> originalValues,
+  ) {
     return data.map((point) {
       final x = point.timestamp.difference(startTime).inMilliseconds.toDouble();
+      originalValues[x] = point.value; // Store original value
       return FlSpot(x, point.value);
     }).toList();
   }
@@ -377,7 +438,38 @@ class _InteractivePlotState extends State<InteractivePlot> {
                 _buildHeader(),
                 const SizedBox(height: 4),
                 Expanded(
-                  child: _buildChart(),
+                  child: GestureDetector(
+                    onPanStart: _dataManager.isPaused 
+                        ? (details) {
+                            setState(() {
+                              _dragStart = details.localPosition;
+                              _dragEnd = details.localPosition;
+                              _isDragging = true;
+                            });
+                          }
+                        : null,
+                    onPanUpdate: _dataManager.isPaused && _isDragging
+                        ? (details) {
+                            setState(() {
+                              _dragEnd = details.localPosition;
+                            });
+                          }
+                        : null,
+                    onPanEnd: _dataManager.isPaused && _isDragging
+                        ? (details) {
+                            _handleDragZoom();
+                          }
+                        : null,
+                    onDoubleTap: _dataManager.isPaused && _zoomLevel > 1.0
+                        ? () {
+                            setState(() {
+                              _zoomLevel = 1.0;
+                              _timeOffset = 0.0;
+                            });
+                          }
+                        : null,
+                    child: _buildChart(),
+                  ),
                 ),
               ],
             ),
@@ -403,6 +495,50 @@ class _InteractivePlotState extends State<InteractivePlot> {
             ),
           ),
         ),
+        // Zoom controls (only show when paused and has data)
+        if (_dataManager.isPaused && widget.configuration.yAxis.hasData) ...[
+          IconButton(
+            icon: const Icon(Icons.zoom_out, size: 20),
+            onPressed: _zoomLevel > _minZoom ? () {
+              setState(() {
+                _zoomLevel = (_zoomLevel * 0.8).clamp(_minZoom, _maxZoom);
+                if (_zoomLevel <= 1.0) _timeOffset = 0;
+              });
+            } : null,
+            tooltip: 'Zoom Out',
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(
+              minWidth: 32,
+              minHeight: 32,
+            ),
+          ),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.surfaceContainerHighest,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Text(
+              '${(_zoomLevel * 100).toStringAsFixed(0)}%',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.zoom_in, size: 20),
+            onPressed: _zoomLevel < _maxZoom ? () {
+              setState(() {
+                _zoomLevel = (_zoomLevel * 1.25).clamp(_minZoom, _maxZoom);
+              });
+            } : null,
+            tooltip: 'Zoom In',
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(
+              minWidth: 32,
+              minHeight: 32,
+            ),
+          ),
+          const SizedBox(width: 8),
+        ],
         GestureDetector(
           onTap: widget.onLegendTap,
           child: widget.configuration.yAxis.hasData
@@ -472,12 +608,96 @@ class _InteractivePlotState extends State<InteractivePlot> {
       children: [
         LineChart(
           LineChartData(
-            lineTouchData: LineTouchData(enabled: false), // Disable touch to allow GestureDetector to work
+            lineTouchData: LineTouchData(
+              enabled: _dataManager.isPaused && !_isDragging, // Disable when dragging
+              handleBuiltInTouches: !_isDragging, // Don't handle built-in touches when dragging
+              touchCallback: (FlTouchEvent event, LineTouchResponse? response) {
+                if (!mounted) return;
+                
+                if (event is FlPointerHoverEvent || event is FlPanUpdateEvent) {
+                  if (response?.lineBarSpots != null && response!.lineBarSpots!.isNotEmpty) {
+                    setState(() {
+                      _hoveredX = response.lineBarSpots!.first.x;
+                      _hoveredValues.clear();
+                      
+                      // Collect values from all signals at this X position
+                      for (final spot in response.lineBarSpots!) {
+                        final barIndex = spot.barIndex;
+                        if (barIndex < widget.configuration.yAxis.visibleSignals.length) {
+                          final signal = widget.configuration.yAxis.visibleSignals[barIndex];
+                          _hoveredValues[signal.fieldKey] = spot.y;
+                        }
+                      }
+                    });
+                  }
+                } else if (event is FlPointerExitEvent) {
+                  setState(() {
+                    _hoveredX = null;
+                    _hoveredValues.clear();
+                  });
+                }
+              },
+              touchTooltipData: LineTouchTooltipData(
+                tooltipBorder: BorderSide(
+                  color: Theme.of(context).colorScheme.outline,
+                  width: 2,
+                ),
+                tooltipPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                maxContentWidth: 300, // Make tooltip wider
+                fitInsideHorizontally: false, // Allow wider tooltips
+                fitInsideVertically: true,
+                getTooltipItems: (touchedSpots) {
+                  return touchedSpots.map((LineBarSpot spot) {
+                    final barIndex = spot.barIndex;
+                    if (barIndex >= widget.configuration.yAxis.visibleSignals.length) {
+                      return null;
+                    }
+                    
+                    final signal = widget.configuration.yAxis.visibleSignals[barIndex];
+                    
+                    // Get original value from stored map
+                    final originalValue = _originalValues[signal.fieldKey]?[spot.x];
+                    final displayValue = originalValue?.toStringAsFixed(2) ?? spot.y.toStringAsFixed(2);
+                    
+                    return LineTooltipItem(
+                      '${signal.effectiveDisplayName}: $displayValue',
+                      TextStyle(
+                        color: signal.color,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
+                    );
+                  }).toList();
+                },
+              ),
+              getTouchedSpotIndicator: (LineChartBarData barData, List<int> spotIndexes) {
+                return spotIndexes.map((index) {
+                  return TouchedSpotIndicatorData(
+                    FlLine(
+                      color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.5),
+                      strokeWidth: 2,
+                      dashArray: [5, 5],
+                    ),
+                    FlDotData(
+                      show: true,
+                      getDotPainter: (spot, percent, barData, index) {
+                        return FlDotCirclePainter(
+                          radius: 6,
+                          color: barData.color!,
+                          strokeWidth: 2,
+                          strokeColor: Theme.of(context).colorScheme.surface,
+                        );
+                      },
+                    ),
+                  );
+                }).toList();
+              },
+            ),
             gridData: FlGridData(
               show: true,
               drawVerticalLine: true,
               horizontalInterval: (_maxY - _minY) / 5,
-              verticalInterval: widget.configuration.timeWindow.inMilliseconds / 5,
+              verticalInterval: (widget.configuration.timeWindow.inMilliseconds / _zoomLevel) / 5,
               getDrawingHorizontalLine: (value) => FlLine(
                 color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.2),
                 strokeWidth: 1,
@@ -514,7 +734,9 @@ class _InteractivePlotState extends State<InteractivePlot> {
                 color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.3),
               ),
             ),
-            minX: 0,
+            minX: _dataManager.isPaused && _zoomLevel > 1.0
+                ? widget.configuration.timeWindow.inMilliseconds * (1 - 1/_zoomLevel) + _timeOffset
+                : 0,
             maxX: widget.configuration.timeWindow.inMilliseconds.toDouble(),
             minY: _minY,
             maxY: _maxY,
@@ -530,6 +752,17 @@ class _InteractivePlotState extends State<InteractivePlot> {
             showValues: false,
             currentValues: const {},
             alignment: Alignment.topRight,
+          ),
+        // Drag selection rectangle
+        if (_isDragging && _dragStart != null && _dragEnd != null)
+          Positioned.fill(
+            child: CustomPaint(
+              painter: SelectionRectanglePainter(
+                start: _dragStart!,
+                end: _dragEnd!,
+                color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.3),
+              ),
+            ),
           ),
       ],
     );
@@ -605,6 +838,60 @@ class _InteractivePlotState extends State<InteractivePlot> {
       ],
     );
   }
+  
+  void _handleDragZoom() {
+    if (_dragStart == null || _dragEnd == null || !_isDragging) return;
+    
+    final renderBox = context.findRenderObject() as RenderBox?;
+    if (renderBox == null) return;
+    
+    // Get chart dimensions
+    final chartSize = renderBox.size;
+    final chartLeft = 60.0; // Approximate left margin for Y-axis labels
+    final chartRight = chartSize.width - 16.0; // Approximate right margin
+    final chartWidth = chartRight - chartLeft;
+    
+    // Convert pixel coordinates to chart coordinates
+    final startX = (_dragStart!.dx - chartLeft).clamp(0.0, chartWidth);
+    final endX = (_dragEnd!.dx - chartLeft).clamp(0.0, chartWidth);
+    
+    // Ensure we have a meaningful selection
+    final selectionWidth = (endX - startX).abs();
+    if (selectionWidth < 10) {
+      setState(() {
+        _isDragging = false;
+        _dragStart = null;
+        _dragEnd = null;
+      });
+      return;
+    }
+    
+    // Calculate time range from selection
+    final leftX = math.min(startX, endX);
+    final rightX = math.max(startX, endX);
+    
+    // Convert to time coordinates
+    final totalDuration = widget.configuration.timeWindow.inMilliseconds.toDouble();
+    final selectedStartTime = (leftX / chartWidth) * totalDuration;
+    final selectedEndTime = (rightX / chartWidth) * totalDuration;
+    final selectedDuration = selectedEndTime - selectedStartTime;
+    
+    // Calculate new zoom level
+    final newZoomLevel = (totalDuration / selectedDuration).clamp(_minZoom, _maxZoom);
+    
+    // Calculate offset to center the selection
+    final centerTime = (selectedStartTime + selectedEndTime) / 2;
+    final visibleDuration = totalDuration / newZoomLevel;
+    final newOffset = totalDuration - centerTime - visibleDuration / 2;
+    
+    setState(() {
+      _zoomLevel = newZoomLevel;
+      _timeOffset = newOffset.clamp(0.0, totalDuration - visibleDuration);
+      _isDragging = false;
+      _dragStart = null;
+      _dragEnd = null;
+    });
+  }
 }
 
 class _TimeWindow {
@@ -616,13 +903,25 @@ class _TimeWindow {
 
 class _DataProcessingResult {
   final Map<String, List<FlSpot>> signalSpots;
+  final Map<String, Map<double, double>> originalValues;
   final List<double> allValues;
   final bool hasNewData;
   
   _DataProcessingResult({
     required this.signalSpots,
+    required this.originalValues,
     required this.allValues,
     required this.hasNewData,
+  });
+}
+
+class _SpotsAndValues {
+  final List<FlSpot> spots;
+  final Map<double, double> originalValues;
+  
+  _SpotsAndValues({
+    required this.spots,
+    required this.originalValues,
   });
 }
 
@@ -631,4 +930,65 @@ class _YAxisBounds {
   final double maxY;
   
   _YAxisBounds({required this.minY, required this.maxY});
+}
+
+class SelectionRectanglePainter extends CustomPainter {
+  final Offset start;
+  final Offset end;
+  final Color color;
+
+  SelectionRectanglePainter({
+    required this.start,
+    required this.end,
+    required this.color,
+  });
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final rect = Rect.fromPoints(start, end);
+    
+    // Draw fill
+    final fillPaint = Paint()
+      ..color = color
+      ..style = PaintingStyle.fill;
+    canvas.drawRect(rect, fillPaint);
+
+    // Draw border
+    final borderPaint = Paint()
+      ..color = color.withValues(alpha: math.min(1.0, color.a * 3))
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 3.0;
+    canvas.drawRect(rect, borderPaint);
+
+    // Draw dashed lines for better visibility
+    final dashPaint = Paint()
+      ..color = color.withValues(alpha: 0.8)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.0;
+    
+    // Draw dashed horizontal lines
+    final dashWidth = 5.0;
+    final dashSpace = 3.0;
+    double currentX = rect.left;
+    while (currentX < rect.right) {
+      final endX = math.min(currentX + dashWidth, rect.right);
+      canvas.drawLine(Offset(currentX, rect.top), Offset(endX, rect.top), dashPaint);
+      canvas.drawLine(Offset(currentX, rect.bottom), Offset(endX, rect.bottom), dashPaint);
+      currentX += dashWidth + dashSpace;
+    }
+    
+    // Draw dashed vertical lines
+    double currentY = rect.top;
+    while (currentY < rect.bottom) {
+      final endY = math.min(currentY + dashWidth, rect.bottom);
+      canvas.drawLine(Offset(rect.left, currentY), Offset(rect.left, endY), dashPaint);
+      canvas.drawLine(Offset(rect.right, currentY), Offset(rect.right, endY), dashPaint);
+      currentY += dashWidth + dashSpace;
+    }
+  }
+
+  @override
+  bool shouldRepaint(SelectionRectanglePainter oldDelegate) {
+    return start != oldDelegate.start || end != oldDelegate.end;
+  }
 }
