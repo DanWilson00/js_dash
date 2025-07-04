@@ -31,7 +31,12 @@ class _InteractivePlotState extends State<InteractivePlot> {
   double _minY = 0;
   double _maxY = 100;
   StreamSubscription? _dataSubscription;
-  final Map<String, int> _lastDataLengths = {};
+  final Map<String, DateTime> _lastDataTimestamps = {};
+  
+  // Update throttling
+  Timer? _updateTimer;
+  bool _pendingUpdate = false;
+  static const _updateInterval = Duration(milliseconds: 33); // ~30 FPS
 
   @override
   void initState() {
@@ -41,9 +46,32 @@ class _InteractivePlotState extends State<InteractivePlot> {
   }
 
   @override
+  void didUpdateWidget(InteractivePlot oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    
+    // Reset timestamp tracking if signals have changed
+    if (_hasSignalsChanged(oldWidget.configuration, widget.configuration)) {
+      _lastDataTimestamps.clear();
+      _initializeData();
+    }
+  }
+
+  @override
   void dispose() {
+    _updateTimer?.cancel();
     _dataSubscription?.cancel();
     super.dispose();
+  }
+  
+  bool _hasSignalsChanged(PlotConfiguration oldConfig, PlotConfiguration newConfig) {
+    final oldSignals = oldConfig.yAxis.signals.map((s) => s.fieldKey).toList();
+    final newSignals = newConfig.yAxis.signals.map((s) => s.fieldKey).toList();
+    
+    if (oldSignals.length != newSignals.length) return true;
+    
+    final oldSet = oldSignals.toSet();
+    final newSet = newSignals.toSet();
+    return oldSet.length != newSet.length || !oldSet.containsAll(newSet);
   }
 
   void _initializeData() {
@@ -53,11 +81,51 @@ class _InteractivePlotState extends State<InteractivePlot> {
   }
 
   void _setupDataListener() {
-    _dataSubscription = _dataManager.dataStream.listen((_) {
-      if (mounted && widget.configuration.yAxis.hasData) {
-        _updatePlotData();
+    _dataSubscription = _dataManager.dataStream.listen(
+      (_) {
+        if (mounted && widget.configuration.yAxis.hasData) {
+          _scheduleUpdate();
+        }
+      },
+      onError: (error) {
+        // Retry subscription after error
+        _retrySubscription();
+      },
+      onDone: () {
+        // Stream closed, retry subscription
+        _retrySubscription();
+      },
+      cancelOnError: false, // Keep listening even after errors
+    );
+  }
+  
+  void _retrySubscription() {
+    // Cancel existing subscription
+    _dataSubscription?.cancel();
+    _dataSubscription = null;
+    
+    // Retry after a short delay
+    Future.delayed(const Duration(seconds: 1), () {
+      if (mounted) {
+        _setupDataListener();
       }
     });
+  }
+  
+  void _scheduleUpdate() {
+    _pendingUpdate = true;
+    
+    // If no timer is active, start one
+    if (_updateTimer == null || !_updateTimer!.isActive) {
+      _updateTimer = Timer(_updateInterval, () {
+        if (mounted && _pendingUpdate) {
+          _pendingUpdate = false;
+          
+          
+          _updatePlotData();
+        }
+      });
+    }
   }
 
   void _updatePlotData() {
@@ -66,7 +134,9 @@ class _InteractivePlotState extends State<InteractivePlot> {
     final timeWindow = _calculateTimeWindow();
     final dataProcessingResult = _processSignalData(timeWindow);
     
-    if (!dataProcessingResult.hasNewData && _signalSpots.isNotEmpty) return;
+    if (!dataProcessingResult.hasNewData && _signalSpots.isNotEmpty) {
+      return;
+    }
 
     final yAxisBounds = _calculateYAxisBounds(dataProcessingResult.allValues);
     
@@ -92,7 +162,7 @@ class _InteractivePlotState extends State<InteractivePlot> {
       final fieldKey = signal.fieldKey;
       final data = _dataManager.getFieldData(signal.messageType, signal.fieldName);
       
-      if (_checkForNewData(fieldKey, data.length)) {
+      if (_checkForNewData(fieldKey, data)) {
         hasNewData = true;
       }
 
@@ -110,10 +180,14 @@ class _InteractivePlotState extends State<InteractivePlot> {
     );
   }
 
-  bool _checkForNewData(String fieldKey, int currentLength) {
-    final lastLength = _lastDataLengths[fieldKey] ?? 0;
-    if (currentLength != lastLength) {
-      _lastDataLengths[fieldKey] = currentLength;
+  bool _checkForNewData(String fieldKey, List<TimeSeriesPoint> data) {
+    if (data.isEmpty) return false;
+    
+    final latestTimestamp = data.last.timestamp;
+    final lastKnownTimestamp = _lastDataTimestamps[fieldKey];
+    
+    if (lastKnownTimestamp == null || latestTimestamp.isAfter(lastKnownTimestamp)) {
+      _lastDataTimestamps[fieldKey] = latestTimestamp;
       return true;
     }
     return false;
@@ -362,8 +436,8 @@ class _InteractivePlotState extends State<InteractivePlot> {
             maxY: _maxY,
             lineBarsData: _buildLineChartBars(),
           ),
-          // No animation duration - immediate updates
-          duration: Duration.zero,
+          // Smooth animation for better visual performance
+          duration: const Duration(milliseconds: 50),
         ),
         // Legend overlay
         if (widget.configuration.yAxis.visibleSignals.isNotEmpty)
