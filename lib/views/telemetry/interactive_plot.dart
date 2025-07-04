@@ -33,10 +33,10 @@ class _InteractivePlotState extends State<InteractivePlot> {
   StreamSubscription? _dataSubscription;
   final Map<String, DateTime> _lastDataTimestamps = {};
   
-  // Update throttling
+  // Update throttling - sync with parent UI updates
   Timer? _updateTimer;
   bool _pendingUpdate = false;
-  static const _updateInterval = Duration(milliseconds: 33); // ~30 FPS
+  static const _updateInterval = Duration(milliseconds: 100); // 10 FPS to match parent
 
   @override
   void initState() {
@@ -121,8 +121,12 @@ class _InteractivePlotState extends State<InteractivePlot> {
         if (mounted && _pendingUpdate) {
           _pendingUpdate = false;
           
-          
-          _updatePlotData();
+          // Use addPostFrameCallback to ensure smooth rendering
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (mounted) {
+              _updatePlotData();
+            }
+          });
         }
       });
     }
@@ -200,14 +204,94 @@ class _InteractivePlotState extends State<InteractivePlot> {
   List<FlSpot> _convertToFlSpots(List<TimeSeriesPoint> filteredData, DateTime startTime) {
     if (filteredData.isEmpty) return [];
 
+    // Apply data decimation for large datasets to improve performance
+    final decimatedData = _decimateData(filteredData);
+
     if (widget.configuration.yAxis.scalingMode == ScalingMode.independent) {
-      return _createNormalizedFlSpots(filteredData, startTime);
+      return _createNormalizedFlSpots(decimatedData, startTime);
     } else {
-      return _createRawFlSpots(filteredData, startTime);
+      return _createRawFlSpots(decimatedData, startTime);
     }
+  }
+  
+  List<TimeSeriesPoint> _decimateData(List<TimeSeriesPoint> data) {
+    // For datasets larger than 1000 points, use decimation to maintain performance
+    const maxPoints = 1000;
+    
+    if (data.length <= maxPoints) {
+      return data;
+    }
+    
+    // Use largest-triangle-three-buckets decimation algorithm
+    return _largestTriangleThreeBuckets(data, maxPoints);
+  }
+  
+  List<TimeSeriesPoint> _largestTriangleThreeBuckets(List<TimeSeriesPoint> data, int targetPoints) {
+    if (data.length <= targetPoints) return data;
+    
+    final result = <TimeSeriesPoint>[];
+    final bucketSize = (data.length - 2) / (targetPoints - 2);
+    
+    // Always keep first point
+    result.add(data.first);
+    
+    for (int i = 1; i < targetPoints - 1; i++) {
+      final bucketStart = ((i - 1) * bucketSize + 1).floor();
+      final bucketEnd = (i * bucketSize + 1).floor();
+      
+      // Calculate the average point of the next bucket for triangle area calculation
+      double nextBucketAvgX = 0;
+      double nextBucketAvgY = 0;
+      int nextBucketCount = 0;
+      
+      final nextBucketStart = bucketEnd;
+      final nextBucketEnd = ((i + 1) * bucketSize + 1).floor().clamp(0, data.length - 1);
+      
+      for (int j = nextBucketStart; j < nextBucketEnd && j < data.length; j++) {
+        final point = data[j];
+        nextBucketAvgX += point.timestamp.millisecondsSinceEpoch.toDouble();
+        nextBucketAvgY += point.value;
+        nextBucketCount++;
+      }
+      
+      if (nextBucketCount > 0) {
+        nextBucketAvgX /= nextBucketCount;
+        nextBucketAvgY /= nextBucketCount;
+      }
+      
+      // Find the point in current bucket that creates the largest triangle
+      double maxArea = 0;
+      TimeSeriesPoint? selectedPoint;
+      
+      for (int j = bucketStart; j < bucketEnd && j < data.length; j++) {
+        final point = data[j];
+        final prevPoint = result.last;
+        
+        // Calculate triangle area
+        final area = (prevPoint.timestamp.millisecondsSinceEpoch * (point.value - nextBucketAvgY) +
+                     point.timestamp.millisecondsSinceEpoch * (nextBucketAvgY - prevPoint.value) +
+                     nextBucketAvgX * (prevPoint.value - point.value)).abs();
+        
+        if (area > maxArea) {
+          maxArea = area;
+          selectedPoint = point;
+        }
+      }
+      
+      if (selectedPoint != null) {
+        result.add(selectedPoint);
+      }
+    }
+    
+    // Always keep last point
+    result.add(data.last);
+    
+    return result;
   }
 
   List<FlSpot> _createNormalizedFlSpots(List<TimeSeriesPoint> data, DateTime startTime) {
+    if (data.isEmpty) return [];
+    
     final values = data.map((p) => p.value).toList();
     final minVal = values.reduce((a, b) => a < b ? a : b);
     final maxVal = values.reduce((a, b) => a > b ? a : b);
@@ -436,8 +520,8 @@ class _InteractivePlotState extends State<InteractivePlot> {
             maxY: _maxY,
             lineBarsData: _buildLineChartBars(),
           ),
-          // Smooth animation for better visual performance
-          duration: const Duration(milliseconds: 50),
+          // Smooth animation that doesn't conflict with update interval
+          duration: const Duration(milliseconds: 150),
         ),
         // Legend overlay
         if (widget.configuration.yAxis.visibleSignals.isNotEmpty)

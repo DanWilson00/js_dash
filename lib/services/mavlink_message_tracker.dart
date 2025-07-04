@@ -24,6 +24,17 @@ class MessageStats {
   Map<String, dynamic> getMessageFields() {
     if (lastMessage == null) return {};
     
+    // Return cached fields if available and recent
+    final tracker = MavlinkMessageTracker();
+    final messageName = tracker._getMessageName(lastMessage!);
+    final cachedFields = tracker._fieldCache[messageName];
+    final lastUpdate = tracker._lastFieldUpdate[messageName];
+    
+    if (cachedFields != null && lastUpdate != null && 
+        DateTime.now().difference(lastUpdate).inMilliseconds < 200) {
+      return Map.from(cachedFields);
+    }
+    
     final fields = <String, dynamic>{};
     
     if (lastMessage is Heartbeat) {
@@ -130,10 +141,16 @@ class MavlinkMessageTracker {
 
   Timer? _updateTimer;
   bool _isTracking = false;
+  
+  // Caching
+  final Map<String, Map<String, dynamic>> _fieldCache = {};
+  final Map<String, DateTime> _lastFieldUpdate = {};
 
   void startTracking() {
     if (_isTracking) return;
     _isTracking = true;
+    
+    // Stream is available directly through _statsController
     
     // Update stats stream periodically
     _updateTimer = Timer.periodic(_statsUpdateInterval, (_) {
@@ -156,6 +173,16 @@ class MavlinkMessageTracker {
     
     _messageStats.putIfAbsent(messageName, () => MessageStats());
     _messageStats[messageName]!.updateMessage(message);
+    
+    // Cache field processing to avoid redundant calculations
+    _updateFieldCache(messageName, _messageStats[messageName]!);
+  }
+  
+  void _updateFieldCache(String messageName, MessageStats stats) {
+    // Only update field cache if message has actually changed
+    if (stats.lastMessage != null) {
+      _fieldCache[messageName] = stats.getMessageFields();
+    }
   }
 
   static final Map<Type, String> _messageTypeMap = {
@@ -223,6 +250,8 @@ class MavlinkMessageTracker {
 
   void clearStats() {
     _messageStats.clear();
+    _fieldCache.clear();
+    _lastFieldUpdate.clear();
     if (!_statsController.isClosed) {
       _statsController.add({});
     }

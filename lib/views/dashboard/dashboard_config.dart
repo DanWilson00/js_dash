@@ -28,8 +28,8 @@ class DashboardConfig {
   static const Duration startupAnimationDuration = Duration(milliseconds: 1500);
   static const Duration pulseAnimationDuration = Duration(milliseconds: 3000);
   
-  // Update Configuration
-  static const Duration updateInterval = Duration(milliseconds: 50);
+  // Update Configuration - sync with other UI components
+  static const Duration updateInterval = Duration(milliseconds: 100);
   static const double smoothingFactor = 0.08;
   static const double rpmAnimationThreshold = 5.0;
   

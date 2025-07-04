@@ -35,6 +35,11 @@ class _RealtimeDataDisplayState extends State<RealtimeDataDisplay> {
   bool _isConnected = false;
   DateTime? _lastPacketTime;
   late bool _isPaused;
+  
+  // Update throttling
+  Timer? _updateTimer;
+  bool _pendingUpdate = false;
+  static const _uiUpdateInterval = Duration(milliseconds: 100); // 10 FPS for UI updates, synced with plots
 
   @override
   void initState() {
@@ -49,6 +54,7 @@ class _RealtimeDataDisplayState extends State<RealtimeDataDisplay> {
 
   @override
   void dispose() {
+    _updateTimer?.cancel();
     _cleanup();
     super.dispose();
   }
@@ -67,30 +73,25 @@ class _RealtimeDataDisplayState extends State<RealtimeDataDisplay> {
   void _startSpoofMode() {
     _subscriptions.addAll([
       _spoofService.heartbeatStream.listen((_) {
-        setState(() {
-          _lastPacketTime = DateTime.now();
-          _isConnected = true;
-        });
+        _lastPacketTime = DateTime.now();
+        _isConnected = true;
+        _scheduleUpdate();
       }),
       _spoofService.sysStatusStream.listen((_) {
-        setState(() {
-          _lastPacketTime = DateTime.now();
-        });
+        _lastPacketTime = DateTime.now();
+        _scheduleUpdate();
       }),
       _spoofService.attitudeStream.listen((_) {
-        setState(() {
-          _lastPacketTime = DateTime.now();
-        });
+        _lastPacketTime = DateTime.now();
+        _scheduleUpdate();
       }),
       _spoofService.gpsStream.listen((_) {
-        setState(() {
-          _lastPacketTime = DateTime.now();
-        });
+        _lastPacketTime = DateTime.now();
+        _scheduleUpdate();
       }),
       _spoofService.vfrHudStream.listen((_) {
-        setState(() {
-          _lastPacketTime = DateTime.now();
-        });
+        _lastPacketTime = DateTime.now();
+        _scheduleUpdate();
       }),
     ]);
     
@@ -102,30 +103,25 @@ class _RealtimeDataDisplayState extends State<RealtimeDataDisplay> {
     try {
       _subscriptions.addAll([
         _mavlinkService.heartbeatStream.listen((_) {
-          setState(() {
-            _lastPacketTime = DateTime.now();
-            _isConnected = true;
-          });
+          _lastPacketTime = DateTime.now();
+          _isConnected = true;
+          _scheduleUpdate();
         }),
         _mavlinkService.sysStatusStream.listen((_) {
-          setState(() {
-            _lastPacketTime = DateTime.now();
-          });
+          _lastPacketTime = DateTime.now();
+          _scheduleUpdate();
         }),
         _mavlinkService.attitudeStream.listen((_) {
-          setState(() {
-            _lastPacketTime = DateTime.now();
-          });
+          _lastPacketTime = DateTime.now();
+          _scheduleUpdate();
         }),
         _mavlinkService.gpsStream.listen((_) {
-          setState(() {
-            _lastPacketTime = DateTime.now();
-          });
+          _lastPacketTime = DateTime.now();
+          _scheduleUpdate();
         }),
         _mavlinkService.vfrHudStream.listen((_) {
-          setState(() {
-            _lastPacketTime = DateTime.now();
-          });
+          _lastPacketTime = DateTime.now();
+          _scheduleUpdate();
         }),
       ]);
       
@@ -145,6 +141,20 @@ class _RealtimeDataDisplayState extends State<RealtimeDataDisplay> {
     _dataManager.stopTracking();
   }
 
+  void _scheduleUpdate() {
+    _pendingUpdate = true;
+    
+    // If no timer is active, start one
+    if (_updateTimer == null || !_updateTimer!.isActive) {
+      _updateTimer = Timer(_uiUpdateInterval, () {
+        if (mounted && _pendingUpdate) {
+          _pendingUpdate = false;
+          setState(() {});
+        }
+      });
+    }
+  }
+  
   void _onFieldSelected(String messageType, String fieldName) {
     // Assign the selected field to the currently selected plot
     _plotGridKey.currentState?.assignFieldToSelectedPlot(messageType, fieldName);

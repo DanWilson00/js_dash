@@ -18,6 +18,13 @@ class TimeSeriesDataManager {
   // Buffer configuration
   static const int defaultBufferSize = 2000; // ~10 minutes at 3Hz, covers 5m window + margin
   static const Duration maxAge = Duration(minutes: 10);
+  
+  // Performance optimizations
+  static const int maxFieldCount = 500; // Limit field discovery to prevent unbounded growth
+  final Map<String, double> _valueCache = {}; // Cache parsed values
+  final Set<String> _numericFields = {}; // Cache known numeric fields
+  final Set<String> _invalidFields = {}; // Cache known invalid fields
+  final RegExp _numericRegex = RegExp(r'^-?\d*\.?\d+([eE][+-]?\d+)?$'); // Pre-compiled regex
 
   Stream<Map<String, CircularBuffer>> get dataStream => _dataController.stream;
 
@@ -42,6 +49,7 @@ class TimeSeriesDataManager {
     
     final now = DateTime.now();
     bool hasNewData = false;
+    final updatedBuffers = <String, CircularBuffer>{};
 
     for (final entry in messageStats.entries) {
       final messageName = entry.key;
@@ -52,35 +60,94 @@ class TimeSeriesDataManager {
         
         for (final field in fields.entries) {
           final fieldKey = '$messageName.${field.key}';
-          final value = _parseNumericValue(field.value);
+          
+          // Skip if we've reached field limit (prevent unbounded growth)
+          if (_dataBuffers.length >= maxFieldCount && !_dataBuffers.containsKey(fieldKey)) {
+            continue;
+          }
+          
+          // Skip if we know this field is invalid
+          if (_invalidFields.contains(fieldKey)) {
+            continue;
+          }
+          
+          final value = _parseNumericValueOptimized(fieldKey, field.value);
           
           if (value != null) {
             _dataBuffers.putIfAbsent(fieldKey, () => CircularBuffer(defaultBufferSize));
             _dataBuffers[fieldKey]!.add(TimeSeriesPoint(now, value));
+            updatedBuffers[fieldKey] = _dataBuffers[fieldKey]!;
             hasNewData = true;
+            _numericFields.add(fieldKey); // Cache as numeric field
           }
         }
       }
     }
 
-    // Clean up old data
-    _cleanupOldData(now);
+    // Clean up old data less frequently
+    if (now.millisecondsSinceEpoch % 5000 < 200) { // Every ~5 seconds
+      _cleanupOldData(now);
+    }
 
     if (hasNewData && !_dataController.isClosed) {
       _dataController.add(Map.from(_dataBuffers));
     }
   }
 
-  double? _parseNumericValue(dynamic value) {
-    if (value is num) return value.toDouble();
-    
+  double? _parseNumericValueOptimized(String fieldKey, dynamic value) {
+    // Check cache first
     if (value is String) {
-      // Remove units and parse
-      final cleaned = value.replaceAll(RegExp(r'[^\d\.\-]'), '');
-      return double.tryParse(cleaned);
+      final cacheKey = '${fieldKey}_$value';
+      if (_valueCache.containsKey(cacheKey)) {
+        return _valueCache[cacheKey];
+      }
     }
     
-    return null;
+    double? result;
+    
+    if (value is num) {
+      result = value.toDouble();
+    } else if (value is String) {
+      // Quick check if we know this field type
+      if (_numericFields.contains(fieldKey)) {
+        // Fast path for known numeric fields
+        if (_numericRegex.hasMatch(value)) {
+          result = double.tryParse(value);
+        } else {
+          // Try removing units
+          final cleaned = value.replaceAll(RegExp(r'[^\d\.\-eE\+]'), '');
+          result = double.tryParse(cleaned);
+        }
+      } else {
+        // Slower path for unknown fields
+        // First try direct parse
+        result = double.tryParse(value);
+        
+        // If that fails, try removing units
+        if (result == null) {
+          final cleaned = value.replaceAll(RegExp(r'[^\d\.\-eE\+]'), '');
+          result = double.tryParse(cleaned);
+        }
+        
+        // If still null, mark as invalid field
+        if (result == null) {
+          _invalidFields.add(fieldKey);
+        }
+      }
+      
+      // Cache the result for strings
+      if (result != null) {
+        final cacheKey = '${fieldKey}_$value';
+        _valueCache[cacheKey] = result;
+        
+        // Limit cache size
+        if (_valueCache.length > 1000) {
+          _valueCache.clear();
+        }
+      }
+    }
+    
+    return result;
   }
 
   void _cleanupOldData(DateTime now) {
@@ -112,6 +179,9 @@ class TimeSeriesDataManager {
   
   void clearAllData() {
     _dataBuffers.clear();
+    _valueCache.clear();
+    _numericFields.clear();
+    _invalidFields.clear();
     if (!_dataController.isClosed) {
       _dataController.add({});
     }
