@@ -49,6 +49,13 @@ class _RealtimeDataDisplayState extends State<RealtimeDataDisplay> {
     _isUsingSpoof = widget.settingsManager.connection.useSpoofMode;
     _isPaused = widget.settingsManager.connection.isPaused;
     
+    // Sync data manager with initial pause state
+    if (_isPaused) {
+      _dataManager.pause();
+    } else {
+      _dataManager.resume();
+    }
+    
     _initializeServices();
   }
 
@@ -211,7 +218,7 @@ class _RealtimeDataDisplayState extends State<RealtimeDataDisplay> {
                     IconButton(
                       icon: Icon(_isPaused ? Icons.play_arrow : Icons.pause),
                       onPressed: _togglePause,
-                      tooltip: _isPaused ? 'Resume Streaming' : 'Pause Streaming (enables zoom & hover)',
+                      tooltip: _isPaused ? 'PAUSED (click to resume)' : 'PLAYING (click to pause & enable zoom/hover)',
                     ),
                     IconButton(
                       icon: const Icon(Icons.clear_all),

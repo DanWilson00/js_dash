@@ -175,7 +175,7 @@ class ConnectionSettings {
       mavlinkHost: '127.0.0.1',
       mavlinkPort: 14550,
       autoStartMonitor: true,
-      isPaused: false,
+      isPaused: true, // Start paused by default
     );
   }
   

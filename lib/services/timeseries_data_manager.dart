@@ -169,10 +169,18 @@ class TimeSeriesDataManager {
   
   void pause() {
     _isPaused = true;
+    // Emit immediate event to notify listeners of pause state change
+    if (!_dataController.isClosed) {
+      _dataController.add(Map.from(_dataBuffers));
+    }
   }
   
   void resume() {
     _isPaused = false;
+    // Emit immediate event to notify listeners of pause state change  
+    if (!_dataController.isClosed) {
+      _dataController.add(Map.from(_dataBuffers));
+    }
   }
   
   bool get isPaused => _isPaused;

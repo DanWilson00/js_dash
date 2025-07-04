@@ -46,13 +46,18 @@ class _InteractivePlotState extends State<InteractivePlot> {
   static const double _minZoom = 0.1;
   static const double _maxZoom = 10.0;
   
+  // Absolute time system - use wall clock time for all coordinates
+  static final DateTime _absoluteEpoch = DateTime(2020, 1, 1);
+  
+  // Pause state tracking - store actual timestamps, not coordinates
+  DateTime? _pauseWindowStartTime;
+  
   // Drag selection state
   Offset? _dragStart;
   Offset? _dragEnd;
   bool _isDragging = false;
   
   // Hover state
-  double? _hoveredX;
   final Map<String, double> _hoveredValues = {};
 
   @override
@@ -92,26 +97,43 @@ class _InteractivePlotState extends State<InteractivePlot> {
   }
 
   void _initializeData() {
+    // If we start paused, immediately capture pause window
+    if (_dataManager.isPaused && _pauseWindowStartTime == null) {
+      final now = DateTime.now();
+      _pauseWindowStartTime = now.subtract(widget.configuration.timeWindow);
+    }
+    
     if (widget.configuration.yAxis.hasData) {
       _updatePlotData();
     }
   }
 
   void _setupDataListener() {
-    // Track previous pause state to detect changes
     bool wasPaused = _dataManager.isPaused;
     
     _dataSubscription = _dataManager.dataStream.listen(
       (_) {
         if (mounted && widget.configuration.yAxis.hasData) {
-          // Reset zoom when transitioning from paused to playing
-          if (wasPaused && !_dataManager.isPaused) {
-            setState(() {
-              _zoomLevel = 1.0;
-              _timeOffset = 0.0;
-            });
+          final isPaused = _dataManager.isPaused;
+          
+          // Handle pause state changes
+          if (wasPaused != isPaused) {
+            if (isPaused) {
+              // Just paused - capture FRESH window immediately
+              final now = DateTime.now();
+              setState(() {
+                _pauseWindowStartTime = now.subtract(widget.configuration.timeWindow);
+              });
+            } else {
+              // Resumed - clear pause state so next pause captures fresh window
+              setState(() {
+                _zoomLevel = 1.0;
+                _timeOffset = 0.0;
+                _pauseWindowStartTime = null;
+              });
+            }
           }
-          wasPaused = _dataManager.isPaused;
+          wasPaused = isPaused;
           
           _scheduleUpdate();
         }
@@ -127,6 +149,7 @@ class _InteractivePlotState extends State<InteractivePlot> {
       cancelOnError: false, // Keep listening even after errors
     );
   }
+  
   
   void _retrySubscription() {
     // Cancel existing subscription
@@ -184,10 +207,11 @@ class _InteractivePlotState extends State<InteractivePlot> {
   _TimeWindow _calculateTimeWindow() {
     final now = DateTime.now();
     
-    // Always use the full time window for data retrieval
-    // Zoom only affects display, not data filtering
+    // Data filtering cutoff - how far back to include data
     final cutoff = now.subtract(widget.configuration.timeWindow);
-    return _TimeWindow(startTime: cutoff, cutoff: cutoff);
+    
+    // Use absolute epoch for all coordinate calculations
+    return _TimeWindow(startTime: _absoluteEpoch, cutoff: cutoff);
   }
 
   _DataProcessingResult _processSignalData(_TimeWindow timeWindow) {
@@ -353,7 +377,8 @@ class _InteractivePlotState extends State<InteractivePlot> {
     final range = maxVal - minVal;
     
     return data.map((point) {
-      final x = point.timestamp.difference(startTime).inMilliseconds.toDouble();
+      // Use absolute time difference from epoch for stable coordinates
+      final x = point.timestamp.difference(_absoluteEpoch).inMilliseconds.toDouble();
       final normalizedY = range > 0 ? ((point.value - minVal) / range) * 100.0 : 50.0;
       originalValues[x] = point.value; // Store original value
       return FlSpot(x, normalizedY);
@@ -366,7 +391,8 @@ class _InteractivePlotState extends State<InteractivePlot> {
     Map<double, double> originalValues,
   ) {
     return data.map((point) {
-      final x = point.timestamp.difference(startTime).inMilliseconds.toDouble();
+      // Use absolute time difference from epoch for stable coordinates
+      final x = point.timestamp.difference(_absoluteEpoch).inMilliseconds.toDouble();
       originalValues[x] = point.value; // Store original value
       return FlSpot(x, point.value);
     }).toList();
@@ -617,7 +643,6 @@ class _InteractivePlotState extends State<InteractivePlot> {
                 if (event is FlPointerHoverEvent || event is FlPanUpdateEvent) {
                   if (response?.lineBarSpots != null && response!.lineBarSpots!.isNotEmpty) {
                     setState(() {
-                      _hoveredX = response.lineBarSpots!.first.x;
                       _hoveredValues.clear();
                       
                       // Collect values from all signals at this X position
@@ -632,12 +657,13 @@ class _InteractivePlotState extends State<InteractivePlot> {
                   }
                 } else if (event is FlPointerExitEvent) {
                   setState(() {
-                    _hoveredX = null;
                     _hoveredValues.clear();
                   });
                 }
               },
               touchTooltipData: LineTouchTooltipData(
+                getTooltipColor: (spot) => Theme.of(context).colorScheme.surface.withValues(alpha: 0.9), // Semi-transparent plot background
+                tooltipRoundedRadius: 8,
                 tooltipBorder: BorderSide(
                   color: Theme.of(context).colorScheme.outline,
                   width: 2,
@@ -734,10 +760,8 @@ class _InteractivePlotState extends State<InteractivePlot> {
                 color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.3),
               ),
             ),
-            minX: _dataManager.isPaused && _zoomLevel > 1.0
-                ? widget.configuration.timeWindow.inMilliseconds * (1 - 1/_zoomLevel) + _timeOffset
-                : 0,
-            maxX: widget.configuration.timeWindow.inMilliseconds.toDouble(),
+            minX: _calculateMinX(),
+            maxX: _calculateMaxX(),
             minY: _minY,
             maxY: _maxY,
             lineBarsData: _buildLineChartBars(),
@@ -791,22 +815,16 @@ class _InteractivePlotState extends State<InteractivePlot> {
   }
 
   Widget _buildTimeLabel(double value) {
-    final now = DateTime.now();
-    final startTime = now.subtract(widget.configuration.timeWindow);
-    final time = startTime.add(Duration(milliseconds: value.round()));
-    final diff = now.difference(time);
+    // Convert absolute X coordinate back to actual timestamp
+    final timestamp = _absoluteEpoch.add(Duration(milliseconds: value.round()));
     
-    String label;
-    if (diff.inMinutes < 1) {
-      label = '${diff.inSeconds}s';
-    } else if (diff.inHours < 1) {
-      label = '${diff.inMinutes}m';
-    } else {
-      label = '${diff.inHours}h';
-    }
+    // Show actual wall clock time when data was received
+    final timeStr = '${timestamp.hour.toString().padLeft(2, '0')}:'
+                   '${timestamp.minute.toString().padLeft(2, '0')}:'
+                   '${timestamp.second.toString().padLeft(2, '0')}';
     
     return Text(
-      label,
+      timeStr,
       style: Theme.of(context).textTheme.bodySmall,
     );
   }
@@ -839,6 +857,32 @@ class _InteractivePlotState extends State<InteractivePlot> {
     );
   }
   
+  double _calculateMinX() {
+    if (_dataManager.isPaused && _pauseWindowStartTime != null) {
+      // When paused, use frozen timestamps (NO DateTime.now() calls)
+      final pauseStartX = _pauseWindowStartTime!.difference(_absoluteEpoch).inMilliseconds.toDouble();
+      return pauseStartX + _timeOffset;
+    }
+    
+    // When not paused, show sliding window ending at current time
+    final now = DateTime.now();
+    final currentX = now.difference(_absoluteEpoch).inMilliseconds.toDouble();
+    return currentX - widget.configuration.timeWindow.inMilliseconds.toDouble();
+  }
+  
+  double _calculateMaxX() {
+    if (_dataManager.isPaused && _pauseWindowStartTime != null) {
+      // When paused, use frozen timestamps (NO DateTime.now() calls)
+      final visibleDuration = widget.configuration.timeWindow.inMilliseconds.toDouble() / _zoomLevel;
+      final pauseStartX = _pauseWindowStartTime!.difference(_absoluteEpoch).inMilliseconds.toDouble();
+      return pauseStartX + _timeOffset + visibleDuration;
+    }
+    
+    // When not paused, right edge tracks current time
+    final now = DateTime.now();
+    return now.difference(_absoluteEpoch).inMilliseconds.toDouble();
+  }
+
   void _handleDragZoom() {
     if (_dragStart == null || _dragEnd == null || !_isDragging) return;
     
