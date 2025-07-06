@@ -15,6 +15,9 @@ AppSettings _$AppSettingsFromJson(Map<String, dynamic> json) => AppSettings(
   navigation: NavigationSettings.fromJson(
     json['navigation'] as Map<String, dynamic>,
   ),
+  performance: PerformanceSettings.fromJson(
+    json['performance'] as Map<String, dynamic>,
+  ),
 );
 
 Map<String, dynamic> _$AppSettingsToJson(AppSettings instance) =>
@@ -23,6 +26,7 @@ Map<String, dynamic> _$AppSettingsToJson(AppSettings instance) =>
       'plots': instance.plots,
       'connection': instance.connection,
       'navigation': instance.navigation,
+      'performance': instance.performance,
     };
 
 WindowSettings _$WindowSettingsFromJson(Map<String, dynamic> json) =>
@@ -97,3 +101,28 @@ Map<String, dynamic> _$NavigationSettingsToJson(NavigationSettings instance) =>
       'selectedViewIndex': instance.selectedViewIndex,
       'selectedPlotIndex': instance.selectedPlotIndex,
     };
+
+PerformanceSettings _$PerformanceSettingsFromJson(Map<String, dynamic> json) =>
+    PerformanceSettings(
+      enablePointDecimation: json['enablePointDecimation'] as bool,
+      decimationThreshold: (json['decimationThreshold'] as num).toInt(),
+      enableUpdateThrottling: json['enableUpdateThrottling'] as bool,
+      updateInterval: (json['updateInterval'] as num).toInt(),
+      enableSmoothAnimations: json['enableSmoothAnimations'] as bool,
+      animationDuration: (json['animationDuration'] as num).toInt(),
+      dataBufferSize: (json['dataBufferSize'] as num).toInt(),
+      dataRetentionMinutes: (json['dataRetentionMinutes'] as num).toInt(),
+    );
+
+Map<String, dynamic> _$PerformanceSettingsToJson(
+  PerformanceSettings instance,
+) => <String, dynamic>{
+  'enablePointDecimation': instance.enablePointDecimation,
+  'decimationThreshold': instance.decimationThreshold,
+  'enableUpdateThrottling': instance.enableUpdateThrottling,
+  'updateInterval': instance.updateInterval,
+  'enableSmoothAnimations': instance.enableSmoothAnimations,
+  'animationDuration': instance.animationDuration,
+  'dataBufferSize': instance.dataBufferSize,
+  'dataRetentionMinutes': instance.dataRetentionMinutes,
+};

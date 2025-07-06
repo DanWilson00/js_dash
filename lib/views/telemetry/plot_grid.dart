@@ -240,6 +240,7 @@ class PlotGridManagerState extends State<PlotGridManager> {
         final plot = _plots[index];
         return InteractivePlot(
           configuration: plot,
+          settingsManager: widget.settingsManager,
           isAxisSelected: _selectedPlotId == plot.id,
           onAxisTap: () => _selectPlot(plot.id),
           onClearAxis: () => _clearPlotAxis(plot.id),

@@ -3,14 +3,17 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:js_dash/models/plot_configuration.dart';
 import 'package:js_dash/views/telemetry/interactive_plot.dart';
 import 'package:js_dash/services/timeseries_data_manager.dart';
+import 'package:js_dash/services/settings_manager.dart';
 
 void main() {
   group('InteractivePlot Widget Tests', () {
     late TimeSeriesDataManager dataManager;
+    late SettingsManager settingsManager;
 
     setUp(() {
       TimeSeriesDataManager.resetInstanceForTesting();
       dataManager = TimeSeriesDataManager();
+      settingsManager = SettingsManager();
     });
 
     tearDown(() {
@@ -24,7 +27,10 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           home: Scaffold(
-            body: InteractivePlot(configuration: config),
+            body: InteractivePlot(
+              configuration: config,
+              settingsManager: settingsManager,
+            ),
           ),
         ),
       );
@@ -49,7 +55,10 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           home: Scaffold(
-            body: InteractivePlot(configuration: config),
+            body: InteractivePlot(
+              configuration: config,
+              settingsManager: settingsManager,
+            ),
           ),
         ),
       );
@@ -74,7 +83,10 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           home: Scaffold(
-            body: InteractivePlot(configuration: config),
+            body: InteractivePlot(
+              configuration: config,
+              settingsManager: settingsManager,
+            ),
           ),
         ),
       );
@@ -105,7 +117,10 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           home: Scaffold(
-            body: InteractivePlot(configuration: config),
+            body: InteractivePlot(
+              configuration: config,
+              settingsManager: settingsManager,
+            ),
           ),
         ),
       );
@@ -136,7 +151,10 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           home: Scaffold(
-            body: InteractivePlot(configuration: config),
+            body: InteractivePlot(
+              configuration: config,
+              settingsManager: settingsManager,
+            ),
           ),
         ),
       );
@@ -252,7 +270,10 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           home: Scaffold(
-            body: InteractivePlot(configuration: config),
+            body: InteractivePlot(
+              configuration: config,
+              settingsManager: settingsManager,
+            ),
           ),
         ),
       );
@@ -382,7 +403,10 @@ void main() {
       await tester.pumpWidget(
         MaterialApp(
           home: Scaffold(
-            body: InteractivePlot(configuration: config),
+            body: InteractivePlot(
+              configuration: config,
+              settingsManager: settingsManager,
+            ),
           ),
         ),
       );

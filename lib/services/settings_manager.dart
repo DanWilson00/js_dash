@@ -18,6 +18,7 @@ class SettingsManager extends ChangeNotifier {
   PlotSettings get plots => _settings.plots;
   ConnectionSettings get connection => _settings.connection;
   NavigationSettings get navigation => _settings.navigation;
+  PerformanceSettings get performance => _settings.performance;
 
   /// Initialize settings by loading from storage
   Future<void> initialize() async {
@@ -193,6 +194,47 @@ class SettingsManager extends ChangeNotifier {
   /// Update selected plot index in navigation
   void updateSelectedPlotInNavigation(int index) {
     updateNavigation(_settings.navigation.copyWith(selectedPlotIndex: index));
+  }
+
+  /// Update performance settings
+  void updatePerformance(PerformanceSettings newPerformance) {
+    if (_settings.performance == newPerformance) return;
+    
+    _settings = _settings.copyWith(performance: newPerformance);
+    notifyListeners();
+    _debouncedSave();
+  }
+
+  /// Update point decimation settings
+  void updatePointDecimation({bool? enabled, int? threshold}) {
+    updatePerformance(_settings.performance.copyWith(
+      enablePointDecimation: enabled,
+      decimationThreshold: threshold,
+    ));
+  }
+
+  /// Update throttling settings
+  void updateThrottling({bool? enabled, int? interval}) {
+    updatePerformance(_settings.performance.copyWith(
+      enableUpdateThrottling: enabled,
+      updateInterval: interval,
+    ));
+  }
+
+  /// Update animation settings
+  void updateAnimations({bool? enabled, int? duration}) {
+    updatePerformance(_settings.performance.copyWith(
+      enableSmoothAnimations: enabled,
+      animationDuration: duration,
+    ));
+  }
+
+  /// Update data management settings
+  void updateDataManagement({int? bufferSize, int? retentionMinutes}) {
+    updatePerformance(_settings.performance.copyWith(
+      dataBufferSize: bufferSize,
+      dataRetentionMinutes: retentionMinutes,
+    ));
   }
 
   /// Force immediate save (for app shutdown)

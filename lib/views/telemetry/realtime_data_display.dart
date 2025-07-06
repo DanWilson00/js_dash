@@ -6,6 +6,7 @@ import '../../services/timeseries_data_manager.dart';
 import '../../services/settings_manager.dart';
 import 'mavlink_message_monitor.dart';
 import 'plot_grid.dart';
+import '../settings/settings_dialog.dart';
 
 class RealtimeDataDisplay extends StatefulWidget {
   const RealtimeDataDisplay({
@@ -68,7 +69,7 @@ class _RealtimeDataDisplayState extends State<RealtimeDataDisplay> {
 
   Future<void> _initializeServices() async {
     await _mavlinkService.initialize();
-    _dataManager.startTracking();
+    _dataManager.startTracking(widget.settingsManager);
     
     if (_isUsingSpoof) {
       _startSpoofMode();
@@ -200,6 +201,15 @@ class _RealtimeDataDisplayState extends State<RealtimeDataDisplay> {
     _dataManager.clearAllData();
   }
 
+  void _openSettings() {
+    showDialog(
+      context: context,
+      builder: (context) => SettingsDialog(
+        settingsManager: widget.settingsManager,
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -230,6 +240,11 @@ class _RealtimeDataDisplayState extends State<RealtimeDataDisplay> {
                       icon: Icon(_isUsingSpoof ? Icons.bug_report : Icons.wifi),
                       onPressed: _toggleMode,
                       tooltip: _isUsingSpoof ? 'Switch to Real MAVLink' : 'Switch to Spoof Mode',
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.settings),
+                      onPressed: _openSettings,
+                      tooltip: 'Settings',
                     ),
                   ],
                 ),

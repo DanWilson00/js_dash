@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 import '../../models/plot_configuration.dart';
 import '../../services/timeseries_data_manager.dart';
+import '../../services/settings_manager.dart';
 import 'plot_legend.dart';
 
 class InteractivePlot extends StatefulWidget {
@@ -12,10 +13,12 @@ class InteractivePlot extends StatefulWidget {
   final VoidCallback? onAxisTap;
   final VoidCallback? onClearAxis;
   final VoidCallback? onLegendTap;
+  final SettingsManager settingsManager;
 
   const InteractivePlot({
     super.key,
     required this.configuration,
+    required this.settingsManager,
     this.isAxisSelected = false,
     this.onAxisTap,
     this.onClearAxis,
@@ -35,10 +38,9 @@ class _InteractivePlotState extends State<InteractivePlot> {
   StreamSubscription? _dataSubscription;
   final Map<String, DateTime> _lastDataTimestamps = {};
   
-  // Update throttling - sync with parent UI updates
+  // Update throttling - configurable from settings
   Timer? _updateTimer;
   bool _pendingUpdate = false;
-  static const _updateInterval = Duration(milliseconds: 100); // 10 FPS to match parent
   
   // Zoom and pan state
   double _zoomLevel = 1.0;
@@ -65,6 +67,16 @@ class _InteractivePlotState extends State<InteractivePlot> {
     super.initState();
     _initializeData();
     _setupDataListener();
+    
+    // Listen to settings changes
+    widget.settingsManager.addListener(_onSettingsChanged);
+  }
+
+  void _onSettingsChanged() {
+    if (mounted) {
+      // Performance settings changed, update plot accordingly
+      setState(() {});
+    }
   }
 
   @override
@@ -80,6 +92,7 @@ class _InteractivePlotState extends State<InteractivePlot> {
 
   @override
   void dispose() {
+    widget.settingsManager.removeListener(_onSettingsChanged);
     _updateTimer?.cancel();
     _dataSubscription?.cancel();
     super.dispose();
@@ -167,11 +180,26 @@ class _InteractivePlotState extends State<InteractivePlot> {
   }
   
   void _scheduleUpdate() {
+    final performance = widget.settingsManager.performance;
+    
+    if (!performance.enableUpdateThrottling) {
+      // Update immediately if throttling is disabled
+      if (mounted) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) {
+            _updatePlotData();
+          }
+        });
+      }
+      return;
+    }
+    
     _pendingUpdate = true;
     
-    // If no timer is active, start one
+    // If no timer is active, start one with configurable interval
     if (_updateTimer == null || !_updateTimer!.isActive) {
-      _updateTimer = Timer(_updateInterval, () {
+      final updateInterval = Duration(milliseconds: performance.updateInterval);
+      _updateTimer = Timer(updateInterval, () {
         if (mounted && _pendingUpdate) {
           _pendingUpdate = false;
           
@@ -292,8 +320,13 @@ class _InteractivePlotState extends State<InteractivePlot> {
   }
   
   List<TimeSeriesPoint> _decimateData(List<TimeSeriesPoint> data) {
-    // For datasets larger than 1000 points, use decimation to maintain performance
-    const maxPoints = 1000;
+    final performance = widget.settingsManager.performance;
+    
+    if (!performance.enablePointDecimation) {
+      return data;
+    }
+    
+    final maxPoints = performance.decimationThreshold;
     
     if (data.length <= maxPoints) {
       return data;
@@ -768,8 +801,10 @@ class _InteractivePlotState extends State<InteractivePlot> {
             maxY: _maxY,
             lineBarsData: _buildLineChartBars(),
           ),
-          // Smooth animation that doesn't conflict with update interval
-          duration: const Duration(milliseconds: 150),
+          // Configurable animation duration
+          duration: widget.settingsManager.performance.enableSmoothAnimations
+              ? Duration(milliseconds: widget.settingsManager.performance.animationDuration)
+              : Duration.zero,
         ),
         // Legend overlay
         if (widget.configuration.yAxis.visibleSignals.isNotEmpty)

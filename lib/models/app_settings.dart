@@ -10,12 +10,14 @@ class AppSettings {
   final PlotSettings plots;
   final ConnectionSettings connection;
   final NavigationSettings navigation;
+  final PerformanceSettings performance;
   
   const AppSettings({
     required this.window,
     required this.plots,
     required this.connection,
     required this.navigation,
+    required this.performance,
   });
   
   factory AppSettings.defaults() {
@@ -24,6 +26,7 @@ class AppSettings {
       plots: PlotSettings.defaults(),
       connection: ConnectionSettings.defaults(),
       navigation: NavigationSettings.defaults(),
+      performance: PerformanceSettings.defaults(),
     );
   }
   
@@ -35,12 +38,14 @@ class AppSettings {
     PlotSettings? plots,
     ConnectionSettings? connection,
     NavigationSettings? navigation,
+    PerformanceSettings? performance,
   }) {
     return AppSettings(
       window: window ?? this.window,
       plots: plots ?? this.plots,
       connection: connection ?? this.connection,
       navigation: navigation ?? this.navigation,
+      performance: performance ?? this.performance,
     );
   }
 }
@@ -226,6 +231,67 @@ class NavigationSettings {
     return NavigationSettings(
       selectedViewIndex: selectedViewIndex ?? this.selectedViewIndex,
       selectedPlotIndex: selectedPlotIndex ?? this.selectedPlotIndex,
+    );
+  }
+}
+
+@JsonSerializable()
+class PerformanceSettings {
+  final bool enablePointDecimation;
+  final int decimationThreshold;
+  final bool enableUpdateThrottling;
+  final int updateInterval; // milliseconds
+  final bool enableSmoothAnimations;
+  final int animationDuration; // milliseconds
+  final int dataBufferSize;
+  final int dataRetentionMinutes;
+  
+  const PerformanceSettings({
+    required this.enablePointDecimation,
+    required this.decimationThreshold,
+    required this.enableUpdateThrottling,
+    required this.updateInterval,
+    required this.enableSmoothAnimations,
+    required this.animationDuration,
+    required this.dataBufferSize,
+    required this.dataRetentionMinutes,
+  });
+  
+  factory PerformanceSettings.defaults() {
+    return const PerformanceSettings(
+      enablePointDecimation: true,
+      decimationThreshold: 1000,
+      enableUpdateThrottling: true,
+      updateInterval: 100, // 10 FPS
+      enableSmoothAnimations: true,
+      animationDuration: 150,
+      dataBufferSize: 2000,
+      dataRetentionMinutes: 10,
+    );
+  }
+  
+  factory PerformanceSettings.fromJson(Map<String, dynamic> json) => _$PerformanceSettingsFromJson(json);
+  Map<String, dynamic> toJson() => _$PerformanceSettingsToJson(this);
+  
+  PerformanceSettings copyWith({
+    bool? enablePointDecimation,
+    int? decimationThreshold,
+    bool? enableUpdateThrottling,
+    int? updateInterval,
+    bool? enableSmoothAnimations,
+    int? animationDuration,
+    int? dataBufferSize,
+    int? dataRetentionMinutes,
+  }) {
+    return PerformanceSettings(
+      enablePointDecimation: enablePointDecimation ?? this.enablePointDecimation,
+      decimationThreshold: decimationThreshold ?? this.decimationThreshold,
+      enableUpdateThrottling: enableUpdateThrottling ?? this.enableUpdateThrottling,
+      updateInterval: updateInterval ?? this.updateInterval,
+      enableSmoothAnimations: enableSmoothAnimations ?? this.enableSmoothAnimations,
+      animationDuration: animationDuration ?? this.animationDuration,
+      dataBufferSize: dataBufferSize ?? this.dataBufferSize,
+      dataRetentionMinutes: dataRetentionMinutes ?? this.dataRetentionMinutes,
     );
   }
 }

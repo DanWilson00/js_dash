@@ -1,6 +1,7 @@
 import 'dart:async';
 import '../models/plot_configuration.dart';
 import 'mavlink_message_tracker.dart';
+import 'settings_manager.dart';
 
 class TimeSeriesDataManager {
   static TimeSeriesDataManager? _instance;
@@ -14,10 +15,11 @@ class TimeSeriesDataManager {
   StreamSubscription? _messageSubscription;
   bool _isTracking = false;
   bool _isPaused = false;
+  SettingsManager? _settingsManager;
 
-  // Buffer configuration
-  static const int defaultBufferSize = 2000; // ~10 minutes at 3Hz, covers 5m window + margin
-  static const Duration maxAge = Duration(minutes: 10);
+  // Buffer configuration - defaults that can be overridden by settings
+  int _currentBufferSize = 2000; // ~10 minutes at 3Hz, covers 5m window + margin
+  Duration _currentMaxAge = const Duration(minutes: 10);
   
   // Performance optimizations
   static const int maxFieldCount = 500; // Limit field discovery to prevent unbounded growth
@@ -28,9 +30,16 @@ class TimeSeriesDataManager {
 
   Stream<Map<String, CircularBuffer>> get dataStream => _dataController.stream;
 
-  void startTracking() {
+  void startTracking([SettingsManager? settingsManager]) {
     if (_isTracking) return;
     _isTracking = true;
+
+    // Set up settings manager if provided
+    if (settingsManager != null) {
+      _settingsManager = settingsManager;
+      _updateFromSettings();
+      settingsManager.addListener(_updateFromSettings);
+    }
 
     final tracker = MavlinkMessageTracker();
     _messageSubscription = tracker.statsStream.listen((messageStats) {
@@ -38,10 +47,23 @@ class TimeSeriesDataManager {
     });
   }
 
+  void _updateFromSettings() {
+    if (_settingsManager == null) return;
+    
+    final performance = _settingsManager!.performance;
+    _currentBufferSize = performance.dataBufferSize;
+    _currentMaxAge = Duration(minutes: performance.dataRetentionMinutes);
+    
+    // Note: Cannot dynamically resize existing CircularBuffers
+    // New buffers will use the updated size
+  }
+
   void stopTracking() {
     _isTracking = false;
     _messageSubscription?.cancel();
     _messageSubscription = null;
+    _settingsManager?.removeListener(_updateFromSettings);
+    _settingsManager = null;
   }
 
   void _processMessageUpdates(Map<String, MessageStats> messageStats) {
@@ -74,7 +96,7 @@ class TimeSeriesDataManager {
           final value = _parseNumericValueOptimized(fieldKey, field.value);
           
           if (value != null) {
-            _dataBuffers.putIfAbsent(fieldKey, () => CircularBuffer(defaultBufferSize));
+            _dataBuffers.putIfAbsent(fieldKey, () => CircularBuffer(_currentBufferSize));
             _dataBuffers[fieldKey]!.add(TimeSeriesPoint(now, value));
             updatedBuffers[fieldKey] = _dataBuffers[fieldKey]!;
             hasNewData = true;
@@ -151,7 +173,7 @@ class TimeSeriesDataManager {
   }
 
   void _cleanupOldData(DateTime now) {
-    final cutoff = now.subtract(maxAge);
+    final cutoff = now.subtract(_currentMaxAge);
     
     for (final buffer in _dataBuffers.values) {
       buffer.removeOldData(cutoff);
@@ -229,7 +251,7 @@ class TimeSeriesDataManager {
     final now = DateTime.now();
     final point = TimeSeriesPoint(now, value);
     
-    _dataBuffers.putIfAbsent(key, () => CircularBuffer(defaultBufferSize));
+    _dataBuffers.putIfAbsent(key, () => CircularBuffer(_currentBufferSize));
     _dataBuffers[key]!.add(point);
     
     if (!_dataController.isClosed) {
