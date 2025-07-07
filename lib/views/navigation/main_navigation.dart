@@ -200,6 +200,9 @@ class _MainNavigationState extends State<MainNavigation> {
     // Also disconnect MAVLink service if connected
     _mavlinkService.disconnect();
     
+    // Clear old data when switching connection modes to prevent false "connected" status
+    _dataManager.clearAllData();
+    
     // Don't stop tracking - we want to keep the data manager running
     // _dataManager.stopTracking();
   }

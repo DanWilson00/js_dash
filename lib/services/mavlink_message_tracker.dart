@@ -8,16 +8,30 @@ class MessageStats {
   DateTime lastReceived = DateTime.now();
   MavlinkMessage? lastMessage;
   double frequency = 0.0;
+  
+  // For more responsive frequency calculation
+  final List<DateTime> _recentTimestamps = [];
 
   void updateMessage(MavlinkMessage message) {
     count++;
     lastReceived = DateTime.now();
     lastMessage = message;
     
-    // Calculate frequency over the last 5 seconds
-    final duration = lastReceived.difference(firstReceived);
-    if (duration.inMilliseconds > 1000) {
-      frequency = count / (duration.inMilliseconds / 1000.0);
+    // Track recent timestamps for responsive frequency calculation
+    _recentTimestamps.add(lastReceived);
+    
+    // Keep only timestamps from the last 5 seconds
+    final cutoff = lastReceived.subtract(const Duration(seconds: 5));
+    _recentTimestamps.removeWhere((timestamp) => timestamp.isBefore(cutoff));
+    
+    // Calculate frequency based on recent activity (messages in last 5 seconds)
+    if (_recentTimestamps.length > 1) {
+      final timeSpan = _recentTimestamps.last.difference(_recentTimestamps.first);
+      if (timeSpan.inMilliseconds > 0) {
+        frequency = (_recentTimestamps.length - 1) / (timeSpan.inMilliseconds / 1000.0);
+      }
+    } else if (_recentTimestamps.length == 1) {
+      frequency = 0.0; // Only one data point, can't calculate frequency yet
     }
   }
 
@@ -155,6 +169,8 @@ class MavlinkMessageTracker {
     // Update stats stream periodically
     _updateTimer = Timer.periodic(_statsUpdateInterval, (_) {
       if (!_statsController.isClosed) {
+        // Update frequencies to reflect current activity
+        _updateFrequencies();
         _statsController.add(Map.from(_messageStats));
       }
     });
@@ -246,6 +262,28 @@ class MavlinkMessageTracker {
 
   String _getMessageName(MavlinkMessage message) {
     return _messageTypeMap[message.runtimeType] ?? 'MSG_${message.mavlinkMessageId}';
+  }
+
+  void _updateFrequencies() {
+    final now = DateTime.now();
+    
+    // Update frequency for each message based on recent activity
+    for (final stats in _messageStats.values) {
+      final timeSinceLastMessage = now.difference(stats.lastReceived);
+      
+      // If no message received in the last 2 seconds, start decaying frequency
+      if (timeSinceLastMessage.inMilliseconds > 2000) {
+        // Decay frequency exponentially to zero over time
+        // After 5 seconds of no data, frequency should be near zero
+        final decayFactor = 1.0 - (timeSinceLastMessage.inMilliseconds - 2000) / 3000.0;
+        stats.frequency = (stats.frequency * decayFactor.clamp(0.0, 1.0));
+        
+        // Set to exactly zero if very low to avoid tiny numbers
+        if (stats.frequency < 0.01) {
+          stats.frequency = 0.0;
+        }
+      }
+    }
   }
 
   void clearStats() {

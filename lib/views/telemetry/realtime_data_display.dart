@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../services/timeseries_data_manager.dart';
 import '../../services/settings_manager.dart';
@@ -25,6 +26,7 @@ class _RealtimeDataDisplayState extends State<RealtimeDataDisplay> {
   
   // Current telemetry data (kept for message tracking functionality)  
   late bool _isPaused;
+  StreamSubscription? _dataStreamSubscription;
 
   @override
   void initState() {
@@ -35,6 +37,13 @@ class _RealtimeDataDisplayState extends State<RealtimeDataDisplay> {
     
     // Listen for settings changes
     widget.settingsManager.addListener(_onSettingsChanged);
+    
+    // Listen for data changes to update connection status
+    _dataStreamSubscription = _dataManager.dataStream.listen((_) {
+      if (mounted) {
+        setState(() {}); // Trigger rebuild to update connection status
+      }
+    });
     
     // Sync data manager with current pause state
     if (_isPaused) {
@@ -64,6 +73,7 @@ class _RealtimeDataDisplayState extends State<RealtimeDataDisplay> {
   @override
   void dispose() {
     widget.settingsManager.removeListener(_onSettingsChanged);
+    _dataStreamSubscription?.cancel();
     super.dispose();
   }
 
@@ -170,26 +180,20 @@ class _RealtimeDataDisplayState extends State<RealtimeDataDisplay> {
   }
 
   Widget _buildConnectionStatus() {
-    // Determine status based on data availability rather than direct connection tracking
-    final hasData = _dataManager.getAvailableFields().isNotEmpty;
-    final statusColor = _isPaused ? Colors.orange : (hasData ? Colors.green : Colors.red);
-    final statusText = _isPaused ? 'Paused' : (hasData ? 'Data Available' : 'No Data');
+    // Determine connection status based on recent data availability and pause state
+    final hasRecentData = _hasRecentData();
+    final isConnected = hasRecentData && !_isPaused;
     
-    String modeText;
     final connection = widget.settingsManager.connection;
-    if (connection.enableSpoofing) {
-      modeText = 'SPOOF MODE (USB Serial)';
+    final statusColor = _isPaused ? Colors.orange : (isConnected ? Colors.green : Colors.red);
+    
+    String statusText;
+    if (_isPaused) {
+      statusText = 'Paused';
+    } else if (connection.enableSpoofing) {
+      statusText = isConnected ? 'Spoof mode connected' : 'Spoof mode disconnected';
     } else {
-      switch (connection.connectionType) {
-        case 'udp':
-          modeText = 'UDP MAVLINK';
-          break;
-        case 'serial':
-          modeText = 'SERIAL MAVLINK';
-          break;
-        default:
-          modeText = 'MAVLINK';
-      }
+      statusText = isConnected ? 'Connected' : 'Disconnected';
     }
     
     return Card(
@@ -201,7 +205,7 @@ class _RealtimeDataDisplayState extends State<RealtimeDataDisplay> {
             const SizedBox(width: 8),
             Flexible(
               child: Text(
-                '$statusText ($modeText)',
+                statusText,
                 style: TextStyle(
                   fontWeight: FontWeight.bold,
                   color: statusColor,
@@ -213,5 +217,28 @@ class _RealtimeDataDisplayState extends State<RealtimeDataDisplay> {
         ),
       ),
     );
+  }
+
+  /// Check if there's been recent data activity (within last 5 seconds)
+  bool _hasRecentData() {
+    final now = DateTime.now();
+    final cutoff = now.subtract(const Duration(seconds: 5));
+    
+    // Check each available field for recent data points
+    for (final fieldKey in _dataManager.getAvailableFields()) {
+      final parts = fieldKey.split('.');
+      if (parts.length >= 2) {
+        final messageType = parts[0];
+        final fieldName = parts.sublist(1).join('.');
+        final data = _dataManager.getFieldData(messageType, fieldName);
+        
+        // Check if any data point is recent
+        if (data.any((point) => point.timestamp.isAfter(cutoff))) {
+          return true;
+        }
+      }
+    }
+    
+    return false;
   }
 }
