@@ -50,11 +50,24 @@ class UsbSerialSpoofService extends MavlinkDataProvider {
   double _longitude = -118.2437;
   double _course = 90.0; // Initial course in degrees (East)
   int _simulationTime = 0; // Time counter for movement patterns
+  
+  // Dashboard simulation state
+  double _rpm = 1000.0;
+  double _rpmDirection = 1.0; // 1 for increasing, -1 for decreasing
+  double _portWingPosition = 0.0; // -100 to +100 (degrees or percentage)
+  double _starboardWingPosition = 0.0; // -100 to +100 (degrees or percentage)
 
   Stream<MavlinkFrame> get frameStream => _frameController.stream;
   Stream<Uint8List> get rawDataStream => _rawDataController.stream;
   bool get isConnected => _isConnected;
   bool get isPaused => _isPaused;
+  
+  // Dashboard data getters (for compatibility with dashboard)
+  bool get isRunning => _isConnected;
+  double get currentRPM => _rpm;
+  double get currentSpeed => _groundSpeed;
+  double get portWingPosition => _portWingPosition;
+  double get starboardWingPosition => _starboardWingPosition;
   
   /// Initialize the spoof service
   Future<void> initialize() async {
@@ -190,6 +203,25 @@ class UsbSerialSpoofService extends MavlinkDataProvider {
     _roll = _roll.clamp(-20.0, 20.0);
     
     _yaw = _heading * 3.14159 / 180.0; // Convert to radians
+    
+    // Simulate RPM changes (realistic jetski RPM: 1000-8000)
+    _rpm += _rpmDirection * (10 + (DateTime.now().millisecond % 30));
+    if (_rpm >= 7500) {
+      _rpmDirection = -1.0; // Start decreasing
+    } else if (_rpm <= 1500) {
+      _rpmDirection = 1.0; // Start increasing
+    }
+    _rpm = _rpm.clamp(1000.0, 8000.0);
+    
+    // Simulate wing positions (hydrofoils adjusting based on speed and turns)
+    final wingAdjustment = _groundSpeed * 2.0; // More speed = more wing adjustment
+    final turnAdjustment = (_heading % 360 - 180).abs() / 10.0; // Turn effects
+    
+    _portWingPosition = (wingAdjustment + turnAdjustment) * math.sin(timeInSeconds * 0.5);
+    _starboardWingPosition = (wingAdjustment - turnAdjustment) * math.cos(timeInSeconds * 0.3);
+    
+    _portWingPosition = _portWingPosition.clamp(-100.0, 100.0);
+    _starboardWingPosition = _starboardWingPosition.clamp(-100.0, 100.0);
     
     // Generate GLOBAL_POSITION_INT message with moving coordinates
     final globalPosMsg = GlobalPositionInt(

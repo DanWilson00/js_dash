@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import '../../services/mavlink_spoof_service.dart';
+import '../../services/timeseries_data_manager.dart';
+import '../../models/plot_configuration.dart';
 import 'dashboard_config.dart';
 import 'ambient_lighting.dart';
 import 'jetshark_branding.dart';
@@ -17,8 +18,9 @@ class JetsharkDashboard extends StatefulWidget {
 }
 
 class _JetsharkDashboardState extends State<JetsharkDashboard> with TickerProviderStateMixin {
-  final MavlinkSpoofService _spoofService = MavlinkSpoofService();
+  final TimeSeriesDataManager _dataManager = TimeSeriesDataManager();
   Timer? _updateTimer;
+  StreamSubscription? _dataSubscription;
   
   // Animation controllers
   late AnimationController _rpmController;
@@ -43,7 +45,66 @@ class _JetsharkDashboardState extends State<JetsharkDashboard> with TickerProvid
   void initState() {
     super.initState();
     _initializeAnimations();
+    _startDataListening();
     _startUpdates();
+  }
+  
+  void _startDataListening() {
+    // Listen to data stream from the centralized data manager
+    _dataSubscription = _dataManager.dataStream.listen((dataBuffers) {
+      // Extract values we need for the dashboard
+      _updateFromDataBuffers(dataBuffers);
+    });
+  }
+  
+  void _updateFromDataBuffers(Map<String, CircularBuffer> dataBuffers) {
+    // Extract the latest values from data buffers for dashboard display
+    // Look for fields that would contain RPM, speed, and wing position data
+    
+    double? rpm;
+    double? speed;
+    double? leftWing;
+    double? rightWing;
+    
+    // Try to extract RPM from VFR_HUD throttle or other engine data
+    final vfrHudThrottle = _getLatestValue(dataBuffers, 'VFR_HUD.throttle');
+    if (vfrHudThrottle != null) {
+      // Convert throttle percentage to RPM (assuming 0-100% maps to 1000-8000 RPM)
+      rpm = 1000 + (vfrHudThrottle * 70); // Scale to reasonable RPM range
+    }
+    
+    // Extract speed from VFR_HUD or GLOBAL_POSITION_INT
+    speed = _getLatestValue(dataBuffers, 'VFR_HUD.groundspeed') ?? 
+            _getLatestValue(dataBuffers, 'GLOBAL_POSITION_INT.vx');
+    
+    // For wing positions, we could use attitude data or custom fields
+    // For now, simulate based on attitude data
+    final roll = _getLatestValue(dataBuffers, 'ATTITUDE.roll');
+    final pitch = _getLatestValue(dataBuffers, 'ATTITUDE.pitch');
+    
+    if (roll != null && pitch != null) {
+      // Convert attitude to wing positions (this is simulated)
+      leftWing = roll * 180 / 3.14159; // Convert radians to degrees
+      rightWing = -roll * 180 / 3.14159; // Opposite wing for balance
+    }
+    
+    // Update state if we have valid data
+    if (rpm != null || speed != null || leftWing != null || rightWing != null) {
+      setState(() {
+        if (rpm != null) _targetRpm = rpm;
+        if (speed != null) _speed = speed * DashboardConfig.speedConversionFactor;
+        if (leftWing != null) _targetLeftWing = leftWing;
+        if (rightWing != null) _targetRightWing = rightWing;
+      });
+    }
+  }
+  
+  double? _getLatestValue(Map<String, CircularBuffer> dataBuffers, String fieldKey) {
+    final buffer = dataBuffers[fieldKey];
+    if (buffer != null && buffer.points.isNotEmpty) {
+      return buffer.points.last.value;
+    }
+    return null;
   }
 
   void _initializeAnimations() {
@@ -84,6 +145,7 @@ class _JetsharkDashboardState extends State<JetsharkDashboard> with TickerProvid
   @override
   void dispose() {
     _updateTimer?.cancel();
+    _dataSubscription?.cancel();
     _rpmController.dispose();
     _startupController.dispose();
     _pulseController.dispose();
@@ -92,25 +154,18 @@ class _JetsharkDashboardState extends State<JetsharkDashboard> with TickerProvid
 
   void _startUpdates() {
     _updateTimer = Timer.periodic(DashboardConfig.updateInterval, (_) {
-      if (_spoofService.isRunning) {
-        setState(() {
-          _targetRpm = _spoofService.currentRPM;
-          _speed = _spoofService.currentSpeed * DashboardConfig.speedConversionFactor;
-          
-          _targetLeftWing = _spoofService.portWingPosition;
-          _targetRightWing = _spoofService.starboardWingPosition;
-          
-          // Smooth RPM animation - always update
-          _rpm = _rpm + (_targetRpm - _rpm) * DashboardConfig.smoothingFactor;
-          if ((_targetRpm - _rpm).abs() > DashboardConfig.rpmAnimationThreshold) {
-            _rpmController.forward(from: 0);
-          }
-          
-          // Smooth wing animations
-          _leftWing = _leftWing + (_targetLeftWing - _leftWing) * DashboardConfig.smoothingFactor;
-          _rightWing = _rightWing + (_targetRightWing - _rightWing) * DashboardConfig.smoothingFactor;
-        });
-      }
+      // Always update animations - data comes from stream listener
+      setState(() {
+        // Smooth RPM animation - always update
+        _rpm = _rpm + (_targetRpm - _rpm) * DashboardConfig.smoothingFactor;
+        if ((_targetRpm - _rpm).abs() > DashboardConfig.rpmAnimationThreshold) {
+          _rpmController.forward(from: 0);
+        }
+        
+        // Smooth wing animations
+        _leftWing = _leftWing + (_targetLeftWing - _leftWing) * DashboardConfig.smoothingFactor;
+        _rightWing = _rightWing + (_targetRightWing - _rightWing) * DashboardConfig.smoothingFactor;
+      });
     });
   }
 

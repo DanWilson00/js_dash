@@ -1,7 +1,4 @@
-import 'dart:async';
 import 'package:flutter/material.dart';
-import '../../services/mavlink_service.dart';
-import '../../services/usb_serial_spoof_service.dart';
 import '../../services/timeseries_data_manager.dart';
 import '../../services/settings_manager.dart';
 import 'mavlink_message_monitor.dart';
@@ -23,78 +20,33 @@ class RealtimeDataDisplay extends StatefulWidget {
 }
 
 class _RealtimeDataDisplayState extends State<RealtimeDataDisplay> {
-  final MavlinkService _mavlinkService = MavlinkService();
-  final UsbSerialSpoofService _usbSerialSpoofService = UsbSerialSpoofService();
   final TimeSeriesDataManager _dataManager = TimeSeriesDataManager();
-  
-  final List<StreamSubscription> _subscriptions = [];
   final GlobalKey<PlotGridManagerState> _plotGridKey = GlobalKey<PlotGridManagerState>();
   
-  // Current telemetry data (kept for message tracking functionality)
-  
-  late bool _isUsingSpoof;
-  bool _isConnected = false;
-  DateTime? _lastPacketTime;
+  // Current telemetry data (kept for message tracking functionality)  
   late bool _isPaused;
-  
-  // Update throttling
-  Timer? _updateTimer;
-  bool _pendingUpdate = false;
-  static const _uiUpdateInterval = Duration(milliseconds: 100); // 10 FPS for UI updates, synced with plots
 
   @override
   void initState() {
     super.initState();
     
     // Initialize from settings
-    _isUsingSpoof = widget.settingsManager.connection.enableSpoofing;
     _isPaused = widget.settingsManager.connection.isPaused;
     
     // Listen for settings changes
     widget.settingsManager.addListener(_onSettingsChanged);
     
-    // Sync data manager with initial pause state
+    // Sync data manager with current pause state
     if (_isPaused) {
       _dataManager.pause();
     } else {
       _dataManager.resume();
     }
-    
-    _initializeServicesOnce();
-  }
-  
-  Future<void> _initializeServicesOnce() async {
-    // Initialize services once only
-    await _mavlinkService.initialize();
-    await _usbSerialSpoofService.initialize();
-    _dataManager.startTracking(widget.settingsManager);
-    
-    _startDataSource();
-  }
-  
-  Future<void> _startDataSource() async {
-    if (_isUsingSpoof) {
-      _startSpoofMode();
-    } else {
-      await _connectRealMAVLink();
-    }
   }
   
   void _onSettingsChanged() {
-    // Check if connection mode or pause state changed
-    final newUseSpoofMode = widget.settingsManager.connection.enableSpoofing;
+    // Only handle pause state changes - connection management is in MainNavigation
     final newIsPaused = widget.settingsManager.connection.isPaused;
-    
-    if (newUseSpoofMode != _isUsingSpoof) {
-      // Connection mode changed, restart data source
-      _cleanup();
-      setState(() {
-        _isUsingSpoof = newUseSpoofMode;
-        _isConnected = false;
-        _lastPacketTime = null;
-      });
-      _startDataSource(); // Note: This is async but we don't await it
-    }
     
     if (newIsPaused != _isPaused) {
       // Pause state changed
@@ -111,124 +63,10 @@ class _RealtimeDataDisplayState extends State<RealtimeDataDisplay> {
 
   @override
   void dispose() {
-    _updateTimer?.cancel();
     widget.settingsManager.removeListener(_onSettingsChanged);
-    _cleanup();
     super.dispose();
   }
 
-  void _startSpoofMode() {
-    final connection = widget.settingsManager.connection;
-    
-    // Use USB Serial Spoof Service (only option now)
-    _subscriptions.addAll([
-      _usbSerialSpoofService.heartbeatStream.listen((_) {
-        _lastPacketTime = DateTime.now();
-        _isConnected = true;
-        _scheduleUpdate();
-      }),
-      _usbSerialSpoofService.sysStatusStream.listen((_) {
-        _lastPacketTime = DateTime.now();
-        _scheduleUpdate();
-      }),
-      _usbSerialSpoofService.attitudeStream.listen((_) {
-        _lastPacketTime = DateTime.now();
-        _scheduleUpdate();
-      }),
-      _usbSerialSpoofService.gpsStream.listen((_) {
-        _lastPacketTime = DateTime.now();
-        _scheduleUpdate();
-      }),
-      _usbSerialSpoofService.vfrHudStream.listen((_) {
-        _lastPacketTime = DateTime.now();
-        _scheduleUpdate();
-      }),
-    ]);
-    
-    _usbSerialSpoofService.startSpoofing(
-      baudRate: connection.spoofBaudRate,
-      systemId: connection.spoofSystemId,
-      componentId: connection.spoofComponentId,
-    );
-    
-    setState(() => _isConnected = true);
-  }
-
-  Future<void> _connectRealMAVLink() async {
-    try {
-      _subscriptions.addAll([
-        _mavlinkService.heartbeatStream.listen((_) {
-          _lastPacketTime = DateTime.now();
-          _isConnected = true;
-          _scheduleUpdate();
-        }),
-        _mavlinkService.sysStatusStream.listen((_) {
-          _lastPacketTime = DateTime.now();
-          _scheduleUpdate();
-        }),
-        _mavlinkService.attitudeStream.listen((_) {
-          _lastPacketTime = DateTime.now();
-          _scheduleUpdate();
-        }),
-        _mavlinkService.gpsStream.listen((_) {
-          _lastPacketTime = DateTime.now();
-          _scheduleUpdate();
-        }),
-        _mavlinkService.vfrHudStream.listen((_) {
-          _lastPacketTime = DateTime.now();
-          _scheduleUpdate();
-        }),
-      ]);
-      
-      final connection = widget.settingsManager.connection;
-      if (connection.connectionType == 'udp') {
-        await _mavlinkService.connectUDP(
-          host: connection.mavlinkHost,
-          port: connection.mavlinkPort,
-        );
-      } else if (connection.connectionType == 'serial') {
-        await _mavlinkService.connectSerial(
-          portName: connection.serialPort,
-          baudRate: connection.serialBaudRate,
-        );
-      }
-      
-      setState(() => _isConnected = _mavlinkService.isConnected);
-    } catch (e) {
-      setState(() => _isConnected = false);
-    }
-  }
-
-  void _cleanup() {
-    // Cancel all stream subscriptions
-    for (var subscription in _subscriptions) {
-      subscription.cancel();
-    }
-    _subscriptions.clear();
-    
-    // Stop spoof service
-    _usbSerialSpoofService.stopSpoofing();
-    
-    // Also disconnect MAVLink service if connected
-    _mavlinkService.disconnect();
-    
-    // Don't stop tracking - we want to keep the data manager running
-    // _dataManager.stopTracking();
-  }
-
-  void _scheduleUpdate() {
-    _pendingUpdate = true;
-    
-    // If no timer is active, start one
-    if (_updateTimer == null || !_updateTimer!.isActive) {
-      _updateTimer = Timer(_uiUpdateInterval, () {
-        if (mounted && _pendingUpdate) {
-          _pendingUpdate = false;
-          setState(() {});
-        }
-      });
-    }
-  }
   
   void _onFieldSelected(String messageType, String fieldName) {
     // Assign the selected field to the currently selected plot
@@ -332,8 +170,10 @@ class _RealtimeDataDisplayState extends State<RealtimeDataDisplay> {
   }
 
   Widget _buildConnectionStatus() {
-    final statusColor = _isPaused ? Colors.orange : (_isConnected ? Colors.green : Colors.red);
-    final statusText = _isPaused ? 'Paused' : (_isConnected ? 'Connected' : 'Disconnected');
+    // Determine status based on data availability rather than direct connection tracking
+    final hasData = _dataManager.getAvailableFields().isNotEmpty;
+    final statusColor = _isPaused ? Colors.orange : (hasData ? Colors.green : Colors.red);
+    final statusText = _isPaused ? 'Paused' : (hasData ? 'Data Available' : 'No Data');
     
     String modeText;
     final connection = widget.settingsManager.connection;
@@ -369,26 +209,9 @@ class _RealtimeDataDisplayState extends State<RealtimeDataDisplay> {
                 overflow: TextOverflow.ellipsis,
               ),
             ),
-            const Spacer(),
-            if (_lastPacketTime != null)
-              Flexible(
-                child: Text(
-                  _formatTime(_lastPacketTime!),
-                  style: Theme.of(context).textTheme.bodySmall,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
           ],
         ),
       ),
     );
-  }
-
-
-  String _formatTime(DateTime time) {
-    final now = DateTime.now();
-    final diff = now.difference(time).inSeconds;
-    if (diff == 0) return '';
-    return '${diff}s ago';
   }
 }
