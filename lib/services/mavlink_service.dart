@@ -1,7 +1,9 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:typed_data';
 import 'package:dart_mavlink/mavlink.dart';
 import 'package:dart_mavlink/dialects/common.dart';
+import 'package:flutter_libserialport/flutter_libserialport.dart';
 import 'mavlink_data_provider.dart';
 
 class MavlinkService extends MavlinkDataProvider {
@@ -17,6 +19,10 @@ class MavlinkService extends MavlinkDataProvider {
   
   RawDatagramSocket? _socket;
   StreamSubscription<RawSocketEvent>? _socketSubscription;
+  
+  SerialPort? _serialPort;
+  StreamSubscription<Uint8List>? _serialSubscription;
+  Timer? _serialReader;
   
   final StreamController<MavlinkFrame> _frameController = StreamController<MavlinkFrame>.broadcast();
 
@@ -64,10 +70,76 @@ class MavlinkService extends MavlinkDataProvider {
     }
   }
 
+  Future<void> connectSerial({required String portName, int baudRate = 115200}) async {
+    try {
+      // Disconnect any existing connection first
+      await disconnect();
+      
+      _serialPort = SerialPort(portName);
+      
+      // Configure serial port settings
+      final config = SerialPortConfig();
+      config.baudRate = baudRate;
+      config.bits = 8;
+      config.parity = SerialPortParity.none;
+      config.stopBits = 1;
+      config.setFlowControl(SerialPortFlowControl.none);
+      
+      _serialPort!.config = config;
+      
+      // Open the serial port
+      if (!_serialPort!.openReadWrite()) {
+        throw Exception('Failed to open serial port: ${SerialPort.lastError}');
+      }
+      
+      _isConnected = true;
+      
+      // Set up periodic reading from serial port
+      _serialReader = Timer.periodic(const Duration(milliseconds: 10), (_) {
+        try {
+          final buffer = _serialPort!.read(1024); // Read up to 1KB at a time
+          if (buffer.isNotEmpty) {
+            _parser?.parse(buffer);
+          }
+        } catch (e) {
+          // Handle read errors gracefully
+          // TODO: Replace with proper logging framework
+          // print('Serial read error: $e');
+        }
+      });
+      
+      // TODO: Replace with proper logging framework
+      // print('MAVLink service connected on Serial $portName at $baudRate baud');
+    } catch (e) {
+      // TODO: Replace with proper logging framework
+      // print('Failed to connect MAVLink Serial: $e');
+      _isConnected = false;
+      _serialPort?.close();
+      _serialPort = null;
+      rethrow;
+    }
+  }
+
+  /// Get available serial ports
+  static List<String> getAvailableSerialPorts() {
+    try {
+      return SerialPort.availablePorts;
+    } catch (e) {
+      // TODO: Replace with proper logging framework
+      // print('Failed to get available serial ports: $e');
+      return [];
+    }
+  }
+
 
   Future<void> disconnect() async {
     await _socketSubscription?.cancel();
     _socket?.close();
+    
+    _serialReader?.cancel();
+    _serialPort?.close();
+    _serialPort = null;
+    
     _isConnected = false;
     // TODO: Replace with proper logging framework
     // print('MAVLink service disconnected');

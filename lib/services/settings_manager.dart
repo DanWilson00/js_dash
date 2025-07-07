@@ -155,8 +155,39 @@ class SettingsManager extends ChangeNotifier {
   }
 
   /// Update connection mode (spoof vs real)
-  void updateConnectionMode(bool useSpoofMode) {
-    updateConnection(_settings.connection.copyWith(useSpoofMode: useSpoofMode));
+  void updateConnectionMode(bool enableSpoofing, {String? spoofMode}) {
+    updateConnection(_settings.connection.copyWith(
+      enableSpoofing: enableSpoofing,
+      spoofMode: spoofMode ?? _settings.connection.spoofMode,
+    ));
+  }
+  
+  /// Update receiving connection type
+  void updateConnectionType(String connectionType) {
+    updateConnection(_settings.connection.copyWith(connectionType: connectionType));
+  }
+  
+  /// Update serial connection settings
+  void updateSerialConnection(String port, int baudRate) {
+    updateConnection(_settings.connection.copyWith(
+      serialPort: port,
+      serialBaudRate: baudRate,
+    ));
+  }
+  
+  /// Update spoofing configuration
+  void updateSpoofingConfig({
+    String? spoofMode,
+    int? spoofBaudRate,
+    int? spoofSystemId,
+    int? spoofComponentId,
+  }) {
+    updateConnection(_settings.connection.copyWith(
+      spoofMode: spoofMode,
+      spoofBaudRate: spoofBaudRate,
+      spoofSystemId: spoofSystemId,
+      spoofComponentId: spoofComponentId,
+    ));
   }
 
   /// Update MAVLink connection details

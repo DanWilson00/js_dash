@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../services/mavlink_service.dart';
 import '../../services/mavlink_spoof_service.dart';
+import '../../services/usb_serial_spoof_service.dart';
 import '../../services/timeseries_data_manager.dart';
 import '../../services/settings_manager.dart';
 import 'mavlink_message_monitor.dart';
@@ -25,6 +26,7 @@ class RealtimeDataDisplay extends StatefulWidget {
 class _RealtimeDataDisplayState extends State<RealtimeDataDisplay> {
   final MavlinkService _mavlinkService = MavlinkService();
   final MavlinkSpoofService _spoofService = MavlinkSpoofService();
+  final UsbSerialSpoofService _usbSerialSpoofService = UsbSerialSpoofService();
   final TimeSeriesDataManager _dataManager = TimeSeriesDataManager();
   
   final List<StreamSubscription> _subscriptions = [];
@@ -47,8 +49,11 @@ class _RealtimeDataDisplayState extends State<RealtimeDataDisplay> {
     super.initState();
     
     // Initialize from settings
-    _isUsingSpoof = widget.settingsManager.connection.useSpoofMode;
+    _isUsingSpoof = widget.settingsManager.connection.enableSpoofing;
     _isPaused = widget.settingsManager.connection.isPaused;
+    
+    // Listen for settings changes
+    widget.settingsManager.addListener(_onSettingsChanged);
     
     // Sync data manager with initial pause state
     if (_isPaused) {
@@ -57,53 +62,126 @@ class _RealtimeDataDisplayState extends State<RealtimeDataDisplay> {
       _dataManager.resume();
     }
     
-    _initializeServices();
+    _initializeServicesOnce();
   }
-
-  @override
-  void dispose() {
-    _updateTimer?.cancel();
-    _cleanup();
-    super.dispose();
-  }
-
-  Future<void> _initializeServices() async {
+  
+  Future<void> _initializeServicesOnce() async {
+    // Initialize services once only
     await _mavlinkService.initialize();
+    await _usbSerialSpoofService.initialize();
     _dataManager.startTracking(widget.settingsManager);
     
+    _startDataSource();
+  }
+  
+  Future<void> _startDataSource() async {
     if (_isUsingSpoof) {
       _startSpoofMode();
     } else {
       await _connectRealMAVLink();
     }
   }
+  
+  void _onSettingsChanged() {
+    // Check if connection mode or pause state changed
+    final newUseSpoofMode = widget.settingsManager.connection.enableSpoofing;
+    final newIsPaused = widget.settingsManager.connection.isPaused;
+    
+    if (newUseSpoofMode != _isUsingSpoof) {
+      // Connection mode changed, restart data source
+      _cleanup();
+      setState(() {
+        _isUsingSpoof = newUseSpoofMode;
+        _isConnected = false;
+        _lastPacketTime = null;
+      });
+      _startDataSource(); // Note: This is async but we don't await it
+    }
+    
+    if (newIsPaused != _isPaused) {
+      // Pause state changed
+      setState(() {
+        _isPaused = newIsPaused;
+        if (_isPaused) {
+          _dataManager.pause();
+        } else {
+          _dataManager.resume();
+        }
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _updateTimer?.cancel();
+    widget.settingsManager.removeListener(_onSettingsChanged);
+    _cleanup();
+    super.dispose();
+  }
 
   void _startSpoofMode() {
-    _subscriptions.addAll([
-      _spoofService.heartbeatStream.listen((_) {
-        _lastPacketTime = DateTime.now();
-        _isConnected = true;
-        _scheduleUpdate();
-      }),
-      _spoofService.sysStatusStream.listen((_) {
-        _lastPacketTime = DateTime.now();
-        _scheduleUpdate();
-      }),
-      _spoofService.attitudeStream.listen((_) {
-        _lastPacketTime = DateTime.now();
-        _scheduleUpdate();
-      }),
-      _spoofService.gpsStream.listen((_) {
-        _lastPacketTime = DateTime.now();
-        _scheduleUpdate();
-      }),
-      _spoofService.vfrHudStream.listen((_) {
-        _lastPacketTime = DateTime.now();
-        _scheduleUpdate();
-      }),
-    ]);
+    final connection = widget.settingsManager.connection;
     
-    _spoofService.startSpoofing();
+    if (connection.spoofMode == 'usb_serial') {
+      // Use USB Serial Spoof Service
+      _subscriptions.addAll([
+        _usbSerialSpoofService.heartbeatStream.listen((_) {
+          _lastPacketTime = DateTime.now();
+          _isConnected = true;
+          _scheduleUpdate();
+        }),
+        _usbSerialSpoofService.sysStatusStream.listen((_) {
+          _lastPacketTime = DateTime.now();
+          _scheduleUpdate();
+        }),
+        _usbSerialSpoofService.attitudeStream.listen((_) {
+          _lastPacketTime = DateTime.now();
+          _scheduleUpdate();
+        }),
+        _usbSerialSpoofService.gpsStream.listen((_) {
+          _lastPacketTime = DateTime.now();
+          _scheduleUpdate();
+        }),
+        _usbSerialSpoofService.vfrHudStream.listen((_) {
+          _lastPacketTime = DateTime.now();
+          _scheduleUpdate();
+        }),
+      ]);
+      
+      _usbSerialSpoofService.startSpoofing(
+        baudRate: connection.spoofBaudRate,
+        systemId: connection.spoofSystemId,
+        componentId: connection.spoofComponentId,
+      );
+    } else {
+      // Use Timer-based Spoof Service (default)
+      _subscriptions.addAll([
+        _spoofService.heartbeatStream.listen((_) {
+          _lastPacketTime = DateTime.now();
+          _isConnected = true;
+          _scheduleUpdate();
+        }),
+        _spoofService.sysStatusStream.listen((_) {
+          _lastPacketTime = DateTime.now();
+          _scheduleUpdate();
+        }),
+        _spoofService.attitudeStream.listen((_) {
+          _lastPacketTime = DateTime.now();
+          _scheduleUpdate();
+        }),
+        _spoofService.gpsStream.listen((_) {
+          _lastPacketTime = DateTime.now();
+          _scheduleUpdate();
+        }),
+        _spoofService.vfrHudStream.listen((_) {
+          _lastPacketTime = DateTime.now();
+          _scheduleUpdate();
+        }),
+      ]);
+      
+      _spoofService.startSpoofing();
+    }
+    
     setState(() => _isConnected = true);
   }
 
@@ -133,7 +211,19 @@ class _RealtimeDataDisplayState extends State<RealtimeDataDisplay> {
         }),
       ]);
       
-      await _mavlinkService.connectUDP();
+      final connection = widget.settingsManager.connection;
+      if (connection.connectionType == 'udp') {
+        await _mavlinkService.connectUDP(
+          host: connection.mavlinkHost,
+          port: connection.mavlinkPort,
+        );
+      } else if (connection.connectionType == 'serial') {
+        await _mavlinkService.connectSerial(
+          portName: connection.serialPort,
+          baudRate: connection.serialBaudRate,
+        );
+      }
+      
       setState(() => _isConnected = _mavlinkService.isConnected);
     } catch (e) {
       setState(() => _isConnected = false);
@@ -141,12 +231,21 @@ class _RealtimeDataDisplayState extends State<RealtimeDataDisplay> {
   }
 
   void _cleanup() {
+    // Cancel all stream subscriptions
     for (var subscription in _subscriptions) {
       subscription.cancel();
     }
     _subscriptions.clear();
+    
+    // Stop both spoof services
     _spoofService.stopSpoofing();
-    _dataManager.stopTracking();
+    _usbSerialSpoofService.stopSpoofing();
+    
+    // Also disconnect MAVLink service if connected
+    _mavlinkService.disconnect();
+    
+    // Don't stop tracking - we want to keep the data manager running
+    // _dataManager.stopTracking();
   }
 
   void _scheduleUpdate() {
@@ -168,19 +267,6 @@ class _RealtimeDataDisplayState extends State<RealtimeDataDisplay> {
     _plotGridKey.currentState?.assignFieldToSelectedPlot(messageType, fieldName);
   }
 
-  void _toggleMode() {
-    _cleanup();
-    setState(() {
-      _isUsingSpoof = !_isUsingSpoof;
-      _isConnected = false;
-      _lastPacketTime = null;
-    });
-    
-    // Save connection mode to settings
-    widget.settingsManager.updateConnectionMode(_isUsingSpoof);
-    
-    _initializeServices();
-  }
   
   void _togglePause() {
     setState(() {
@@ -237,11 +323,6 @@ class _RealtimeDataDisplayState extends State<RealtimeDataDisplay> {
                     ),
                     const SizedBox(width: 8),
                     IconButton(
-                      icon: Icon(_isUsingSpoof ? Icons.bug_report : Icons.wifi),
-                      onPressed: _toggleMode,
-                      tooltip: _isUsingSpoof ? 'Switch to Real MAVLink' : 'Switch to Spoof Mode',
-                    ),
-                    IconButton(
                       icon: const Icon(Icons.settings),
                       onPressed: _openSettings,
                       tooltip: 'Settings',
@@ -285,7 +366,32 @@ class _RealtimeDataDisplayState extends State<RealtimeDataDisplay> {
   Widget _buildConnectionStatus() {
     final statusColor = _isPaused ? Colors.orange : (_isConnected ? Colors.green : Colors.red);
     final statusText = _isPaused ? 'Paused' : (_isConnected ? 'Connected' : 'Disconnected');
-    final modeText = _isUsingSpoof ? 'SPOOF MODE' : 'REAL MAVLINK';
+    
+    String modeText;
+    final connection = widget.settingsManager.connection;
+    if (connection.enableSpoofing) {
+      switch (connection.spoofMode) {
+        case 'timer':
+          modeText = 'SPOOF MODE (Timer)';
+          break;
+        case 'usb_serial':
+          modeText = 'SPOOF MODE (USB Serial)';
+          break;
+        default:
+          modeText = 'SPOOF MODE';
+      }
+    } else {
+      switch (connection.connectionType) {
+        case 'udp':
+          modeText = 'UDP MAVLINK';
+          break;
+        case 'serial':
+          modeText = 'SERIAL MAVLINK';
+          break;
+        default:
+          modeText = 'MAVLINK';
+      }
+    }
     
     return Card(
       child: Padding(

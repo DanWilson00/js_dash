@@ -74,18 +74,32 @@ Map<String, dynamic> _$PlotSettingsToJson(PlotSettings instance) =>
 
 ConnectionSettings _$ConnectionSettingsFromJson(Map<String, dynamic> json) =>
     ConnectionSettings(
-      useSpoofMode: json['useSpoofMode'] as bool,
+      connectionType: json['connectionType'] as String,
       mavlinkHost: json['mavlinkHost'] as String,
       mavlinkPort: (json['mavlinkPort'] as num).toInt(),
+      serialPort: json['serialPort'] as String,
+      serialBaudRate: (json['serialBaudRate'] as num).toInt(),
+      enableSpoofing: json['enableSpoofing'] as bool,
+      spoofMode: json['spoofMode'] as String,
+      spoofBaudRate: (json['spoofBaudRate'] as num).toInt(),
+      spoofSystemId: (json['spoofSystemId'] as num).toInt(),
+      spoofComponentId: (json['spoofComponentId'] as num).toInt(),
       autoStartMonitor: json['autoStartMonitor'] as bool,
       isPaused: json['isPaused'] as bool,
     );
 
 Map<String, dynamic> _$ConnectionSettingsToJson(ConnectionSettings instance) =>
     <String, dynamic>{
-      'useSpoofMode': instance.useSpoofMode,
+      'connectionType': instance.connectionType,
       'mavlinkHost': instance.mavlinkHost,
       'mavlinkPort': instance.mavlinkPort,
+      'serialPort': instance.serialPort,
+      'serialBaudRate': instance.serialBaudRate,
+      'enableSpoofing': instance.enableSpoofing,
+      'spoofMode': instance.spoofMode,
+      'spoofBaudRate': instance.spoofBaudRate,
+      'spoofSystemId': instance.spoofSystemId,
+      'spoofComponentId': instance.spoofComponentId,
       'autoStartMonitor': instance.autoStartMonitor,
       'isPaused': instance.isPaused,
     };

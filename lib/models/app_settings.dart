@@ -160,25 +160,54 @@ class PlotSettings {
 
 @JsonSerializable()
 class ConnectionSettings {
-  final bool useSpoofMode;
+  // Receiving Settings
+  final String connectionType; // 'udp', 'serial'
   final String mavlinkHost;
   final int mavlinkPort;
+  final String serialPort;
+  final int serialBaudRate;
+  
+  // Spoofing Settings
+  final bool enableSpoofing;
+  final String spoofMode; // 'timer', 'usb_serial'
+  final int spoofBaudRate;
+  final int spoofSystemId;
+  final int spoofComponentId;
+  
+  // General Settings
   final bool autoStartMonitor;
   final bool isPaused;
   
   const ConnectionSettings({
-    required this.useSpoofMode,
+    required this.connectionType,
     required this.mavlinkHost,
     required this.mavlinkPort,
+    required this.serialPort,
+    required this.serialBaudRate,
+    required this.enableSpoofing,
+    required this.spoofMode,
+    required this.spoofBaudRate,
+    required this.spoofSystemId,
+    required this.spoofComponentId,
     required this.autoStartMonitor,
     required this.isPaused,
   });
   
   factory ConnectionSettings.defaults() {
     return const ConnectionSettings(
-      useSpoofMode: true,
+      // Receiving defaults
+      connectionType: 'udp',
       mavlinkHost: '127.0.0.1',
       mavlinkPort: 14550,
+      serialPort: '/dev/ttyUSB0',
+      serialBaudRate: 57600,
+      // Spoofing defaults
+      enableSpoofing: true,
+      spoofMode: 'timer',
+      spoofBaudRate: 57600,
+      spoofSystemId: 1,
+      spoofComponentId: 1,
+      // General defaults
       autoStartMonitor: true,
       isPaused: true, // Start paused by default
     );
@@ -188,20 +217,37 @@ class ConnectionSettings {
   Map<String, dynamic> toJson() => _$ConnectionSettingsToJson(this);
   
   ConnectionSettings copyWith({
-    bool? useSpoofMode,
+    String? connectionType,
     String? mavlinkHost,
     int? mavlinkPort,
+    String? serialPort,
+    int? serialBaudRate,
+    bool? enableSpoofing,
+    String? spoofMode,
+    int? spoofBaudRate,
+    int? spoofSystemId,
+    int? spoofComponentId,
     bool? autoStartMonitor,
     bool? isPaused,
   }) {
     return ConnectionSettings(
-      useSpoofMode: useSpoofMode ?? this.useSpoofMode,
+      connectionType: connectionType ?? this.connectionType,
       mavlinkHost: mavlinkHost ?? this.mavlinkHost,
       mavlinkPort: mavlinkPort ?? this.mavlinkPort,
+      serialPort: serialPort ?? this.serialPort,
+      serialBaudRate: serialBaudRate ?? this.serialBaudRate,
+      enableSpoofing: enableSpoofing ?? this.enableSpoofing,
+      spoofMode: spoofMode ?? this.spoofMode,
+      spoofBaudRate: spoofBaudRate ?? this.spoofBaudRate,
+      spoofSystemId: spoofSystemId ?? this.spoofSystemId,
+      spoofComponentId: spoofComponentId ?? this.spoofComponentId,
       autoStartMonitor: autoStartMonitor ?? this.autoStartMonitor,
       isPaused: isPaused ?? this.isPaused,
     );
   }
+  
+  // Legacy compatibility properties
+  bool get useSpoofMode => enableSpoofing;
 }
 
 @JsonSerializable()

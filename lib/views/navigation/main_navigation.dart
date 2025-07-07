@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import '../telemetry/realtime_data_display.dart';
 import '../dashboard/jetshark_dashboard.dart';
 import '../map/map_view.dart';
-import '../../services/mavlink_spoof_service.dart';
 import '../../services/settings_manager.dart';
 
 class MainNavigation extends StatefulWidget {
@@ -21,7 +20,6 @@ class MainNavigation extends StatefulWidget {
 
 class _MainNavigationState extends State<MainNavigation> {
   late int _selectedIndex;
-  final MavlinkSpoofService _spoofService = MavlinkSpoofService();
 
   @override
   void initState() {
@@ -30,15 +28,7 @@ class _MainNavigationState extends State<MainNavigation> {
     // Restore selected view from settings
     _selectedIndex = widget.settingsManager.navigation.selectedViewIndex;
     
-    if (widget.autoStartMonitor) {
-      _spoofService.startSpoofing();
-    }
-  }
-
-  @override
-  void dispose() {
-    _spoofService.dispose();
-    super.dispose();
+    // Note: Data source control moved to RealtimeDataDisplay based on connection settings
   }
 
   void _onItemTapped(int index) {
