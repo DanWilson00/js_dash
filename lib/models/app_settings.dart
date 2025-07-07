@@ -203,7 +203,7 @@ class ConnectionSettings {
       serialBaudRate: 57600,
       // Spoofing defaults
       enableSpoofing: true,
-      spoofMode: 'timer',
+      spoofMode: 'usb_serial',  // Only option now
       spoofBaudRate: 57600,
       spoofSystemId: 1,
       spoofComponentId: 1,

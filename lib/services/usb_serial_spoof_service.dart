@@ -14,8 +14,9 @@ class UsbSerialSpoofService extends MavlinkDataProvider {
   final MavlinkDialectCommon _dialect;
   MavlinkParser? _parser;
   
-  Timer? _telemetryTimer;
-  Timer? _heartbeatTimer;
+  Timer? _fastTelemetryTimer;  // 10 Hz for attitude, position, HUD
+  Timer? _slowTelemetryTimer;  // 1 Hz for SYS_STATUS
+  Timer? _heartbeatTimer;      // 1 Hz for HEARTBEAT
   Timer? _serialTransmissionTimer;
   
   final StreamController<MavlinkFrame> _frameController = StreamController<MavlinkFrame>.broadcast();
@@ -85,15 +86,21 @@ class UsbSerialSpoofService extends MavlinkDataProvider {
     // We'll be more conservative and limit to realistic rates
     const transmissionIntervalMs = 5; // 200 Hz transmission rate
     
-    // Start telemetry generation (5 Hz)
-    _telemetryTimer = Timer.periodic(
-      const Duration(milliseconds: 200),
-      (_) => _generateTelemetryMessages(),
+    // Start fast telemetry at 10 Hz (attitude, position, HUD)
+    _fastTelemetryTimer = Timer.periodic(
+      const Duration(milliseconds: 100),  // 10 Hz
+      (_) => _generateFastTelemetryMessages(),
     );
     
-    // Start heartbeat generation (1 Hz)
+    // Start slow telemetry at 1 Hz (SYS_STATUS)
+    _slowTelemetryTimer = Timer.periodic(
+      const Duration(seconds: 1),  // 1 Hz
+      (_) => _generateSlowTelemetryMessages(),
+    );
+    
+    // Start heartbeat generation at 1 Hz
     _heartbeatTimer = Timer.periodic(
-      const Duration(seconds: 1),
+      const Duration(seconds: 1),  // 1 Hz
       (_) => _generateHeartbeatMessage(),
     );
     
@@ -106,7 +113,8 @@ class UsbSerialSpoofService extends MavlinkDataProvider {
 
   /// Stop spoofing
   Future<void> stopSpoofing() async {
-    _telemetryTimer?.cancel();
+    _fastTelemetryTimer?.cancel();
+    _slowTelemetryTimer?.cancel();
     _heartbeatTimer?.cancel();
     _serialTransmissionTimer?.cancel();
     
@@ -120,8 +128,8 @@ class UsbSerialSpoofService extends MavlinkDataProvider {
     _isPaused = paused;
   }
 
-  /// Generate realistic telemetry messages
-  void _generateTelemetryMessages() {
+  /// Generate fast telemetry messages at 10 Hz (attitude, position, HUD)
+  void _generateFastTelemetryMessages() {
     if (_isPaused || !_isConnected) return;
     
     final now = DateTime.now().millisecondsSinceEpoch;
@@ -144,9 +152,6 @@ class UsbSerialSpoofService extends MavlinkDataProvider {
     _roll = _roll.clamp(-30.0, 30.0);
     
     _yaw = _heading * 3.14159 / 180.0; // Convert to radians
-    
-    _batteryVoltage = 12.6 + (DateTime.now().millisecond % 100 - 50) / 1000.0;
-    _batteryVoltage = _batteryVoltage.clamp(10.0, 13.0);
     
     // Generate GLOBAL_POSITION_INT message
     final globalPosMsg = GlobalPositionInt(
@@ -172,6 +177,30 @@ class UsbSerialSpoofService extends MavlinkDataProvider {
       yawspeed: 0.0,
     );
     
+    // Generate VFR_HUD message for dash display
+    final vfrHudMsg = VfrHud(
+      airspeed: _groundSpeed,
+      groundspeed: _groundSpeed,
+      heading: _heading.round(),
+      throttle: 50 + (DateTime.now().millisecond % 40 - 20), // 30-70% throttle
+      alt: _altitude,
+      climb: (DateTime.now().millisecond % 100 - 50) / 50.0, // ±1 m/s climb rate
+    );
+    
+    // Queue messages for transmission
+    _queueMessageForTransmission(globalPosMsg);
+    _queueMessageForTransmission(attitudeMsg);
+    _queueMessageForTransmission(vfrHudMsg);
+  }
+  
+  /// Generate slow telemetry messages at 1 Hz (SYS_STATUS)
+  void _generateSlowTelemetryMessages() {
+    if (_isPaused || !_isConnected) return;
+    
+    // Update battery voltage slowly
+    _batteryVoltage = 12.6 + (DateTime.now().millisecond % 100 - 50) / 1000.0;
+    _batteryVoltage = _batteryVoltage.clamp(10.0, 13.0);
+    
     // Generate SYS_STATUS message
     final sysStatusMsg = SysStatus(
       onboardControlSensorsPresent: 0x7FF,
@@ -192,9 +221,7 @@ class UsbSerialSpoofService extends MavlinkDataProvider {
       onboardControlSensorsHealthExtended: 0,
     );
     
-    // Queue messages for transmission
-    _queueMessageForTransmission(globalPosMsg);
-    _queueMessageForTransmission(attitudeMsg);
+    // Queue message for transmission
     _queueMessageForTransmission(sysStatusMsg);
   }
 

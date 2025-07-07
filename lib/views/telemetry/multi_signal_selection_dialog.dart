@@ -244,12 +244,7 @@ class _MultiSignalSelectionDialogState extends State<MultiSignalSelectionDialog>
           final fieldName = parts.length > 1 ? parts[1] : fieldKey;
           
           // Find next available color
-          Color signalColor = SignalColorPalette.getColorForSignal(fieldKey);
-          int colorIndex = 0;
-          while (usedColors.contains(signalColor) && colorIndex < SignalColorPalette.availableColors.length) {
-            signalColor = SignalColorPalette.getNextColor(selectedSignals.length + colorIndex);
-            colorIndex++;
-          }
+          final signalColor = SignalColorPalette.getNextAvailableColor(usedColors.toList());
           usedColors.add(signalColor);
 
           final signal = PlotSignalConfiguration(

@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../services/mavlink_service.dart';
-import '../../services/mavlink_spoof_service.dart';
 import '../../services/usb_serial_spoof_service.dart';
 import '../../services/timeseries_data_manager.dart';
 import '../../services/settings_manager.dart';
@@ -25,7 +24,6 @@ class RealtimeDataDisplay extends StatefulWidget {
 
 class _RealtimeDataDisplayState extends State<RealtimeDataDisplay> {
   final MavlinkService _mavlinkService = MavlinkService();
-  final MavlinkSpoofService _spoofService = MavlinkSpoofService();
   final UsbSerialSpoofService _usbSerialSpoofService = UsbSerialSpoofService();
   final TimeSeriesDataManager _dataManager = TimeSeriesDataManager();
   
@@ -122,65 +120,36 @@ class _RealtimeDataDisplayState extends State<RealtimeDataDisplay> {
   void _startSpoofMode() {
     final connection = widget.settingsManager.connection;
     
-    if (connection.spoofMode == 'usb_serial') {
-      // Use USB Serial Spoof Service
-      _subscriptions.addAll([
-        _usbSerialSpoofService.heartbeatStream.listen((_) {
-          _lastPacketTime = DateTime.now();
-          _isConnected = true;
-          _scheduleUpdate();
-        }),
-        _usbSerialSpoofService.sysStatusStream.listen((_) {
-          _lastPacketTime = DateTime.now();
-          _scheduleUpdate();
-        }),
-        _usbSerialSpoofService.attitudeStream.listen((_) {
-          _lastPacketTime = DateTime.now();
-          _scheduleUpdate();
-        }),
-        _usbSerialSpoofService.gpsStream.listen((_) {
-          _lastPacketTime = DateTime.now();
-          _scheduleUpdate();
-        }),
-        _usbSerialSpoofService.vfrHudStream.listen((_) {
-          _lastPacketTime = DateTime.now();
-          _scheduleUpdate();
-        }),
-      ]);
-      
-      _usbSerialSpoofService.startSpoofing(
-        baudRate: connection.spoofBaudRate,
-        systemId: connection.spoofSystemId,
-        componentId: connection.spoofComponentId,
-      );
-    } else {
-      // Use Timer-based Spoof Service (default)
-      _subscriptions.addAll([
-        _spoofService.heartbeatStream.listen((_) {
-          _lastPacketTime = DateTime.now();
-          _isConnected = true;
-          _scheduleUpdate();
-        }),
-        _spoofService.sysStatusStream.listen((_) {
-          _lastPacketTime = DateTime.now();
-          _scheduleUpdate();
-        }),
-        _spoofService.attitudeStream.listen((_) {
-          _lastPacketTime = DateTime.now();
-          _scheduleUpdate();
-        }),
-        _spoofService.gpsStream.listen((_) {
-          _lastPacketTime = DateTime.now();
-          _scheduleUpdate();
-        }),
-        _spoofService.vfrHudStream.listen((_) {
-          _lastPacketTime = DateTime.now();
-          _scheduleUpdate();
-        }),
-      ]);
-      
-      _spoofService.startSpoofing();
-    }
+    // Use USB Serial Spoof Service (only option now)
+    _subscriptions.addAll([
+      _usbSerialSpoofService.heartbeatStream.listen((_) {
+        _lastPacketTime = DateTime.now();
+        _isConnected = true;
+        _scheduleUpdate();
+      }),
+      _usbSerialSpoofService.sysStatusStream.listen((_) {
+        _lastPacketTime = DateTime.now();
+        _scheduleUpdate();
+      }),
+      _usbSerialSpoofService.attitudeStream.listen((_) {
+        _lastPacketTime = DateTime.now();
+        _scheduleUpdate();
+      }),
+      _usbSerialSpoofService.gpsStream.listen((_) {
+        _lastPacketTime = DateTime.now();
+        _scheduleUpdate();
+      }),
+      _usbSerialSpoofService.vfrHudStream.listen((_) {
+        _lastPacketTime = DateTime.now();
+        _scheduleUpdate();
+      }),
+    ]);
+    
+    _usbSerialSpoofService.startSpoofing(
+      baudRate: connection.spoofBaudRate,
+      systemId: connection.spoofSystemId,
+      componentId: connection.spoofComponentId,
+    );
     
     setState(() => _isConnected = true);
   }
@@ -237,8 +206,7 @@ class _RealtimeDataDisplayState extends State<RealtimeDataDisplay> {
     }
     _subscriptions.clear();
     
-    // Stop both spoof services
-    _spoofService.stopSpoofing();
+    // Stop spoof service
     _usbSerialSpoofService.stopSpoofing();
     
     // Also disconnect MAVLink service if connected
@@ -370,16 +338,7 @@ class _RealtimeDataDisplayState extends State<RealtimeDataDisplay> {
     String modeText;
     final connection = widget.settingsManager.connection;
     if (connection.enableSpoofing) {
-      switch (connection.spoofMode) {
-        case 'timer':
-          modeText = 'SPOOF MODE (Timer)';
-          break;
-        case 'usb_serial':
-          modeText = 'SPOOF MODE (USB Serial)';
-          break;
-        default:
-          modeText = 'SPOOF MODE';
-      }
+      modeText = 'SPOOF MODE (USB Serial)';
     } else {
       switch (connection.connectionType) {
         case 'udp':

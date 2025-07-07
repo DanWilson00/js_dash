@@ -298,29 +298,7 @@ class _ConnectionSettingsPanelState extends State<ConnectionSettingsPanel> {
                       ],
                     ),
                   ),
-                  ListTile(
-                    dense: true,
-                    title: const Text('Spoof mode'),
-                    subtitle: const Text('Type of test data generation'),
-                    trailing: DropdownButton<String>(
-                      value: connection.spoofMode,
-                      items: const [
-                        DropdownMenuItem(
-                          value: 'timer',
-                          child: Text('Timer'),
-                        ),
-                        DropdownMenuItem(
-                          value: 'usb_serial',
-                          child: Text('USB Serial'),
-                        ),
-                      ],
-                      onChanged: (value) {
-                        if (value != null) {
-                          widget.settingsManager.updateSpoofingConfig(spoofMode: value);
-                        }
-                      },
-                    ),
-                  ),
+                  // Removed spoof mode selection - only USB Serial spoofing available
                   
                   const Divider(),
                   
@@ -374,28 +352,25 @@ class _ConnectionSettingsPanelState extends State<ConnectionSettingsPanel> {
                       ),
                     ),
                   ),
-                  
-                  if (connection.spoofMode == 'usb_serial') ...[
-                    ListTile(
-                      dense: true,
-                      title: const Text('Spoof baud rate'),
-                      subtitle: const Text('Simulated serial communication speed'),
-                      trailing: DropdownButton<int>(
-                        value: _baudRates.contains(connection.spoofBaudRate) 
-                            ? connection.spoofBaudRate 
-                            : _baudRates.first,
-                        items: _baudRates.map((baudRate) => DropdownMenuItem(
-                          value: baudRate,
-                          child: Text('$baudRate bps'),
-                        )).toList(),
-                        onChanged: (value) {
-                          if (value != null) {
-                            widget.settingsManager.updateSpoofingConfig(spoofBaudRate: value);
-                          }
-                        },
-                      ),
+                  ListTile(
+                    dense: true,
+                    title: const Text('Spoof baud rate'),
+                    subtitle: const Text('Simulated serial communication speed'),
+                    trailing: DropdownButton<int>(
+                      value: _baudRates.contains(connection.spoofBaudRate) 
+                          ? connection.spoofBaudRate 
+                          : _baudRates.first,
+                      items: _baudRates.map((baudRate) => DropdownMenuItem(
+                        value: baudRate,
+                        child: Text('$baudRate bps'),
+                      )).toList(),
+                      onChanged: (value) {
+                        if (value != null) {
+                          widget.settingsManager.updateSpoofingConfig(spoofBaudRate: value);
+                        }
+                      },
                     ),
-                  ],
+                  ),
                 ],
               ),
             ),

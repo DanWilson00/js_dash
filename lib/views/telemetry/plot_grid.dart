@@ -443,11 +443,13 @@ class PlotGridManagerState extends State<PlotGridManager> {
         );
       } else {
         // Signal doesn't exist, add it
+        // Get colors already in use in this plot
+        final usedColors = currentPlot.yAxis.signals.map((s) => s.color).toList();
         final newSignal = PlotSignalConfiguration(
           id: '${messageType}_${fieldName}_${DateTime.now().millisecondsSinceEpoch}',
           messageType: messageType,
           fieldName: fieldName,
-          color: SignalColorPalette.getNextColor(currentPlot.yAxis.signals.length),
+          color: SignalColorPalette.getNextAvailableColor(usedColors),
         );
         
         _plots[plotIndex] = currentPlot.addSignal(newSignal);
@@ -499,11 +501,13 @@ class PlotGridManagerState extends State<PlotGridManager> {
         );
       } else {
         // Signal doesn't exist, add it
+        // Get colors already in use in this plot
+        final usedColors = _plots[plotIndex].yAxis.signals.map((s) => s.color).toList();
         final signal = PlotSignalConfiguration(
           id: '${messageType}_${fieldName}_${DateTime.now().millisecondsSinceEpoch}',
           messageType: messageType,
           fieldName: fieldName,
-          color: SignalColorPalette.getNextColor(_plots[plotIndex].yAxis.signals.length),
+          color: SignalColorPalette.getNextAvailableColor(usedColors),
         );
         
         _plots[plotIndex] = _plots[plotIndex].addSignal(signal);

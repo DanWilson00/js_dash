@@ -315,6 +315,36 @@ class SignalColorPalette {
   static Color getNextColor(int index) {
     return _colors[index % _colors.length];
   }
+  
+  static Color getNextAvailableColor(List<Color> usedColors) {
+    // Try to find a color that's not in use
+    for (final color in _colors) {
+      if (!usedColors.contains(color)) {
+        return color;
+      }
+    }
+    // If all colors are used, fallback to the least used color
+    // by counting occurrences
+    final colorCounts = <Color, int>{};
+    for (final color in _colors) {
+      colorCounts[color] = 0;
+    }
+    for (final usedColor in usedColors) {
+      if (colorCounts.containsKey(usedColor)) {
+        colorCounts[usedColor] = colorCounts[usedColor]! + 1;
+      }
+    }
+    // Find the color with minimum usage
+    Color leastUsedColor = _colors.first;
+    int minCount = colorCounts[_colors.first] ?? 0;
+    for (final entry in colorCounts.entries) {
+      if (entry.value < minCount) {
+        minCount = entry.value;
+        leastUsedColor = entry.key;
+      }
+    }
+    return leastUsedColor;
+  }
 
   static Color getColorForSignal(String signalId) {
     // Generate consistent color based on signal ID hash
