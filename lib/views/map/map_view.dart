@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'dart:async';
+import 'dart:math' as math;
 import 'package:dart_mavlink/dialects/common.dart';
 import '../../services/settings_manager.dart';
 import '../../services/usb_serial_spoof_service.dart';
@@ -36,6 +37,11 @@ class _MapViewState extends State<MapView> {
   // Vehicle following control
   bool _isFollowingVehicle = true;
   
+  // Path tracking
+  final List<LatLng> _vehiclePath = [];
+  bool _showPath = true;
+  int _maxPathPoints = 200; // Configurable path length (number of points)
+  
   // Subscriptions for MAVLink data
   StreamSubscription<GlobalPositionInt>? _gpsSubscription;
   StreamSubscription<VfrHud>? _hudSubscription;
@@ -52,6 +58,23 @@ class _MapViewState extends State<MapView> {
     await _mavlinkService.startSpoofing();
   }
   
+  // Calculate distance between two points in meters
+  double _calculateDistance(LatLng point1, LatLng point2) {
+    const double radiusOfEarth = 6371000; // Earth's radius in meters
+    
+    final double lat1Rad = point1.latitude * (math.pi / 180);
+    final double lat2Rad = point2.latitude * (math.pi / 180);
+    final double deltaLatRad = (point2.latitude - point1.latitude) * (math.pi / 180);
+    final double deltaLonRad = (point2.longitude - point1.longitude) * (math.pi / 180);
+    
+    final double a = math.sin(deltaLatRad / 2) * math.sin(deltaLatRad / 2) +
+        math.cos(lat1Rad) * math.cos(lat2Rad) *
+        math.sin(deltaLonRad / 2) * math.sin(deltaLonRad / 2);
+    final double c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a));
+    
+    return radiusOfEarth * c;
+  }
+  
   void _initializeMavlinkListeners() {
     // Listen to GPS position updates
     _gpsSubscription = _mavlinkService.gpsStream.listen((gps) {
@@ -62,6 +85,17 @@ class _MapViewState extends State<MapView> {
       
       setState(() {
         _vehicleLocation = newLocation;
+        
+        // Add to path if location has changed significantly (avoid duplicate points)
+        if (_vehiclePath.isEmpty || 
+            _calculateDistance(_vehiclePath.last, newLocation) > 0.5) { // 0.5 meter threshold
+          _vehiclePath.add(newLocation);
+          
+          // Maintain maximum path length
+          if (_vehiclePath.length > _maxPathPoints) {
+            _vehiclePath.removeAt(0); // Remove oldest point
+          }
+        }
       });
       
       // Automatically center map on vehicle location if following is enabled
@@ -121,6 +155,18 @@ class _MapViewState extends State<MapView> {
                 urlTemplate: _getTileUrl(),
                 userAgentPackageName: 'com.example.js_dash',
               ),
+              
+              // Vehicle path layer
+              if (_showPath && _vehiclePath.length > 1)
+                PolylineLayer(
+                  polylines: [
+                    Polyline(
+                      points: _vehiclePath,
+                      color: Colors.red,
+                      strokeWidth: 3.0,
+                    ),
+                  ],
+                ),
               
               // Vehicle marker layer
               if (_vehicleLocation != null)
@@ -239,6 +285,60 @@ class _MapViewState extends State<MapView> {
           
           const SizedBox(height: 16),
           
+          // Path controls
+          Container(
+            decoration: BoxDecoration(
+              color: Colors.black87,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Toggle path visibility
+                IconButton(
+                  icon: Icon(
+                    _showPath ? Icons.timeline : Icons.timeline_outlined,
+                    color: _showPath ? Colors.blue : Colors.white,
+                  ),
+                  onPressed: () {
+                    setState(() {
+                      _showPath = !_showPath;
+                    });
+                  },
+                  tooltip: _showPath ? 'Hide Path' : 'Show Path',
+                ),
+                // Clear path button
+                if (_vehiclePath.isNotEmpty)
+                  IconButton(
+                    icon: const Icon(Icons.clear_all, color: Colors.white),
+                    onPressed: () {
+                      setState(() {
+                        _vehiclePath.clear();
+                      });
+                    },
+                    tooltip: 'Clear Path',
+                  ),
+                // Path length configuration
+                GestureDetector(
+                  onTap: _showPathConfigDialog,
+                  child: Padding(
+                    padding: const EdgeInsets.all(4.0),
+                    child: Text(
+                      '${_vehiclePath.length}/$_maxPathPoints',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 10,
+                        decoration: TextDecoration.underline,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          
+          const SizedBox(height: 16),
+          
           // Vehicle following controls
           if (_vehicleLocation != null)
             Container(
@@ -313,5 +413,66 @@ class _MapViewState extends State<MapView> {
       _vehicleLocation = location;
       _vehicleHeading = heading;
     });
+  }
+  
+  // Show path configuration dialog
+  void _showPathConfigDialog() {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        int tempMaxPathPoints = _maxPathPoints;
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: const Text('Path Configuration'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text('Maximum path points: $tempMaxPathPoints'),
+                  const SizedBox(height: 16),
+                  Slider(
+                    value: tempMaxPathPoints.toDouble(),
+                    min: 50,
+                    max: 1000,
+                    divisions: 19,
+                    label: tempMaxPathPoints.toString(),
+                    onChanged: (value) {
+                      setDialogState(() {
+                        tempMaxPathPoints = value.round();
+                      });
+                    },
+                  ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'Fewer points = shorter path\nMore points = longer path',
+                    style: TextStyle(fontSize: 12),
+                    textAlign: TextAlign.center,
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text('Cancel'),
+                ),
+                TextButton(
+                  onPressed: () {
+                    setState(() {
+                      _maxPathPoints = tempMaxPathPoints;
+                      // Trim existing path if it's too long
+                      while (_vehiclePath.length > _maxPathPoints) {
+                        _vehiclePath.removeAt(0);
+                      }
+                    });
+                    Navigator.of(context).pop();
+                  },
+                  child: const Text('Apply'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
   }
 }
