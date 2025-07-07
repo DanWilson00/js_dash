@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 import 'dart:typed_data';
 import 'package:dart_mavlink/mavlink.dart';
 import 'package:dart_mavlink/dialects/common.dart';
@@ -43,6 +44,12 @@ class UsbSerialSpoofService extends MavlinkDataProvider {
   double _yaw = 0.0;
   double _batteryVoltage = 12.6;
   int _sequenceNumber = 0;
+  
+  // GPS simulation state for realistic movement
+  double _latitude = 34.0522; // Los Angeles area starting point
+  double _longitude = -118.2437;
+  double _course = 90.0; // Initial course in degrees (East)
+  int _simulationTime = 0; // Time counter for movement patterns
 
   Stream<MavlinkFrame> get frameStream => _frameController.stream;
   Stream<Uint8List> get rawDataStream => _rawDataController.stream;
@@ -133,36 +140,67 @@ class UsbSerialSpoofService extends MavlinkDataProvider {
     if (_isPaused || !_isConnected) return;
     
     final now = DateTime.now().millisecondsSinceEpoch;
+    _simulationTime += 100; // Increment by 100ms each call (10 Hz)
     
     // Simulate realistic vehicle movement
     _altitude += (DateTime.now().millisecond % 100 - 50) / 1000.0;
     _altitude = _altitude.clamp(0.0, 100.0);
     
     _groundSpeed += (DateTime.now().millisecond % 60 - 30) / 100.0;
-    _groundSpeed = _groundSpeed.clamp(0.0, 30.0);
+    _groundSpeed = _groundSpeed.clamp(5.0, 25.0); // Keep vehicle moving
     
-    _heading += (DateTime.now().millisecond % 20 - 10) / 10.0;
-    _heading = _heading % 360.0;
+    // Simulate course changes - gentle turns and occasional direction changes
+    final timeInSeconds = _simulationTime / 1000.0;
+    
+    // Create a figure-8 pattern with some randomness
+    final baseHeading = (timeInSeconds * 15) % 360; // 15 degrees per second rotation
+    final headingVariation = 30 * math.sin(timeInSeconds * 0.5); // ±30 degree swing
+    _heading = (baseHeading + headingVariation) % 360.0;
     if (_heading < 0) _heading += 360.0;
     
+    _course = _heading; // Course follows heading
+    
+    // Update GPS position based on movement
+    // Convert speed from m/s to degrees per second (approximate)
+    final metersPerDegreeLatitude = 111320.0; // Approximate meters per degree latitude
+    final metersPerDegreeLongitude = 111320.0 * math.cos(_latitude * math.pi / 180.0);
+    
+    final speedMs = _groundSpeed; // Ground speed in m/s
+    final deltaTimeSeconds = 0.1; // 100ms = 0.1 seconds
+    
+    // Calculate movement in meters
+    final distanceMeters = speedMs * deltaTimeSeconds;
+    final headingRadians = _heading * math.pi / 180.0;
+    
+    // Update position
+    final deltaLatDegrees = (distanceMeters * math.cos(headingRadians)) / metersPerDegreeLatitude;
+    final deltaLonDegrees = (distanceMeters * math.sin(headingRadians)) / metersPerDegreeLongitude;
+    
+    _latitude += deltaLatDegrees;
+    _longitude += deltaLonDegrees;
+    
+    // Keep vehicle in reasonable bounds (around LA area)
+    _latitude = _latitude.clamp(33.9, 34.2);
+    _longitude = _longitude.clamp(-118.5, -118.0);
+    
     _pitch += (DateTime.now().millisecond % 10 - 5) / 100.0;
-    _pitch = _pitch.clamp(-30.0, 30.0);
+    _pitch = _pitch.clamp(-15.0, 15.0);
     
     _roll += (DateTime.now().millisecond % 10 - 5) / 100.0;
-    _roll = _roll.clamp(-30.0, 30.0);
+    _roll = _roll.clamp(-20.0, 20.0);
     
     _yaw = _heading * 3.14159 / 180.0; // Convert to radians
     
-    // Generate GLOBAL_POSITION_INT message
+    // Generate GLOBAL_POSITION_INT message with moving coordinates
     final globalPosMsg = GlobalPositionInt(
       timeBootMs: now,
-      lat: 340000000, // 34.0 degrees in 1E7 format
-      lon: -1180000000, // -118.0 degrees in 1E7 format
+      lat: (_latitude * 1e7).round(), // Convert to 1E7 format
+      lon: (_longitude * 1e7).round(), // Convert to 1E7 format
       alt: (_altitude * 1000).round(),
       relativeAlt: (_altitude * 1000).round(),
-      vx: (_groundSpeed * 100).round(),
-      vy: 0,
-      vz: 0,
+      vx: (_groundSpeed * math.cos(headingRadians) * 100).round(), // North velocity in cm/s
+      vy: (_groundSpeed * math.sin(headingRadians) * 100).round(), // East velocity in cm/s
+      vz: 0, // No vertical velocity
       hdg: (_heading * 100).round(),
     );
     

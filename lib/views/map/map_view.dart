@@ -4,7 +4,7 @@ import 'package:latlong2/latlong.dart';
 import 'dart:async';
 import 'package:dart_mavlink/dialects/common.dart';
 import '../../services/settings_manager.dart';
-import '../../services/mavlink_spoof_service.dart';
+import '../../services/usb_serial_spoof_service.dart';
 import '../../services/bing_maps_service.dart';
 
 class MapView extends StatefulWidget {
@@ -21,10 +21,10 @@ class MapView extends StatefulWidget {
 
 class _MapViewState extends State<MapView> {
   final MapController _mapController = MapController();
-  final MavlinkSpoofService _mavlinkService = MavlinkSpoofService();
+  final UsbSerialSpoofService _mavlinkService = UsbSerialSpoofService();
   
-  // Default center coordinates (San Francisco Bay Area)
-  static const LatLng _defaultCenter = LatLng(37.7749, -122.4194);
+  // Default center coordinates (Los Angeles area - matches spoofer starting point)
+  static const LatLng _defaultCenter = LatLng(34.0522, -118.2437);
   
   // Map layers
   BingMapType _currentLayer = BingMapType.aerial;
@@ -33,6 +33,9 @@ class _MapViewState extends State<MapView> {
   LatLng? _vehicleLocation;
   double? _vehicleHeading;
   
+  // Vehicle following control
+  bool _isFollowingVehicle = true;
+  
   // Subscriptions for MAVLink data
   StreamSubscription<GlobalPositionInt>? _gpsSubscription;
   StreamSubscription<VfrHud>? _hudSubscription;
@@ -40,18 +43,31 @@ class _MapViewState extends State<MapView> {
   @override
   void initState() {
     super.initState();
+    _initializeSpoofer();
     _initializeMavlinkListeners();
+  }
+  
+  void _initializeSpoofer() async {
+    await _mavlinkService.initialize();
+    await _mavlinkService.startSpoofing();
   }
   
   void _initializeMavlinkListeners() {
     // Listen to GPS position updates
     _gpsSubscription = _mavlinkService.gpsStream.listen((gps) {
+      final newLocation = LatLng(
+        gps.lat / 1e7, // Convert from 1E7 degrees to decimal degrees
+        gps.lon / 1e7,
+      );
+      
       setState(() {
-        _vehicleLocation = LatLng(
-          gps.lat / 1e7, // Convert from 1E7 degrees to decimal degrees
-          gps.lon / 1e7,
-        );
+        _vehicleLocation = newLocation;
       });
+      
+      // Automatically center map on vehicle location if following is enabled
+      if (_isFollowingVehicle) {
+        _mapController.move(newLocation, _mapController.camera.zoom);
+      }
     });
     
     // Listen to VFR HUD for heading updates
@@ -66,6 +82,7 @@ class _MapViewState extends State<MapView> {
   void dispose() {
     _gpsSubscription?.cancel();
     _hudSubscription?.cancel();
+    _mavlinkService.stopSpoofing();
     super.dispose();
   }
 
@@ -86,6 +103,17 @@ class _MapViewState extends State<MapView> {
               interactionOptions: const InteractionOptions(
                 flags: InteractiveFlag.all,
               ),
+              onMapEvent: (MapEvent mapEvent) {
+                // Disable following when user manually pans the map
+                if (mapEvent is MapEventMoveStart && 
+                    mapEvent.source == MapEventSource.onDrag) {
+                  if (_isFollowingVehicle) {
+                    setState(() {
+                      _isFollowingVehicle = false;
+                    });
+                  }
+                }
+              },
             ),
             children: [
               // Tile layer (OpenStreetMap)
@@ -211,19 +239,44 @@ class _MapViewState extends State<MapView> {
           
           const SizedBox(height: 16),
           
-          // Center on vehicle button
+          // Vehicle following controls
           if (_vehicleLocation != null)
             Container(
               decoration: BoxDecoration(
                 color: Colors.black87,
                 borderRadius: BorderRadius.circular(8),
               ),
-              child: IconButton(
-                icon: const Icon(Icons.my_location, color: Colors.white),
-                onPressed: () {
-                  _mapController.move(_vehicleLocation!, 15.0);
-                },
-                tooltip: 'Center on Vehicle',
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Follow vehicle toggle
+                  IconButton(
+                    icon: Icon(
+                      _isFollowingVehicle ? Icons.gps_fixed : Icons.gps_not_fixed,
+                      color: _isFollowingVehicle ? Colors.green : Colors.white,
+                    ),
+                    onPressed: () {
+                      setState(() {
+                        _isFollowingVehicle = !_isFollowingVehicle;
+                        // If enabling follow mode, immediately center on vehicle
+                        if (_isFollowingVehicle && _vehicleLocation != null) {
+                          _mapController.move(_vehicleLocation!, _mapController.camera.zoom);
+                        }
+                      });
+                    },
+                    tooltip: _isFollowingVehicle ? 'Stop Following Vehicle' : 'Follow Vehicle',
+                  ),
+                  // Manual center on vehicle button
+                  IconButton(
+                    icon: const Icon(Icons.my_location, color: Colors.white),
+                    onPressed: () {
+                      if (_vehicleLocation != null) {
+                        _mapController.move(_vehicleLocation!, _mapController.camera.zoom);
+                      }
+                    },
+                    tooltip: 'Center on Vehicle',
+                  ),
+                ],
               ),
             ),
         ],
