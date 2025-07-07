@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'package:dart_mavlink/mavlink_message.dart';
+import 'package:dart_mavlink/dialects/common.dart';
 import '../models/plot_configuration.dart';
 import 'mavlink_message_tracker.dart';
 import 'settings_manager.dart';
@@ -23,10 +25,6 @@ class TimeSeriesDataManager {
   
   // Performance optimizations
   static const int maxFieldCount = 500; // Limit field discovery to prevent unbounded growth
-  final Map<String, double> _valueCache = {}; // Cache parsed values
-  final Set<String> _numericFields = {}; // Cache known numeric fields
-  final Set<String> _invalidFields = {}; // Cache known invalid fields
-  final RegExp _numericRegex = RegExp(r'^-?\d*\.?\d+([eE][+-]?\d+)?$'); // Pre-compiled regex
 
   Stream<Map<String, CircularBuffer>> get dataStream => _dataController.stream;
 
@@ -78,9 +76,10 @@ class TimeSeriesDataManager {
       final stats = entry.value;
       
       if (stats.lastMessage != null) {
-        final fields = stats.getMessageFields();
+        // Extract raw numeric values directly from the MAVLink message for dashboard
+        final rawFields = _extractRawMessageFields(messageName, stats.lastMessage!);
         
-        for (final field in fields.entries) {
+        for (final field in rawFields.entries) {
           final fieldKey = '$messageName.${field.key}';
           
           // Skip if we've reached field limit (prevent unbounded growth)
@@ -88,19 +87,34 @@ class TimeSeriesDataManager {
             continue;
           }
           
-          // Skip if we know this field is invalid
-          if (_invalidFields.contains(fieldKey)) {
+          final value = field.value;
+          if (value != null) {
+            _dataBuffers.putIfAbsent(fieldKey, () => CircularBuffer(_currentBufferSize));
+            _dataBuffers[fieldKey]!.add(TimeSeriesPoint(now, value));
+            updatedBuffers[fieldKey] = _dataBuffers[fieldKey]!;
+            hasNewData = true;
+          }
+        }
+        
+        // Also extract formatted fields for backward compatibility with plotting
+        // These have different field names (capitalized, with units) than raw fields
+        final formattedFields = stats.getMessageFields();
+        
+        for (final field in formattedFields.entries) {
+          final fieldKey = '$messageName.${field.key}';
+          
+          // Skip if we've reached field limit (prevent unbounded growth)
+          if (_dataBuffers.length >= maxFieldCount && !_dataBuffers.containsKey(fieldKey)) {
             continue;
           }
           
-          final value = _parseNumericValueOptimized(fieldKey, field.value);
+          final value = _parseNumericValue(field.value);
           
           if (value != null) {
             _dataBuffers.putIfAbsent(fieldKey, () => CircularBuffer(_currentBufferSize));
             _dataBuffers[fieldKey]!.add(TimeSeriesPoint(now, value));
             updatedBuffers[fieldKey] = _dataBuffers[fieldKey]!;
             hasNewData = true;
-            _numericFields.add(fieldKey); // Cache as numeric field
           }
         }
       }
@@ -116,61 +130,6 @@ class TimeSeriesDataManager {
     }
   }
 
-  double? _parseNumericValueOptimized(String fieldKey, dynamic value) {
-    // Check cache first
-    if (value is String) {
-      final cacheKey = '${fieldKey}_$value';
-      if (_valueCache.containsKey(cacheKey)) {
-        return _valueCache[cacheKey];
-      }
-    }
-    
-    double? result;
-    
-    if (value is num) {
-      result = value.toDouble();
-    } else if (value is String) {
-      // Quick check if we know this field type
-      if (_numericFields.contains(fieldKey)) {
-        // Fast path for known numeric fields
-        if (_numericRegex.hasMatch(value)) {
-          result = double.tryParse(value);
-        } else {
-          // Try removing units
-          final cleaned = value.replaceAll(RegExp(r'[^\d\.\-eE\+]'), '');
-          result = double.tryParse(cleaned);
-        }
-      } else {
-        // Slower path for unknown fields
-        // First try direct parse
-        result = double.tryParse(value);
-        
-        // If that fails, try removing units
-        if (result == null) {
-          final cleaned = value.replaceAll(RegExp(r'[^\d\.\-eE\+]'), '');
-          result = double.tryParse(cleaned);
-        }
-        
-        // If still null, mark as invalid field
-        if (result == null) {
-          _invalidFields.add(fieldKey);
-        }
-      }
-      
-      // Cache the result for strings
-      if (result != null) {
-        final cacheKey = '${fieldKey}_$value';
-        _valueCache[cacheKey] = result;
-        
-        // Limit cache size
-        if (_valueCache.length > 1000) {
-          _valueCache.clear();
-        }
-      }
-    }
-    
-    return result;
-  }
 
   void _cleanupOldData(DateTime now) {
     final cutoff = now.subtract(_currentMaxAge);
@@ -178,6 +137,70 @@ class TimeSeriesDataManager {
     for (final buffer in _dataBuffers.values) {
       buffer.removeOldData(cutoff);
     }
+  }
+
+  /// Parse numeric values from formatted strings (for backward compatibility)
+  double? _parseNumericValue(dynamic value) {
+    if (value is num) {
+      return value.toDouble();
+    } else if (value is String) {
+      // First try direct parse
+      final result = double.tryParse(value);
+      if (result != null) return result;
+      
+      // Try removing units and symbols
+      final cleaned = value.replaceAll(RegExp(r'[^\d\.\-eE\+]'), '');
+      return double.tryParse(cleaned);
+    }
+    return null;
+  }
+
+  /// Extract raw numeric fields directly from MAVLink messages
+  Map<String, double?> _extractRawMessageFields(String messageName, MavlinkMessage message) {
+    final fields = <String, double?>{};
+    
+    if (message is Heartbeat) {
+      fields['type'] = message.type.toDouble();
+      fields['autopilot'] = message.autopilot.toDouble();
+      fields['baseMode'] = message.baseMode.toDouble();
+      fields['customMode'] = message.customMode.toDouble();
+      fields['systemStatus'] = message.systemStatus.toDouble();
+      fields['mavlinkVersion'] = message.mavlinkVersion.toDouble();
+    } else if (message is SysStatus) {
+      fields['voltageBattery'] = message.voltageBattery.toDouble();
+      fields['currentBattery'] = message.currentBattery.toDouble();
+      fields['batteryRemaining'] = message.batteryRemaining.toDouble();
+      fields['load'] = message.load.toDouble();
+      fields['dropRateComm'] = message.dropRateComm.toDouble();
+      fields['errorsComm'] = message.errorsComm.toDouble();
+    } else if (message is Attitude) {
+      fields['roll'] = message.roll;
+      fields['pitch'] = message.pitch;
+      fields['yaw'] = message.yaw;
+      fields['rollspeed'] = message.rollspeed;
+      fields['pitchspeed'] = message.pitchspeed;
+      fields['yawspeed'] = message.yawspeed;
+      fields['timeBootMs'] = message.timeBootMs.toDouble();
+    } else if (message is GlobalPositionInt) {
+      fields['lat'] = message.lat.toDouble();
+      fields['lon'] = message.lon.toDouble();
+      fields['alt'] = message.alt.toDouble();
+      fields['relativeAlt'] = message.relativeAlt.toDouble();
+      fields['vx'] = message.vx.toDouble();
+      fields['vy'] = message.vy.toDouble();
+      fields['vz'] = message.vz.toDouble();
+      fields['hdg'] = message.hdg.toDouble();
+      fields['timeBootMs'] = message.timeBootMs.toDouble();
+    } else if (message is VfrHud) {
+      fields['airspeed'] = message.airspeed;
+      fields['groundspeed'] = message.groundspeed;
+      fields['heading'] = message.heading.toDouble();
+      fields['throttle'] = message.throttle.toDouble();
+      fields['alt'] = message.alt;
+      fields['climb'] = message.climb;
+    }
+    
+    return fields;
   }
 
   List<TimeSeriesPoint> getFieldData(String messageType, String fieldName) {
@@ -209,9 +232,6 @@ class TimeSeriesDataManager {
   
   void clearAllData() {
     _dataBuffers.clear();
-    _valueCache.clear();
-    _numericFields.clear();
-    _invalidFields.clear();
     if (!_dataController.isClosed) {
       _dataController.add({});
     }

@@ -55,6 +55,7 @@ class _JetsharkDashboardState extends State<JetsharkDashboard> with TickerProvid
       // Extract values we need for the dashboard
       _updateFromDataBuffers(dataBuffers);
     });
+    
   }
   
   void _updateFromDataBuffers(Map<String, CircularBuffer> dataBuffers) {
