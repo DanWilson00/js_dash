@@ -17,8 +17,8 @@ void main() {
       final settings = await settingsService.loadSettings();
       
       expect(settings, isA<AppSettings>());
-      expect(settings.window.width, equals(1024));
-      expect(settings.window.height, equals(768));
+      expect(settings.window.width, equals(1200.0));
+      expect(settings.window.height, equals(800.0));
       expect(settings.plots.plotCount, equals(1));
       expect(settings.connection.useSpoofMode, equals(true));
     });

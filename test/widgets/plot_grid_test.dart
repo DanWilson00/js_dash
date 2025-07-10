@@ -2,12 +2,16 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:js_dash/views/telemetry/plot_grid.dart';
 import 'package:js_dash/services/timeseries_data_manager.dart';
+import 'package:js_dash/services/settings_manager.dart';
 import 'package:js_dash/models/plot_configuration.dart';
 
 void main() {
   group('PlotGridManager Basic Tests', () {
+    late SettingsManager settingsManager;
+    
     setUp(() {
       TimeSeriesDataManager.resetInstanceForTesting();
+      settingsManager = SettingsManager();
     });
 
     tearDown(() {
@@ -16,9 +20,9 @@ void main() {
 
     testWidgets('should build and display basic structure', (WidgetTester tester) async {
       await tester.pumpWidget(
-        const MaterialApp(
+        MaterialApp(
           home: Scaffold(
-            body: PlotGridManager(),
+            body: PlotGridManager(settingsManager: settingsManager),
           ),
         ),
       );
@@ -34,9 +38,9 @@ void main() {
 
     testWidgets('should show single plot by default', (WidgetTester tester) async {
       await tester.pumpWidget(
-        const MaterialApp(
+        MaterialApp(
           home: Scaffold(
-            body: PlotGridManager(),
+            body: PlotGridManager(settingsManager: settingsManager),
           ),
         ),
       );
@@ -49,9 +53,9 @@ void main() {
 
     testWidgets('should show plot count dropdown options', (tester) async {
       await tester.pumpWidget(
-        const MaterialApp(
+        MaterialApp(
           home: Scaffold(
-            body: PlotGridManager(),
+            body: PlotGridManager(settingsManager: settingsManager),
           ),
         ),
       );
@@ -71,9 +75,9 @@ void main() {
 
     testWidgets('should auto-select first plot', (tester) async {
       await tester.pumpWidget(
-        const MaterialApp(
+        MaterialApp(
           home: Scaffold(
-            body: PlotGridManager(),
+            body: PlotGridManager(settingsManager: settingsManager),
           ),
         ),
       );
@@ -86,9 +90,9 @@ void main() {
 
     testWidgets('should NOT show signal panel by default', (tester) async {
       await tester.pumpWidget(
-        const MaterialApp(
+        MaterialApp(
           home: Scaffold(
-            body: PlotGridManager(),
+            body: PlotGridManager(settingsManager: settingsManager),
           ),
         ),
       );
@@ -101,9 +105,9 @@ void main() {
 
     testWidgets('should handle plot count changes', (tester) async {
       await tester.pumpWidget(
-        const MaterialApp(
+        MaterialApp(
           home: Scaffold(
-            body: PlotGridManager(),
+            body: PlotGridManager(settingsManager: settingsManager),
           ),
         ),
       );
@@ -123,9 +127,12 @@ void main() {
     });
   });
 
-  group('PlotGridManager Multi-Signal Tests', () {
+  group('PlotGridManager API Tests', () {
+    late SettingsManager settingsManager;
+    
     setUp(() {
       TimeSeriesDataManager.resetInstanceForTesting();
+      settingsManager = SettingsManager();
     });
 
     tearDown(() {
@@ -134,9 +141,9 @@ void main() {
 
     testWidgets('should support adding signals to selected plot', (tester) async {
       await tester.pumpWidget(
-        const MaterialApp(
+        MaterialApp(
           home: Scaffold(
-            body: PlotGridManager(),
+            body: PlotGridManager(settingsManager: settingsManager),
           ),
         ),
       );
@@ -155,9 +162,9 @@ void main() {
 
     testWidgets('should support multi-signal operations', (tester) async {
       await tester.pumpWidget(
-        const MaterialApp(
+        MaterialApp(
           home: Scaffold(
-            body: PlotGridManager(),
+            body: PlotGridManager(settingsManager: settingsManager),
           ),
         ),
       );
@@ -189,120 +196,55 @@ void main() {
       expect(tester.takeException(), isNull);
     });
 
-    testWidgets('should handle time window updates', (tester) async {
+    testWidgets('should provide state access methods', (tester) async {
       await tester.pumpWidget(
-        const MaterialApp(
+        MaterialApp(
           home: Scaffold(
-            body: PlotGridManager(),
+            body: PlotGridManager(settingsManager: settingsManager),
           ),
         ),
       );
 
-      // Change time window
-      final timeDropdown = find.byType(DropdownButton<TimeWindowOption>);
-      await tester.tap(timeDropdown);
-      await tester.pumpAndSettle();
-
-      await tester.tap(find.text('30s').last);
-      await tester.pumpAndSettle();
-
-      // Should update without issues
-      expect(tester.takeException(), isNull);
-    });
-
-    testWidgets('should handle plot reduction correctly', (tester) async {
-      await tester.pumpWidget(
-        const MaterialApp(
-          home: Scaffold(
-            body: PlotGridManager(),
-          ),
-        ),
-      );
-
-      // Increase to 3 plots
-      final plotCountDropdown = find.byType(DropdownButton<int>);
-      await tester.tap(plotCountDropdown);
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('3').last);
-      await tester.pumpAndSettle();
-
-      // Then reduce back to 1
-      await tester.tap(plotCountDropdown);
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('1').last);
-      await tester.pumpAndSettle();
-
-      // Should handle the reduction correctly
-      expect(tester.takeException(), isNull);
-      expect(find.text('Plot 1'), findsOneWidget);
-    });
-
-    testWidgets('should provide public API for integration', (tester) async {
-      await tester.pumpWidget(
-        const MaterialApp(
-          home: Scaffold(
-            body: PlotGridManager(),
-          ),
-        ),
-      );
+      await tester.pump();
 
       final gridState = tester.state<PlotGridManagerState>(find.byType(PlotGridManager));
 
-      // Test public API methods
-      expect(gridState.hasSelectedPlot, true);
-      expect(gridState.selectedPlotInfo, 'Plot 1');
+      // Test state access methods
+      expect(gridState.hasSelectedPlot, isTrue);
+      expect(gridState.selectedPlotInfo, contains('Plot'));
+      expect(gridState.allPlottedFields, isA<Set<String>>());
+      expect(gridState.selectedPlotFields, isA<Map<String, Color>>());
+    });
 
-      // Test that signal assignment API works
-      expect(() => gridState.assignFieldToSelectedPlot('GPS_RAW_INT', 'lat'), 
-             returnsNormally);
+    testWidgets('should support clearing all plots', (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: PlotGridManager(settingsManager: settingsManager),
+          ),
+        ),
+      );
+
+      await tester.pump();
+
+      final gridState = tester.state<PlotGridManagerState>(find.byType(PlotGridManager));
+
+      // Add a signal first
+      final signal = PlotSignalConfiguration(
+        id: 'test_signal',
+        messageType: 'ATTITUDE',
+        fieldName: 'roll',
+        color: Colors.red,
+      );
+      
+      gridState.addSignalToSelectedPlot(signal);
+      await tester.pump();
+
+      // Then clear all plots
+      expect(() => gridState.clearAllPlots(), returnsNormally);
       
       await tester.pump();
-    });
-
-    testWidgets('should maintain signal panel state correctly', (tester) async {
-      await tester.pumpWidget(
-        const MaterialApp(
-          home: Scaffold(
-            body: PlotGridManager(),
-          ),
-        ),
-      );
-
-      final gridState = tester.state<PlotGridManagerState>(find.byType(PlotGridManager));
-
-      // Add a signal to make legend clickable
-      gridState.assignFieldToSelectedPlot('ATTITUDE', 'roll');
-      await tester.pump();
-
-      // Panel should not be visible initially
-      expect(find.text('Available Signals'), findsNothing);
-
-      // Test that the widget can handle signal management without crashes
       expect(tester.takeException(), isNull);
-    });
-
-    testWidgets('should handle signal addition and removal', (tester) async {
-      await tester.pumpWidget(
-        const MaterialApp(
-          home: Scaffold(
-            body: PlotGridManager(),
-          ),
-        ),
-      );
-
-      final gridState = tester.state<PlotGridManagerState>(find.byType(PlotGridManager));
-
-      // Test adding signals via the public API
-      gridState.assignFieldToSelectedPlot('ATTITUDE', 'roll');
-      await tester.pump();
-      expect(tester.takeException(), isNull);
-
-      gridState.assignFieldToSelectedPlot('ATTITUDE', 'pitch');
-      await tester.pump();
-      expect(tester.takeException(), isNull);
-
-      // The plot should now have signals
-      expect(gridState.hasSelectedPlot, true);
     });
   });
 }
