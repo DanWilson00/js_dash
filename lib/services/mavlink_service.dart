@@ -7,9 +7,13 @@ import 'package:flutter_libserialport/flutter_libserialport.dart';
 import 'mavlink_data_provider.dart';
 
 class MavlinkService extends MavlinkDataProvider {
+  // Singleton support for backward compatibility - will be deprecated
   static MavlinkService? _instance;
   factory MavlinkService() => _instance ??= MavlinkService._internal();
   MavlinkService._internal() : _dialect = MavlinkDialectCommon();
+  
+  // New constructor for dependency injection
+  MavlinkService.injected() : _dialect = MavlinkDialectCommon();
   
   // For testing - allows creating fresh instances
   MavlinkService.forTesting() : _dialect = MavlinkDialectCommon();
@@ -27,12 +31,42 @@ class MavlinkService extends MavlinkDataProvider {
   final StreamController<MavlinkFrame> _frameController = StreamController<MavlinkFrame>.broadcast();
 
   Stream<MavlinkFrame> get frameStream => _frameController.stream;
+  
+  // Implement IDataSource.messageStream
+  @override
+  Stream<dynamic> get messageStream => frameStream.map((frame) => frame.message);
 
   bool _isConnected = false;
+  @override
   bool get isConnected => _isConnected;
+  
+  // Implement IDataSource.isPaused
+  bool _isPaused = false;
+  @override
+  bool get isPaused => _isPaused;
+  
+  // Implement IDataSource.pause/resume
+  @override
+  void pause() {
+    _isPaused = true;
+  }
+  
+  @override
+  void resume() {
+    _isPaused = false;
+  }
+  
+  // Implement IDataSource.connect (delegates to specific connection methods)
+  @override
+  Future<void> connect() async {
+    // This is a placeholder - actual connection depends on configuration
+    // In a real implementation, this would be handled by ConnectionManager
+    throw UnimplementedError('Use connectUDP() or connectSerial() instead');
+  }
 
   bool _isInitialized = false;
   
+  @override
   Future<void> initialize() async {
     if (_isInitialized) return;
     
@@ -132,6 +166,7 @@ class MavlinkService extends MavlinkDataProvider {
   }
 
 
+  @override
   Future<void> disconnect() async {
     await _socketSubscription?.cancel();
     _socket?.close();
@@ -145,10 +180,11 @@ class MavlinkService extends MavlinkDataProvider {
     // print('MAVLink service disconnected');
   }
 
+  @override
   void dispose() {
     disconnect();
     _frameController.close();
-    disposeStreams();
+    super.dispose();
     _isInitialized = false;
   }
 

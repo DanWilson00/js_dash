@@ -3,14 +3,22 @@ import 'dart:math' as math;
 import 'dart:typed_data';
 import 'package:dart_mavlink/mavlink.dart';
 import 'package:dart_mavlink/dialects/common.dart';
+import '../core/service_locator.dart';
 import 'mavlink_data_provider.dart';
 
 /// USB Serial Spoof Service that simulates realistic MAVLink communication
 /// over a virtual serial port with configurable timing and characteristics
-class UsbSerialSpoofService extends MavlinkDataProvider {
+class UsbSerialSpoofService extends MavlinkDataProvider implements Disposable {
+  // Singleton support for backward compatibility - will be deprecated
   static UsbSerialSpoofService? _instance;
   factory UsbSerialSpoofService() => _instance ??= UsbSerialSpoofService._internal();
   UsbSerialSpoofService._internal() : _dialect = MavlinkDialectCommon();
+  
+  // New constructor for dependency injection
+  UsbSerialSpoofService.injected() : _dialect = MavlinkDialectCommon();
+  
+  // For testing - allows creating fresh instances
+  UsbSerialSpoofService.forTesting() : _dialect = MavlinkDialectCommon();
 
   final MavlinkDialectCommon _dialect;
   MavlinkParser? _parser;
@@ -59,7 +67,14 @@ class UsbSerialSpoofService extends MavlinkDataProvider {
 
   Stream<MavlinkFrame> get frameStream => _frameController.stream;
   Stream<Uint8List> get rawDataStream => _rawDataController.stream;
+  
+  // Implement IDataSource.messageStream
+  @override
+  Stream<dynamic> get messageStream => frameStream.map((frame) => frame.message);
+  
+  @override
   bool get isConnected => _isConnected;
+  @override
   bool get isPaused => _isPaused;
   
   // Dashboard data getters (for compatibility with dashboard)
@@ -70,6 +85,7 @@ class UsbSerialSpoofService extends MavlinkDataProvider {
   double get starboardWingPosition => _starboardWingPosition;
   
   /// Initialize the spoof service
+  @override
   Future<void> initialize() async {
     if (_isInitialized) return;
     
@@ -143,7 +159,30 @@ class UsbSerialSpoofService extends MavlinkDataProvider {
     _isPaused = false;
   }
 
-  /// Pause/resume data generation
+  // Implement IDataSource.connect (delegates to startSpoofing)
+  @override
+  Future<void> connect() async {
+    await startSpoofing();
+  }
+  
+  // Implement IDataSource.disconnect (delegates to stopSpoofing)
+  @override
+  Future<void> disconnect() async {
+    await stopSpoofing();
+  }
+  
+  // Implement IDataSource.pause/resume
+  @override
+  void pause() {
+    _isPaused = true;
+  }
+  
+  @override
+  void resume() {
+    _isPaused = false;
+  }
+  
+  /// Pause/resume data generation (kept for backward compatibility)
   void setPaused(bool paused) {
     _isPaused = paused;
   }
@@ -360,11 +399,12 @@ class UsbSerialSpoofService extends MavlinkDataProvider {
     };
   }
 
+  @override
   void dispose() {
     stopSpoofing();
     _frameController.close();
     _rawDataController.close();
-    disposeStreams();
+    super.dispose();
     _isInitialized = false;
   }
   

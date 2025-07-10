@@ -1,12 +1,17 @@
 import 'dart:async';
 import 'dart:math';
 import 'package:dart_mavlink/dialects/common.dart';
+import '../core/service_locator.dart';
 import 'mavlink_data_provider.dart';
 
-class MavlinkSpoofService extends MavlinkDataProvider {
+class MavlinkSpoofService extends MavlinkDataProvider implements Disposable {
+  // Singleton support for backward compatibility - will be deprecated
   static MavlinkSpoofService? _instance;
   factory MavlinkSpoofService() => _instance ??= MavlinkSpoofService._internal();
   MavlinkSpoofService._internal();
+  
+  // New constructor for dependency injection
+  MavlinkSpoofService.injected();
   
   // For testing - allows creating fresh instances
   MavlinkSpoofService.forTesting();
@@ -19,8 +24,19 @@ class MavlinkSpoofService extends MavlinkDataProvider {
 
   final Random _random = Random();
   bool _isRunning = false;
+  bool _isPaused = false;
 
   bool get isRunning => _isRunning;
+  
+  // Implement IDataSource interface
+  @override
+  Stream<dynamic> get messageStream => Stream.empty(); // Spoof service sends messages via addMessage()
+  
+  @override
+  bool get isConnected => _isRunning;
+  
+  @override
+  bool get isPaused => _isPaused;
   
   // Getters for HUD data
   double get currentRPM => _rpm;
@@ -41,6 +57,35 @@ class MavlinkSpoofService extends MavlinkDataProvider {
   double _rpmDirection = 1.0; // 1 for increasing, -1 for decreasing
   double _portWingPosition = 0.0; // -100 to +100 (degrees or percentage)
   double _starboardWingPosition = 0.0; // -100 to +100 (degrees or percentage)
+  bool _isInitialized = false;
+
+  // Implement IDataSource interface methods
+  @override
+  Future<void> initialize() async {
+    if (_isInitialized) return;
+    _isInitialized = true;
+  }
+  
+  @override
+  Future<void> connect() async {
+    await initialize();
+    startSpoofing();
+  }
+  
+  @override
+  Future<void> disconnect() async {
+    stopSpoofing();
+  }
+  
+  @override
+  void pause() {
+    _isPaused = true;
+  }
+  
+  @override
+  void resume() {
+    _isPaused = false;
+  }
 
   void startSpoofing({Duration? interval}) {
     if (_isRunning) return;
@@ -73,7 +118,7 @@ class MavlinkSpoofService extends MavlinkDataProvider {
   }
 
   void _generateHeartbeat() {
-    if (!_isRunning) return;
+    if (!_isRunning || _isPaused) return;
     
     final heartbeat = Heartbeat(
       type: mavTypeSubmarine, // Submarine type for submersible jetski
@@ -87,7 +132,7 @@ class MavlinkSpoofService extends MavlinkDataProvider {
   }
 
   void _generateSysStatus() {
-    if (!_isRunning) return;
+    if (!_isRunning || _isPaused) return;
     
     final batteryRemaining = 50 + _random.nextInt(50); // 50-100% battery
     final sysStatus = SysStatus(
@@ -112,7 +157,7 @@ class MavlinkSpoofService extends MavlinkDataProvider {
   }
 
   void _generateAttitude() {
-    if (!_isRunning) return;
+    if (!_isRunning || _isPaused) return;
     
     final time = DateTime.now().millisecondsSinceEpoch;
     
@@ -140,7 +185,7 @@ class MavlinkSpoofService extends MavlinkDataProvider {
   }
 
   void _generateGPS() {
-    if (!_isRunning) return;
+    if (!_isRunning || _isPaused) return;
     
     final time = DateTime.now().millisecondsSinceEpoch;
     
@@ -164,7 +209,7 @@ class MavlinkSpoofService extends MavlinkDataProvider {
   }
 
   void _generateVfrHud() {
-    if (!_isRunning) return;
+    if (!_isRunning || _isPaused) return;
     
     _speed = 2.0 + _random.nextDouble() * 2.0; // 2-4 m/s speed variation
     _heading += (_random.nextDouble() - 0.5) * 2.0; // Gradual heading change
@@ -212,9 +257,11 @@ class MavlinkSpoofService extends MavlinkDataProvider {
     addMessage(vfrHud);
   }
 
+  @override
   void dispose() {
     stopSpoofing();
-    disposeStreams();
+    super.dispose();
+    _isInitialized = false;
   }
 
   // For testing - reset singleton instance

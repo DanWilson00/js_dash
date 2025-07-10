@@ -2,13 +2,19 @@ import 'dart:async';
 import 'package:dart_mavlink/mavlink_message.dart';
 import 'package:dart_mavlink/dialects/common.dart';
 import '../models/plot_configuration.dart';
+import '../interfaces/i_data_repository.dart';
+import '../core/service_locator.dart';
 import 'mavlink_message_tracker.dart';
 import 'settings_manager.dart';
 
-class TimeSeriesDataManager {
+class TimeSeriesDataManager implements IDataRepository, Disposable {
+  // Singleton support for backward compatibility - will be deprecated
   static TimeSeriesDataManager? _instance;
   factory TimeSeriesDataManager() => _instance ??= TimeSeriesDataManager._internal();
   TimeSeriesDataManager._internal();
+  
+  // New constructor for dependency injection
+  TimeSeriesDataManager.injected();
 
   final Map<String, CircularBuffer> _dataBuffers = {};
   final StreamController<Map<String, CircularBuffer>> _dataController = 
@@ -26,8 +32,10 @@ class TimeSeriesDataManager {
   // Performance optimizations
   static const int maxFieldCount = 500; // Limit field discovery to prevent unbounded growth
 
+  @override
   Stream<Map<String, CircularBuffer>> get dataStream => _dataController.stream;
 
+  @override
   void startTracking([SettingsManager? settingsManager]) {
     if (_isTracking) return;
     _isTracking = true;
@@ -56,6 +64,7 @@ class TimeSeriesDataManager {
     // New buffers will use the updated size
   }
 
+  @override
   void stopTracking() {
     _isTracking = false;
     _messageSubscription?.cancel();
@@ -203,15 +212,18 @@ class TimeSeriesDataManager {
     return fields;
   }
 
+  @override
   List<TimeSeriesPoint> getFieldData(String messageType, String fieldName) {
     final key = '$messageType.$fieldName';
     return _dataBuffers[key]?.points ?? [];
   }
 
+  @override
   List<String> getAvailableFields() {
     return _dataBuffers.keys.toList()..sort();
   }
   
+  @override
   void pause() {
     _isPaused = true;
     // Emit immediate event to notify listeners of pause state change
@@ -220,6 +232,7 @@ class TimeSeriesDataManager {
     }
   }
   
+  @override
   void resume() {
     _isPaused = false;
     // Emit immediate event to notify listeners of pause state change  
@@ -228,8 +241,10 @@ class TimeSeriesDataManager {
     }
   }
   
+  @override
   bool get isPaused => _isPaused;
   
+  @override
   void clearAllData() {
     _dataBuffers.clear();
     if (!_dataController.isClosed) {
@@ -237,6 +252,7 @@ class TimeSeriesDataManager {
     }
   }
 
+  @override
   List<String> getFieldsForMessage(String messageType) {
     return _dataBuffers.keys
         .where((key) => key.startsWith('$messageType.'))
@@ -246,6 +262,7 @@ class TimeSeriesDataManager {
   }
 
 
+  @override
   void dispose() {
     stopTracking();
     _dataBuffers.clear();
@@ -261,6 +278,7 @@ class TimeSeriesDataManager {
   }
 
   // Get current data state for debugging
+  @override
   Map<String, int> getDataSummary() {
     return _dataBuffers.map((key, buffer) => MapEntry(key, buffer.length));
   }

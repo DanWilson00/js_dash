@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:dart_mavlink/mavlink_message.dart';
 import 'package:dart_mavlink/dialects/common.dart';
+import '../core/service_locator.dart';
 
 class MessageStats {
   int count = 0;
@@ -139,12 +140,19 @@ class MessageStats {
   }
 }
 
-class MavlinkMessageTracker {
+class MavlinkMessageTracker implements Disposable {
   static const Duration _statsUpdateInterval = Duration(milliseconds: 100);
   
+  // Singleton support for backward compatibility - will be deprecated
   static MavlinkMessageTracker? _instance;
   factory MavlinkMessageTracker() => _instance ??= MavlinkMessageTracker._internal();
   MavlinkMessageTracker._internal();
+  
+  // New constructor for dependency injection
+  MavlinkMessageTracker.injected();
+  
+  // For testing - allows creating fresh instances
+  MavlinkMessageTracker.forTesting();
 
   final Map<String, MessageStats> _messageStats = {};
   final StreamController<Map<String, MessageStats>> _statsController = 
@@ -295,6 +303,7 @@ class MavlinkMessageTracker {
     }
   }
 
+  @override
   void dispose() {
     stopTracking();
     if (!_statsController.isClosed) {
