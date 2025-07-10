@@ -19,6 +19,7 @@ class SettingsManager extends ChangeNotifier {
   ConnectionSettings get connection => _settings.connection;
   NavigationSettings get navigation => _settings.navigation;
   PerformanceSettings get performance => _settings.performance;
+  MapSettings get map => _settings.map;
 
   /// Initialize settings by loading from storage
   Future<void> initialize() async {
@@ -26,7 +27,7 @@ class SettingsManager extends ChangeNotifier {
       _settings = await _settingsService.loadSettings();
       notifyListeners();
     } catch (e) {
-      debugPrint('Error initializing settings: $e');
+      // debugPrint('Error initializing settings: $e');
       // Continue with defaults
     }
   }
@@ -266,6 +267,52 @@ class SettingsManager extends ChangeNotifier {
       dataBufferSize: bufferSize,
       dataRetentionMinutes: retentionMinutes,
     ));
+  }
+
+  /// Update map settings
+  void updateMap(MapSettings newMap) {
+    if (_settings.map == newMap) return;
+    
+    _settings = _settings.copyWith(map: newMap);
+    notifyListeners();
+    _debouncedSave();
+  }
+
+  /// Update map center position
+  void updateMapCenter(double latitude, double longitude) {
+    updateMap(_settings.map.copyWith(
+      centerLatitude: latitude,
+      centerLongitude: longitude,
+    ));
+  }
+
+  /// Update map zoom level
+  void updateMapZoom(double zoomLevel) {
+    updateMap(_settings.map.copyWith(zoomLevel: zoomLevel));
+  }
+
+  /// Update map center and zoom together (common operation)
+  void updateMapCenterAndZoom(double latitude, double longitude, double zoomLevel) {
+    updateMap(_settings.map.copyWith(
+      centerLatitude: latitude,
+      centerLongitude: longitude,
+      zoomLevel: zoomLevel,
+    ));
+  }
+
+  /// Update vehicle following setting
+  void updateMapFollowVehicle(bool followVehicle) {
+    updateMap(_settings.map.copyWith(followVehicle: followVehicle));
+  }
+
+  /// Update path visibility
+  void updateMapShowPath(bool showPath) {
+    updateMap(_settings.map.copyWith(showPath: showPath));
+  }
+
+  /// Update maximum path points
+  void updateMapMaxPathPoints(int maxPathPoints) {
+    updateMap(_settings.map.copyWith(maxPathPoints: maxPathPoints));
   }
 
   /// Force immediate save (for app shutdown)

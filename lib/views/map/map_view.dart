@@ -1,14 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:latlong2/latlong.dart';
 import 'dart:async';
 import 'dart:math' as math;
 import 'package:dart_mavlink/dialects/common.dart';
+import '../../providers/ui_providers.dart';
 import '../../services/settings_manager.dart';
 import '../../services/usb_serial_spoof_service.dart';
 import '../../services/bing_maps_service.dart';
 
-class MapView extends StatefulWidget {
+class MapView extends ConsumerStatefulWidget {
   const MapView({
     super.key,
     required this.settingsManager,
@@ -17,15 +19,12 @@ class MapView extends StatefulWidget {
   final SettingsManager settingsManager;
 
   @override
-  State<MapView> createState() => _MapViewState();
+  ConsumerState<MapView> createState() => _MapViewState();
 }
 
-class _MapViewState extends State<MapView> {
+class _MapViewState extends ConsumerState<MapView> {
   final MapController _mapController = MapController();
   final UsbSerialSpoofService _mavlinkService = UsbSerialSpoofService();
-  
-  // Default center coordinates (Los Angeles area - matches spoofer starting point)
-  static const LatLng _defaultCenter = LatLng(34.0522, -118.2437);
   
   // Map layers
   BingMapType _currentLayer = BingMapType.aerial;
@@ -34,13 +33,15 @@ class _MapViewState extends State<MapView> {
   LatLng? _vehicleLocation;
   double? _vehicleHeading;
   
-  // Vehicle following control
-  bool _isFollowingVehicle = true;
-  
   // Path tracking
   final List<LatLng> _vehiclePath = [];
-  bool _showPath = true;
-  int _maxPathPoints = 200; // Configurable path length (number of points)
+  
+  // Map ready state
+  bool _mapReady = false;
+  
+  // Track last saved zoom to detect changes
+  double? _lastSavedZoom;
+  Timer? _saveTimer;
   
   // Subscriptions for MAVLink data
   StreamSubscription<GlobalPositionInt>? _gpsSubscription;
@@ -49,79 +50,104 @@ class _MapViewState extends State<MapView> {
   @override
   void initState() {
     super.initState();
-    _initializeSpoofer();
-    _initializeMavlinkListeners();
+    _startMAVLinkListening();
+    _startPeriodicSave();
   }
-  
-  void _initializeSpoofer() async {
+
+  /// Start periodic saving of zoom level when vehicle tracking is enabled
+  void _startPeriodicSave() {
+    _saveTimer = Timer.periodic(const Duration(seconds: 2), (_) {
+      if (_mapReady) {
+        final currentZoom = _mapController.camera.zoom;
+        if (_lastSavedZoom == null || (currentZoom - _lastSavedZoom!).abs() > 0.1) {
+          _lastSavedZoom = currentZoom;
+          _saveMapState();
+        }
+      }
+    });
+  }
+
+  Future<void> _startMAVLinkListening() async {
     await _mavlinkService.initialize();
-    await _mavlinkService.startSpoofing();
-  }
-  
-  // Calculate distance between two points in meters
-  double _calculateDistance(LatLng point1, LatLng point2) {
-    const double radiusOfEarth = 6371000; // Earth's radius in meters
     
-    final double lat1Rad = point1.latitude * (math.pi / 180);
-    final double lat2Rad = point2.latitude * (math.pi / 180);
-    final double deltaLatRad = (point2.latitude - point1.latitude) * (math.pi / 180);
-    final double deltaLonRad = (point2.longitude - point1.longitude) * (math.pi / 180);
+    // Start spoofing to simulate vehicle movement
+    await _mavlinkService.startSpoofing(
+      baudRate: 57600,
+      systemId: 1,
+      componentId: 1,
+    );
     
-    final double a = math.sin(deltaLatRad / 2) * math.sin(deltaLatRad / 2) +
-        math.cos(lat1Rad) * math.cos(lat2Rad) *
-        math.sin(deltaLonRad / 2) * math.sin(deltaLonRad / 2);
-    final double c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a));
-    
-    return radiusOfEarth * c;
-  }
-  
-  void _initializeMavlinkListeners() {
-    // Listen to GPS position updates
+    // Listen for GPS position updates
     _gpsSubscription = _mavlinkService.gpsStream.listen((gps) {
+      if (!mounted) return;
+      
       final newLocation = LatLng(
-        gps.lat / 1e7, // Convert from 1E7 degrees to decimal degrees
+        gps.lat / 1e7, // Convert from 1E7 format to degrees
         gps.lon / 1e7,
       );
       
       setState(() {
         _vehicleLocation = newLocation;
+        _vehiclePath.add(newLocation);
         
-        // Add to path if location has changed significantly (avoid duplicate points)
-        if (_vehiclePath.isEmpty || 
-            _calculateDistance(_vehiclePath.last, newLocation) > 0.5) { // 0.5 meter threshold
-          _vehiclePath.add(newLocation);
-          
-          // Maintain maximum path length
-          if (_vehiclePath.length > _maxPathPoints) {
-            _vehiclePath.removeAt(0); // Remove oldest point
-          }
+        // Limit path length based on settings
+        final mapSettings = ref.read(mapSettingsProvider);
+        if (_vehiclePath.length > mapSettings.maxPathPoints) {
+          _vehiclePath.removeAt(0);
         }
       });
       
-      // Automatically center map on vehicle location if following is enabled
-      if (_isFollowingVehicle) {
-        _mapController.move(newLocation, _mapController.camera.zoom);
+      // Auto-follow vehicle if enabled (preserve current zoom level)
+      final mapSettings = ref.read(mapSettingsProvider);
+      if (mapSettings.followVehicle && _vehicleLocation != null && _mapReady) {
+        final currentZoom = _mapController.camera.zoom;
+        _mapController.move(_vehicleLocation!, currentZoom);
       }
     });
     
-    // Listen to VFR HUD for heading updates
+    // Listen for heading updates
     _hudSubscription = _mavlinkService.vfrHudStream.listen((hud) {
+      if (!mounted) return;
       setState(() {
         _vehicleHeading = hud.heading.toDouble();
       });
     });
   }
 
+  /// Save current map position and zoom to settings
+  void _saveMapState() {
+    final camera = _mapController.camera;
+    final mapSettings = ref.read(mapSettingsProvider);
+    
+    // Always save zoom, but only save position if not following vehicle
+    if (mapSettings.followVehicle) {
+      // When following vehicle, only save zoom level, keep saved position
+      widget.settingsManager.updateMapZoom(camera.zoom);
+    } else {
+      // When not following, save both position and zoom
+      widget.settingsManager.updateMapCenterAndZoom(
+        camera.center.latitude,
+        camera.center.longitude,
+        camera.zoom,
+      );
+    }
+  }
+
   @override
   void dispose() {
     _gpsSubscription?.cancel();
     _hudSubscription?.cancel();
+    _saveTimer?.cancel();
     _mavlinkService.stopSpoofing();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    final mapSettings = ref.watch(mapSettingsProvider);
+    final defaultCenter = LatLng(mapSettings.centerLatitude, mapSettings.centerLongitude);
+    // Loading map with saved settings
+    
     return Scaffold(
       backgroundColor: Colors.black,
       body: Stack(
@@ -130,40 +156,68 @@ class _MapViewState extends State<MapView> {
           FlutterMap(
             mapController: _mapController,
             options: MapOptions(
-              initialCenter: _vehicleLocation ?? _defaultCenter,
-              initialZoom: 15.0,
+              initialCenter: defaultCenter,
+              initialZoom: mapSettings.zoomLevel,
               minZoom: 5.0,
               maxZoom: 18.0,
               interactionOptions: const InteractionOptions(
                 flags: InteractiveFlag.all,
               ),
               onMapEvent: (MapEvent mapEvent) {
+                // Mark map as ready on first event and restore saved position
+                if (!_mapReady) {
+                  setState(() {
+                    _mapReady = true;
+                  });
+                  // Restore saved position if not following vehicle
+                  if (!mapSettings.followVehicle) {
+                    Future.microtask(() {
+                      _mapController.move(
+                        LatLng(mapSettings.centerLatitude, mapSettings.centerLongitude),
+                        mapSettings.zoomLevel,
+                      );
+                    });
+                  }
+                }
+                
+                // Save map state when user stops interacting or zooming
+                if (mapEvent is MapEventMoveEnd || mapEvent is MapEventRotateEnd) {
+                  _saveMapState();
+                }
+                // Also save on any zoom or scroll events
+                final eventName = mapEvent.runtimeType.toString();
+                if (eventName.contains('Zoom') || 
+                    eventName.contains('Scroll') ||
+                    eventName.contains('Scale') ||
+                    eventName.contains('Tap')) {
+                  Future.delayed(const Duration(milliseconds: 100), () {
+                    if (mounted) _saveMapState();
+                  });
+                }
                 // Disable following when user manually pans the map
                 if (mapEvent is MapEventMoveStart && 
                     mapEvent.source == MapEventSource.onDrag) {
-                  if (_isFollowingVehicle) {
-                    setState(() {
-                      _isFollowingVehicle = false;
-                    });
+                  if (mapSettings.followVehicle) {
+                    widget.settingsManager.updateMapFollowVehicle(false);
                   }
                 }
               },
             ),
             children: [
-              // Tile layer (OpenStreetMap)
+              // Tile layer
               TileLayer(
                 urlTemplate: _getTileUrl(),
                 userAgentPackageName: 'com.example.js_dash',
               ),
               
               // Vehicle path layer
-              if (_showPath && _vehiclePath.length > 1)
+              if (mapSettings.showPath && _vehiclePath.length > 1)
                 PolylineLayer(
                   polylines: [
                     Polyline(
                       points: _vehiclePath,
-                      color: Colors.red,
                       strokeWidth: 3.0,
+                      color: Colors.blue.withValues(alpha: 0.7),
                     ),
                   ],
                 ),
@@ -174,9 +228,16 @@ class _MapViewState extends State<MapView> {
                   markers: [
                     Marker(
                       point: _vehicleLocation!,
-                      width: 40.0,
-                      height: 40.0,
-                      child: _buildVehicleMarker(),
+                      width: 40,
+                      height: 40,
+                      child: Transform.rotate(
+                        angle: (_vehicleHeading ?? 0) * math.pi / 180,
+                        child: const Icon(
+                          Icons.navigation,
+                          color: Colors.red,
+                          size: 30,
+                        ),
+                      ),
                     ),
                   ],
                 ),
@@ -185,6 +246,7 @@ class _MapViewState extends State<MapView> {
           
           // Map controls overlay
           _buildMapControls(),
+          
         ],
       ),
     );
@@ -197,7 +259,7 @@ class _MapViewState extends State<MapView> {
         return 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}';
       case BingMapType.aerialWithLabels:
         // ESRI World Imagery with reference overlay
-        return 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}';
+        return 'https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}';
       case BingMapType.road:
         // OpenStreetMap for roads
         return 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
@@ -206,25 +268,9 @@ class _MapViewState extends State<MapView> {
     }
   }
 
-  Widget _buildVehicleMarker() {
-    return Transform.rotate(
-      angle: _vehicleHeading != null ? _vehicleHeading! * (3.14159 / 180) : 0,
-      child: Container(
-        decoration: BoxDecoration(
-          color: Colors.red,
-          shape: BoxShape.circle,
-          border: Border.all(color: Colors.white, width: 2),
-        ),
-        child: const Icon(
-          Icons.navigation,
-          color: Colors.white,
-          size: 24,
-        ),
-      ),
-    );
-  }
-
   Widget _buildMapControls() {
+    final mapSettings = ref.watch(mapSettingsProvider);
+    
     return Positioned(
       top: 20,
       right: 20,
@@ -260,23 +306,29 @@ class _MapViewState extends State<MapView> {
                 IconButton(
                   icon: const Icon(Icons.add, color: Colors.white),
                   onPressed: () {
-                    final currentZoom = _mapController.camera.zoom;
-                    final currentCenter = _mapController.camera.center;
-                    _mapController.move(
-                      currentCenter,
-                      currentZoom + 1,
-                    );
+                    if (_mapReady) {
+                      final currentZoom = _mapController.camera.zoom;
+                      final currentCenter = _mapController.camera.center;
+                      _mapController.move(currentCenter, currentZoom + 1);
+                      // Save the new zoom level immediately
+                      Future.delayed(const Duration(milliseconds: 200), () {
+                        if (mounted) _saveMapState();
+                      });
+                    }
                   },
                 ),
                 IconButton(
                   icon: const Icon(Icons.remove, color: Colors.white),
                   onPressed: () {
-                    final currentZoom = _mapController.camera.zoom;
-                    final currentCenter = _mapController.camera.center;
-                    _mapController.move(
-                      currentCenter,
-                      currentZoom - 1,
-                    );
+                    if (_mapReady) {
+                      final currentZoom = _mapController.camera.zoom;
+                      final currentCenter = _mapController.camera.center;
+                      _mapController.move(currentCenter, currentZoom - 1);
+                      // Save the new zoom level immediately
+                      Future.delayed(const Duration(milliseconds: 200), () {
+                        if (mounted) _saveMapState();
+                      });
+                    }
                   },
                 ),
               ],
@@ -297,15 +349,13 @@ class _MapViewState extends State<MapView> {
                 // Toggle path visibility
                 IconButton(
                   icon: Icon(
-                    _showPath ? Icons.timeline : Icons.timeline_outlined,
-                    color: _showPath ? Colors.blue : Colors.white,
+                    mapSettings.showPath ? Icons.timeline : Icons.timeline_outlined,
+                    color: mapSettings.showPath ? Colors.blue : Colors.white,
                   ),
                   onPressed: () {
-                    setState(() {
-                      _showPath = !_showPath;
-                    });
+                    widget.settingsManager.updateMapShowPath(!mapSettings.showPath);
                   },
-                  tooltip: _showPath ? 'Hide Path' : 'Show Path',
+                  tooltip: mapSettings.showPath ? 'Hide Path' : 'Show Path',
                 ),
                 // Clear path button
                 if (_vehiclePath.isNotEmpty)
@@ -324,7 +374,7 @@ class _MapViewState extends State<MapView> {
                   child: Padding(
                     padding: const EdgeInsets.all(4.0),
                     child: Text(
-                      '${_vehiclePath.length}/$_maxPathPoints',
+                      '${_vehiclePath.length}/${mapSettings.maxPathPoints}',
                       style: const TextStyle(
                         color: Colors.white,
                         fontSize: 10,
@@ -352,25 +402,23 @@ class _MapViewState extends State<MapView> {
                   // Follow vehicle toggle
                   IconButton(
                     icon: Icon(
-                      _isFollowingVehicle ? Icons.gps_fixed : Icons.gps_not_fixed,
-                      color: _isFollowingVehicle ? Colors.green : Colors.white,
+                      mapSettings.followVehicle ? Icons.gps_fixed : Icons.gps_not_fixed,
+                      color: mapSettings.followVehicle ? Colors.green : Colors.white,
                     ),
                     onPressed: () {
-                      setState(() {
-                        _isFollowingVehicle = !_isFollowingVehicle;
-                        // If enabling follow mode, immediately center on vehicle
-                        if (_isFollowingVehicle && _vehicleLocation != null) {
-                          _mapController.move(_vehicleLocation!, _mapController.camera.zoom);
-                        }
-                      });
+                      widget.settingsManager.updateMapFollowVehicle(!mapSettings.followVehicle);
+                      // If enabling follow mode, immediately center on vehicle
+                      if (!mapSettings.followVehicle && _vehicleLocation != null && _mapReady) {
+                        _mapController.move(_vehicleLocation!, _mapController.camera.zoom);
+                      }
                     },
-                    tooltip: _isFollowingVehicle ? 'Stop Following Vehicle' : 'Follow Vehicle',
+                    tooltip: mapSettings.followVehicle ? 'Stop Following Vehicle' : 'Follow Vehicle',
                   ),
                   // Manual center on vehicle button
                   IconButton(
                     icon: const Icon(Icons.my_location, color: Colors.white),
                     onPressed: () {
-                      if (_vehicleLocation != null) {
+                      if (_vehicleLocation != null && _mapReady) {
                         _mapController.move(_vehicleLocation!, _mapController.camera.zoom);
                       }
                     },
@@ -406,21 +454,14 @@ class _MapViewState extends State<MapView> {
       ),
     );
   }
-
-  // Method to update vehicle location (will be called by MAVLink data)
-  void updateVehicleLocation(LatLng location, double? heading) {
-    setState(() {
-      _vehicleLocation = location;
-      _vehicleHeading = heading;
-    });
-  }
   
   // Show path configuration dialog
   void _showPathConfigDialog() {
+    final mapSettings = ref.read(mapSettingsProvider);
     showDialog(
       context: context,
       builder: (BuildContext context) {
-        int tempMaxPathPoints = _maxPathPoints;
+        int tempMaxPathPoints = mapSettings.maxPathPoints;
         return StatefulBuilder(
           builder: (context, setDialogState) {
             return AlertDialog(
@@ -457,10 +498,10 @@ class _MapViewState extends State<MapView> {
                 ),
                 TextButton(
                   onPressed: () {
+                    widget.settingsManager.updateMapMaxPathPoints(tempMaxPathPoints);
+                    // Trim existing path if it's too long
                     setState(() {
-                      _maxPathPoints = tempMaxPathPoints;
-                      // Trim existing path if it's too long
-                      while (_vehiclePath.length > _maxPathPoints) {
+                      while (_vehiclePath.length > tempMaxPathPoints) {
                         _vehiclePath.removeAt(0);
                       }
                     });

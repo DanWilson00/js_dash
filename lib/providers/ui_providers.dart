@@ -239,6 +239,17 @@ final performanceSettingsProvider = Provider<PerformanceSettings>((ref) {
   );
 });
 
+/// Map Settings Provider
+/// Manages map display and interaction settings
+final mapSettingsProvider = Provider<MapSettings>((ref) {
+  final settings = ref.watch(appSettingsProvider);
+  return settings.when(
+    data: (settings) => settings.map,
+    loading: () => MapSettings.defaults(),
+    error: (_, __) => MapSettings.defaults(),
+  );
+});
+
 /// Theme Provider
 /// Could be extended for theme management
 final themeProvider = Provider<ThemeData>((ref) {

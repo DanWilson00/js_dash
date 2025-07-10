@@ -11,6 +11,7 @@ class AppSettings {
   final ConnectionSettings connection;
   final NavigationSettings navigation;
   final PerformanceSettings performance;
+  final MapSettings map;
   
   const AppSettings({
     required this.window,
@@ -18,6 +19,7 @@ class AppSettings {
     required this.connection,
     required this.navigation,
     required this.performance,
+    required this.map,
   });
   
   factory AppSettings.defaults() {
@@ -27,6 +29,7 @@ class AppSettings {
       connection: ConnectionSettings.defaults(),
       navigation: NavigationSettings.defaults(),
       performance: PerformanceSettings.defaults(),
+      map: MapSettings.defaults(),
     );
   }
   
@@ -39,6 +42,7 @@ class AppSettings {
     ConnectionSettings? connection,
     NavigationSettings? navigation,
     PerformanceSettings? performance,
+    MapSettings? map,
   }) {
     return AppSettings(
       window: window ?? this.window,
@@ -46,6 +50,7 @@ class AppSettings {
       connection: connection ?? this.connection,
       navigation: navigation ?? this.navigation,
       performance: performance ?? this.performance,
+      map: map ?? this.map,
     );
   }
 }
@@ -338,6 +343,57 @@ class PerformanceSettings {
       animationDuration: animationDuration ?? this.animationDuration,
       dataBufferSize: dataBufferSize ?? this.dataBufferSize,
       dataRetentionMinutes: dataRetentionMinutes ?? this.dataRetentionMinutes,
+    );
+  }
+}
+
+@JsonSerializable()
+class MapSettings {
+  final double centerLatitude;
+  final double centerLongitude;
+  final double zoomLevel;
+  final bool followVehicle;
+  final bool showPath;
+  final int maxPathPoints;
+  
+  const MapSettings({
+    required this.centerLatitude,
+    required this.centerLongitude,
+    required this.zoomLevel,
+    required this.followVehicle,
+    required this.showPath,
+    required this.maxPathPoints,
+  });
+  
+  factory MapSettings.defaults() {
+    return const MapSettings(
+      centerLatitude: 34.0522, // Los Angeles area - matches spoofer starting point
+      centerLongitude: -118.2437,
+      zoomLevel: 15.0,
+      followVehicle: false, // Default to static map that remembers position/zoom
+      showPath: true,
+      maxPathPoints: 200,
+    );
+  }
+  
+  factory MapSettings.fromJson(Map<String, dynamic> json) => _$MapSettingsFromJson(json);
+  Map<String, dynamic> toJson() => _$MapSettingsToJson(this);
+  
+  MapSettings copyWith({
+    double? centerLatitude,
+    double? centerLongitude,
+    double? zoomLevel,
+    bool? followVehicle,
+    bool? showPath,
+    int? maxPathPoints,
+  }) {
+    return MapSettings(
+      centerLatitude: centerLatitude ?? this.centerLatitude,
+      centerLongitude: centerLongitude ?? this.centerLongitude,
+      zoomLevel: zoomLevel ?? this.zoomLevel,
+      followVehicle: followVehicle ?? this.followVehicle,
+      showPath: showPath ?? this.showPath,
+      maxPathPoints: maxPathPoints ?? this.maxPathPoints,
     );
   }
 }

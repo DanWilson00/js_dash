@@ -21,7 +21,7 @@ class SettingsService {
         return AppSettings.fromJson(data);
       }
     } catch (e) {
-      debugPrint('Error loading settings: $e');
+      // debugPrint('Error loading settings: $e');
     }
     
     // Return defaults if loading fails
@@ -35,7 +35,7 @@ class SettingsService {
       final settingsJson = jsonEncode(settings.toJson());
       await prefs.setString(_settingsKey, settingsJson);
     } catch (e) {
-      debugPrint('Error saving settings: $e');
+      // debugPrint('Error saving settings: $e');
     }
   }
 
@@ -46,7 +46,7 @@ class SettingsService {
       final windowJson = jsonEncode(windowSettings.toJson());
       await prefs.setString(_windowStateKey, windowJson);
     } catch (e) {
-      debugPrint('Error saving window state: $e');
+      // debugPrint('Error saving window state: $e');
     }
   }
 
@@ -61,7 +61,7 @@ class SettingsService {
         return WindowSettings.fromJson(data);
       }
     } catch (e) {
-      debugPrint('Error loading window state: $e');
+      // debugPrint('Error loading window state: $e');
     }
     
     return WindowSettings.defaults();
@@ -74,7 +74,7 @@ class SettingsService {
       final plotJson = jsonEncode(plotSettings.toJson());
       await prefs.setString(_plotConfigKey, plotJson);
     } catch (e) {
-      debugPrint('Error saving plot settings: $e');
+      // debugPrint('Error saving plot settings: $e');
     }
   }
 
@@ -89,7 +89,7 @@ class SettingsService {
         return PlotSettings.fromJson(data);
       }
     } catch (e) {
-      debugPrint('Error loading plot settings: $e');
+      // debugPrint('Error loading plot settings: $e');
     }
     
     return PlotSettings.defaults();
@@ -102,7 +102,7 @@ class SettingsService {
       final connectionJson = jsonEncode(connectionSettings.toJson());
       await prefs.setString(_connectionKey, connectionJson);
     } catch (e) {
-      debugPrint('Error saving connection settings: $e');
+      // debugPrint('Error saving connection settings: $e');
     }
   }
 
@@ -117,7 +117,7 @@ class SettingsService {
         return ConnectionSettings.fromJson(data);
       }
     } catch (e) {
-      debugPrint('Error loading connection settings: $e');
+      // debugPrint('Error loading connection settings: $e');
     }
     
     return ConnectionSettings.defaults();
@@ -130,7 +130,7 @@ class SettingsService {
       final navigationJson = jsonEncode(navigationSettings.toJson());
       await prefs.setString(_navigationKey, navigationJson);
     } catch (e) {
-      debugPrint('Error saving navigation settings: $e');
+      // debugPrint('Error saving navigation settings: $e');
     }
   }
 
@@ -145,7 +145,7 @@ class SettingsService {
         return NavigationSettings.fromJson(data);
       }
     } catch (e) {
-      debugPrint('Error loading navigation settings: $e');
+      // debugPrint('Error loading navigation settings: $e');
     }
     
     return NavigationSettings.defaults();
@@ -161,7 +161,7 @@ class SettingsService {
       await prefs.remove(_connectionKey);
       await prefs.remove(_navigationKey);
     } catch (e) {
-      debugPrint('Error clearing settings: $e');
+      // debugPrint('Error clearing settings: $e');
     }
   }
 
@@ -171,7 +171,7 @@ class SettingsService {
       final settings = await loadSettings();
       return jsonEncode(settings.toJson());
     } catch (e) {
-      debugPrint('Error exporting settings: $e');
+      // debugPrint('Error exporting settings: $e');
       return null;
     }
   }
@@ -184,7 +184,7 @@ class SettingsService {
       await saveSettings(settings);
       return true;
     } catch (e) {
-      debugPrint('Error importing settings: $e');
+      // debugPrint('Error importing settings: $e');
       return false;
     }
   }

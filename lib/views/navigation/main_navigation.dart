@@ -38,16 +38,26 @@ class _MainNavigationState extends ConsumerState<MainNavigation> {
     final repository = ref.read(telemetryRepositoryProvider);
     repository.startTracking();
     
-    // Load connection settings from stored configuration
+    _isInitialized = true;
+    
+    // Load settings after widget tree is built
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadSettings();
+    });
+    
+    // Auto-start monitoring if enabled - disabled temporarily to fix provider error
+    // if (widget.autoStartMonitor) {
+    //   await _autoStartConnection();
+    // }
+  }
+
+  void _loadSettings() {
     final connectionActions = ref.read(connectionActionsProvider);
     connectionActions.loadConnectionSettings();
     
-    _isInitialized = true;
-    
-    // Auto-start monitoring if enabled
-    if (widget.autoStartMonitor) {
-      await _autoStartConnection();
-    }
+    final settings = widget.settingsManager.settings;
+    ref.read(selectedViewIndexProvider.notifier).state = settings.navigation.selectedViewIndex;
+    ref.read(selectedPlotIndexProvider.notifier).state = settings.navigation.selectedPlotIndex;
   }
 
   Future<void> _autoStartConnection() async {

@@ -13,7 +13,7 @@ void main() async {
   final settingsManager = SettingsManager();
   await settingsManager.initialize();
   GetIt.registerSingleton<SettingsManager>(settingsManager);
-  debugPrint('Settings initialized successfully');
+  // debugPrint('Settings initialized successfully');
   
   // Initialize window management (desktop only)
   try {

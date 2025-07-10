@@ -18,6 +18,7 @@ AppSettings _$AppSettingsFromJson(Map<String, dynamic> json) => AppSettings(
   performance: PerformanceSettings.fromJson(
     json['performance'] as Map<String, dynamic>,
   ),
+  map: MapSettings.fromJson(json['map'] as Map<String, dynamic>),
 );
 
 Map<String, dynamic> _$AppSettingsToJson(AppSettings instance) =>
@@ -27,6 +28,7 @@ Map<String, dynamic> _$AppSettingsToJson(AppSettings instance) =>
       'connection': instance.connection,
       'navigation': instance.navigation,
       'performance': instance.performance,
+      'map': instance.map,
     };
 
 WindowSettings _$WindowSettingsFromJson(Map<String, dynamic> json) =>
@@ -140,3 +142,22 @@ Map<String, dynamic> _$PerformanceSettingsToJson(
   'dataBufferSize': instance.dataBufferSize,
   'dataRetentionMinutes': instance.dataRetentionMinutes,
 };
+
+MapSettings _$MapSettingsFromJson(Map<String, dynamic> json) => MapSettings(
+  centerLatitude: (json['centerLatitude'] as num).toDouble(),
+  centerLongitude: (json['centerLongitude'] as num).toDouble(),
+  zoomLevel: (json['zoomLevel'] as num).toDouble(),
+  followVehicle: json['followVehicle'] as bool,
+  showPath: json['showPath'] as bool,
+  maxPathPoints: (json['maxPathPoints'] as num).toInt(),
+);
+
+Map<String, dynamic> _$MapSettingsToJson(MapSettings instance) =>
+    <String, dynamic>{
+      'centerLatitude': instance.centerLatitude,
+      'centerLongitude': instance.centerLongitude,
+      'zoomLevel': instance.zoomLevel,
+      'followVehicle': instance.followVehicle,
+      'showPath': instance.showPath,
+      'maxPathPoints': instance.maxPathPoints,
+    };
