@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import '../../services/timeseries_data_manager.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../providers/service_providers.dart';
 import '../../models/plot_configuration.dart';
 import 'dashboard_config.dart';
 import 'ambient_lighting.dart';
@@ -10,15 +11,14 @@ import 'wing_indicator.dart';
 
 /// Modular Jetshark Dashboard - maintains exact same look, feel, and functionality
 /// but split into configurable components
-class JetsharkDashboard extends StatefulWidget {
+class JetsharkDashboard extends ConsumerStatefulWidget {
   const JetsharkDashboard({super.key});
 
   @override
-  State<JetsharkDashboard> createState() => _JetsharkDashboardState();
+  ConsumerState<JetsharkDashboard> createState() => _JetsharkDashboardState();
 }
 
-class _JetsharkDashboardState extends State<JetsharkDashboard> with TickerProviderStateMixin {
-  final TimeSeriesDataManager _dataManager = TimeSeriesDataManager();
+class _JetsharkDashboardState extends ConsumerState<JetsharkDashboard> with TickerProviderStateMixin {
   Timer? _updateTimer;
   StreamSubscription? _dataSubscription;
   
@@ -50,12 +50,12 @@ class _JetsharkDashboardState extends State<JetsharkDashboard> with TickerProvid
   }
   
   void _startDataListening() {
-    // Listen to data stream from the centralized data manager
-    _dataSubscription = _dataManager.dataStream.listen((dataBuffers) {
+    // Listen to data stream from the telemetry repository
+    final repository = ref.read(telemetryRepositoryProvider);
+    _dataSubscription = repository.dataStream.listen((dataBuffers) {
       // Extract values we need for the dashboard
       _updateFromDataBuffers(dataBuffers);
     });
-    
   }
   
   void _updateFromDataBuffers(Map<String, CircularBuffer> dataBuffers) {
