@@ -1,4 +1,5 @@
 import 'dart:async';
+import '../core/connection_config.dart';
 
 /// Connection state enumeration
 enum ConnectionState {
@@ -38,7 +39,7 @@ abstract interface class IConnectionManager {
   Stream<ConnectionStatus> get statusStream;
   
   /// Connection management
-  Future<void> connect();
+  Future<bool> connect(ConnectionConfig config);
   Future<void> disconnect();
   
   /// Data flow control
