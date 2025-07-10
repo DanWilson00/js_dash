@@ -1,14 +1,18 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:window_manager/window_manager.dart';
+import 'core/service_locator.dart';
+import 'providers/ui_providers.dart';
 import 'services/settings_manager.dart';
 import 'views/navigation/main_navigation.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   
-  // Initialize settings manager
+  // Initialize settings manager and register in DI container
   final settingsManager = SettingsManager();
   await settingsManager.initialize();
+  GetIt.registerSingleton<SettingsManager>(settingsManager);
   debugPrint('Settings initialized successfully');
   
   // Initialize window management (desktop only)
@@ -30,10 +34,12 @@ void main() async {
     debugPrint('Window management not available: $e');
   }
   
-  runApp(SubmersibleJetskiApp(settingsManager: settingsManager));
+  runApp(ProviderScope(
+    child: SubmersibleJetskiApp(settingsManager: settingsManager),
+  ));
 }
 
-class SubmersibleJetskiApp extends StatefulWidget {
+class SubmersibleJetskiApp extends ConsumerStatefulWidget {
   const SubmersibleJetskiApp({
     super.key, 
     required this.settingsManager,
@@ -44,10 +50,10 @@ class SubmersibleJetskiApp extends StatefulWidget {
   final bool autoStartMonitor;
 
   @override
-  State<SubmersibleJetskiApp> createState() => _SubmersibleJetskiAppState();
+  ConsumerState<SubmersibleJetskiApp> createState() => _SubmersibleJetskiAppState();
 }
 
-class _SubmersibleJetskiAppState extends State<SubmersibleJetskiApp> with WindowListener {
+class _SubmersibleJetskiAppState extends ConsumerState<SubmersibleJetskiApp> with WindowListener {
   
   @override
   void initState() {
@@ -110,21 +116,11 @@ class _SubmersibleJetskiAppState extends State<SubmersibleJetskiApp> with Window
 
   @override
   Widget build(BuildContext context) {
+    final theme = ref.watch(themeProvider);
+    
     return MaterialApp(
       title: 'Submersible Jetski Dashboard',
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(
-          seedColor: Colors.blueAccent,
-          brightness: Brightness.dark,
-        ),
-        useMaterial3: true,
-        fontFamily: 'Roboto',
-        textTheme: const TextTheme(
-          bodyLarge: TextStyle(fontWeight: FontWeight.w300),
-          bodyMedium: TextStyle(fontWeight: FontWeight.w300),
-          bodySmall: TextStyle(fontWeight: FontWeight.w300),
-        ),
-      ),
+      theme: theme,
       home: MainNavigation(
         settingsManager: widget.settingsManager,
         autoStartMonitor: widget.autoStartMonitor,
