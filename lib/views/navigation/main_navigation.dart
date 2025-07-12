@@ -7,6 +7,8 @@ import '../../providers/service_providers.dart';
 import '../../providers/ui_providers.dart';
 import '../../providers/action_providers.dart';
 import '../../services/settings_manager.dart';
+import '../../services/telemetry_repository.dart';
+import '../../core/connection_config.dart';
 
 class MainNavigation extends ConsumerStatefulWidget {
   final SettingsManager settingsManager;
@@ -38,17 +40,20 @@ class _MainNavigationState extends ConsumerState<MainNavigation> {
     final repository = ref.read(telemetryRepositoryProvider);
     repository.startTracking();
     
+    // Start listening to connection manager data streams
+    if (repository is TelemetryRepository) {
+      await repository.startListening();
+    }
+    
     _isInitialized = true;
     
     // Load settings after widget tree is built
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadSettings();
+      
+      // Auto-start spoofing if enabled
+      _autoStartSpoofingIfEnabled();
     });
-    
-    // Auto-start monitoring if enabled - disabled temporarily to fix provider error
-    // if (widget.autoStartMonitor) {
-    //   await _autoStartConnection();
-    // }
   }
 
   void _loadSettings() {
@@ -60,13 +65,17 @@ class _MainNavigationState extends ConsumerState<MainNavigation> {
     ref.read(selectedPlotIndexProvider.notifier).state = settings.navigation.selectedPlotIndex;
   }
 
-  Future<void> _autoStartConnection() async {
+  void _autoStartSpoofingIfEnabled() {
     final settings = widget.settingsManager.settings;
-    final connectionActions = ref.read(connectionActionsProvider);
     
-    if (settings.connection.autoStartMonitor) {
-      // Try to connect with saved settings
-      await connectionActions.connectWithCurrentConfig();
+    if (settings.connection.enableSpoofing) {
+      // Auto-start spoofing if enabled in settings
+      final connectionActions = ref.read(connectionActionsProvider);
+      connectionActions.connectWith(SpoofConnectionConfig(
+        systemId: settings.connection.spoofSystemId,
+        componentId: settings.connection.spoofComponentId,
+        baudRate: settings.connection.spoofBaudRate,
+      ));
     }
   }
 

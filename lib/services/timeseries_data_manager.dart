@@ -21,6 +21,7 @@ class TimeSeriesDataManager implements IDataRepository, Disposable {
       StreamController<Map<String, CircularBuffer>>.broadcast();
   
   StreamSubscription? _messageSubscription;
+  MavlinkMessageTracker? _tracker;
   bool _isTracking = false;
   bool _isPaused = false;
   SettingsManager? _settingsManager;
@@ -34,6 +35,9 @@ class TimeSeriesDataManager implements IDataRepository, Disposable {
 
   @override
   Stream<Map<String, CircularBuffer>> get dataStream => _dataController.stream;
+  
+  /// Stream of message statistics from the internal tracker
+  Stream<Map<String, MessageStats>> get messageStatsStream => _tracker?.statsStream ?? const Stream.empty();
 
   @override
   void startTracking([SettingsManager? settingsManager]) {
@@ -47,8 +51,9 @@ class TimeSeriesDataManager implements IDataRepository, Disposable {
       settingsManager.addListener(_updateFromSettings);
     }
 
-    final tracker = MavlinkMessageTracker();
-    _messageSubscription = tracker.statsStream.listen((messageStats) {
+    _tracker = MavlinkMessageTracker();
+    _tracker!.startTracking();
+    _messageSubscription = _tracker!.statsStream.listen((messageStats) {
       _processMessageUpdates(messageStats);
     });
   }
@@ -69,8 +74,16 @@ class TimeSeriesDataManager implements IDataRepository, Disposable {
     _isTracking = false;
     _messageSubscription?.cancel();
     _messageSubscription = null;
+    _tracker?.stopTracking();
+    _tracker = null;
     _settingsManager?.removeListener(_updateFromSettings);
     _settingsManager = null;
+  }
+  
+  /// Track a message through the internal tracker
+  /// This allows external sources to feed messages into the time series data
+  void trackMessage(MavlinkMessage message) {
+    _tracker?.trackMessage(message);
   }
 
   void _processMessageUpdates(Map<String, MessageStats> messageStats) {

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:js_dash/views/telemetry/mavlink_message_monitor.dart';
 import 'package:js_dash/services/mavlink_message_tracker.dart';
 
@@ -15,9 +16,11 @@ void main() {
 
     testWidgets('should build without error', (WidgetTester tester) async {
       await tester.pumpWidget(
-        const MaterialApp(
-          home: Scaffold(
-            body: MavlinkMessageMonitor(autoStart: false),
+        ProviderScope(
+          child: MaterialApp(
+            home: Scaffold(
+              body: MavlinkMessageMonitor(autoStart: false),
+            ),
           ),
         ),
       );
@@ -30,9 +33,11 @@ void main() {
 
     testWidgets('should show header with title', (WidgetTester tester) async {
       await tester.pumpWidget(
-        const MaterialApp(
-          home: Scaffold(
-            body: MavlinkMessageMonitor(autoStart: false),
+        ProviderScope(
+          child: MaterialApp(
+            home: Scaffold(
+              body: MavlinkMessageMonitor(autoStart: false),
+            ),
           ),
         ),
       );
@@ -46,9 +51,11 @@ void main() {
 
     testWidgets('should show empty state when no messages', (WidgetTester tester) async {
       await tester.pumpWidget(
-        const MaterialApp(
-          home: Scaffold(
-            body: MavlinkMessageMonitor(autoStart: false),
+        ProviderScope(
+          child: MaterialApp(
+            home: Scaffold(
+              body: MavlinkMessageMonitor(autoStart: false),
+            ),
           ),
         ),
       );
@@ -64,9 +71,11 @@ void main() {
 
     testWidgets('should have container widgets', (WidgetTester tester) async {
       await tester.pumpWidget(
-        const MaterialApp(
-          home: Scaffold(
-            body: MavlinkMessageMonitor(autoStart: false),
+        ProviderScope(
+          child: MaterialApp(
+            home: Scaffold(
+              body: MavlinkMessageMonitor(autoStart: false),
+            ),
           ),
         ),
       );
@@ -79,9 +88,11 @@ void main() {
 
     testWidgets('should show clear button in header', (WidgetTester tester) async {
       await tester.pumpWidget(
-        const MaterialApp(
-          home: Scaffold(
-            body: MavlinkMessageMonitor(autoStart: false),
+        ProviderScope(
+          child: MaterialApp(
+            home: Scaffold(
+              body: MavlinkMessageMonitor(autoStart: false),
+            ),
           ),
         ),
       );
@@ -97,9 +108,11 @@ void main() {
 
     testWidgets('should have proper visual structure', (WidgetTester tester) async {
       await tester.pumpWidget(
-        const MaterialApp(
-          home: Scaffold(
-            body: MavlinkMessageMonitor(autoStart: false),
+        ProviderScope(
+          child: MaterialApp(
+            home: Scaffold(
+              body: MavlinkMessageMonitor(autoStart: false),
+            ),
           ),
         ),
       );

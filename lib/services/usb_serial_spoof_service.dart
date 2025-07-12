@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:math' as math;
 import 'dart:typed_data';
+import 'package:flutter/foundation.dart';
 import 'package:dart_mavlink/mavlink.dart';
 import 'package:dart_mavlink/dialects/common.dart';
 import '../core/service_locator.dart';
@@ -26,7 +27,6 @@ class UsbSerialSpoofService extends MavlinkDataProvider implements Disposable {
   Timer? _fastTelemetryTimer;  // 10 Hz for attitude, position, HUD
   Timer? _slowTelemetryTimer;  // 1 Hz for SYS_STATUS
   Timer? _heartbeatTimer;      // 1 Hz for HEARTBEAT
-  Timer? _serialTransmissionTimer;
   
   final StreamController<MavlinkFrame> _frameController = StreamController<MavlinkFrame>.broadcast();
   final StreamController<Uint8List> _rawDataController = StreamController<Uint8List>.broadcast();
@@ -39,9 +39,8 @@ class UsbSerialSpoofService extends MavlinkDataProvider implements Disposable {
   bool _isPaused = false;
   bool _isInitialized = false;
   
-  // Buffer for realistic byte streaming
+  // Buffer for transmission statistics (kept for backwards compatibility)
   final List<int> _transmissionBuffer = [];
-  static const int _bytesPerTransmission = 64; // Realistic USB serial chunk size
   
   // Telemetry simulation state
   double _altitude = 0.0;
@@ -115,12 +114,7 @@ class UsbSerialSpoofService extends MavlinkDataProvider implements Disposable {
     _isConnected = true;
     _isPaused = false;
     
-    // Calculate realistic transmission timing based on baud rate
-    // Each MAVLink message is typically 20-40 bytes
-    // At 57600 baud, that's about 5760 bytes/second
-    // So we can transmit roughly 150-250 messages per second
-    // We'll be more conservative and limit to realistic rates
-    const transmissionIntervalMs = 5; // 200 Hz transmission rate
+    // Data is transmitted immediately when generated to prevent stepped signals
     
     // Start fast telemetry at 10 Hz (attitude, position, HUD)
     _fastTelemetryTimer = Timer.periodic(
@@ -140,11 +134,8 @@ class UsbSerialSpoofService extends MavlinkDataProvider implements Disposable {
       (_) => _generateHeartbeatMessage(),
     );
     
-    // Start serial transmission simulation
-    _serialTransmissionTimer = Timer.periodic(
-      Duration(milliseconds: transmissionIntervalMs),
-      (_) => _transmitBufferedData(),
-    );
+    // No longer using buffered transmission - data is transmitted immediately
+    // when generated to prevent stepped signals
   }
 
   /// Stop spoofing
@@ -152,7 +143,6 @@ class UsbSerialSpoofService extends MavlinkDataProvider implements Disposable {
     _fastTelemetryTimer?.cancel();
     _slowTelemetryTimer?.cancel();
     _heartbeatTimer?.cancel();
-    _serialTransmissionTimer?.cancel();
     
     _transmissionBuffer.clear();
     _isConnected = false;
@@ -360,32 +350,13 @@ class UsbSerialSpoofService extends MavlinkDataProvider implements Disposable {
     );
     
     final bytes = frame.serialize();
-    _transmissionBuffer.addAll(bytes);
+    
+    // For spoofing, transmit immediately instead of buffering
+    // This prevents stepped signals caused by retransmitting old data
+    _parser?.parse(Uint8List.fromList(bytes));
+    _rawDataController.add(Uint8List.fromList(bytes));
   }
 
-  /// Transmit buffered data at realistic serial speeds
-  void _transmitBufferedData() {
-    if (_transmissionBuffer.isEmpty || !_isConnected) return;
-    
-    // Determine how many bytes to transmit this cycle
-    final bytesToTransmit = _transmissionBuffer.length > _bytesPerTransmission 
-        ? _bytesPerTransmission 
-        : _transmissionBuffer.length;
-    
-    // Extract bytes for transmission
-    final dataToTransmit = Uint8List.fromList(
-      _transmissionBuffer.take(bytesToTransmit).toList()
-    );
-    
-    // Remove transmitted bytes from buffer
-    _transmissionBuffer.removeRange(0, bytesToTransmit);
-    
-    // Simulate realistic transmission (parse as if received over serial)
-    _parser?.parse(dataToTransmit);
-    
-    // Also emit raw data for debugging/monitoring
-    _rawDataController.add(dataToTransmit);
-  }
 
   /// Get transmission statistics
   Map<String, dynamic> getTransmissionStats() {

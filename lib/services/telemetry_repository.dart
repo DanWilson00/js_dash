@@ -5,6 +5,7 @@ import '../interfaces/i_data_repository.dart';
 import '../models/plot_configuration.dart';
 import '../services/connection_manager.dart';
 import '../services/timeseries_data_manager.dart';
+import '../services/mavlink_message_tracker.dart';
 
 /// Centralized telemetry repository that unifies data access from various sources
 /// This service provides a single pipeline for telemetry data processing,
@@ -106,8 +107,9 @@ class TelemetryRepository implements IDataRepository, Disposable {
     // Subscribe to the message stream and forward to time series manager
     _dataSourceSubscription = dataSource.messageStream.listen((message) {
       if (!_isPaused) {
-        // The time series manager will handle message processing
-        // We just ensure it's tracking messages from this source
+        // Forward the message to the time series manager for storage
+        final tsManager = _tsManager;
+        tsManager.trackMessage(message);
       }
     });
   }
@@ -122,6 +124,9 @@ class TelemetryRepository implements IDataRepository, Disposable {
   
   @override
   Stream<Map<String, CircularBuffer>> get dataStream => _tsManager.dataStream;
+  
+  /// Stream of message statistics from the time series manager
+  Stream<Map<String, MessageStats>> get messageStatsStream => _tsManager.messageStatsStream;
 
   @override
   void startTracking([settingsManager]) {

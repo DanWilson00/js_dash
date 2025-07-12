@@ -4,11 +4,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:latlong2/latlong.dart';
 import 'dart:async';
 import 'dart:math' as math;
-import 'package:dart_mavlink/dialects/common.dart';
+import '../../providers/service_providers.dart';
 import '../../providers/ui_providers.dart';
 import '../../services/settings_manager.dart';
-import '../../services/usb_serial_spoof_service.dart';
 import '../../services/bing_maps_service.dart';
+import '../../models/plot_configuration.dart';
 
 class MapView extends ConsumerStatefulWidget {
   const MapView({
@@ -24,7 +24,6 @@ class MapView extends ConsumerStatefulWidget {
 
 class _MapViewState extends ConsumerState<MapView> {
   final MapController _mapController = MapController();
-  final UsbSerialSpoofService _mavlinkService = UsbSerialSpoofService();
   
   // Map layers
   BingMapType _currentLayer = BingMapType.aerial;
@@ -43,14 +42,13 @@ class _MapViewState extends ConsumerState<MapView> {
   double? _lastSavedZoom;
   Timer? _saveTimer;
   
-  // Subscriptions for MAVLink data
-  StreamSubscription<GlobalPositionInt>? _gpsSubscription;
-  StreamSubscription<VfrHud>? _hudSubscription;
+  // Subscription for telemetry data
+  StreamSubscription<Map<String, CircularBuffer>>? _dataSubscription;
 
   @override
   void initState() {
     super.initState();
-    _startMAVLinkListening();
+    _setupTelemetryListening();
     _startPeriodicSave();
   }
 
@@ -67,24 +65,33 @@ class _MapViewState extends ConsumerState<MapView> {
     });
   }
 
-  Future<void> _startMAVLinkListening() async {
-    await _mavlinkService.initialize();
+  /// Setup telemetry listening from repository
+  void _setupTelemetryListening() {
+    final repository = ref.read(telemetryRepositoryProvider);
     
-    // Start spoofing to simulate vehicle movement
-    await _mavlinkService.startSpoofing(
-      baudRate: 57600,
-      systemId: 1,
-      componentId: 1,
-    );
-    
-    // Listen for GPS position updates
-    _gpsSubscription = _mavlinkService.gpsStream.listen((gps) {
+    // Listen to telemetry data stream from the repository
+    _dataSubscription = repository.dataStream.listen((dataBuffers) {
       if (!mounted) return;
+      _updateMapFromDataBuffers(dataBuffers);
+    });
+  }
+  
+  /// Update map view from telemetry data buffers
+  void _updateMapFromDataBuffers(Map<String, CircularBuffer> dataBuffers) {
+    // Extract GPS position from data buffers
+    final latBuffer = dataBuffers['GLOBAL_POSITION_INT.lat'];
+    final lonBuffer = dataBuffers['GLOBAL_POSITION_INT.lon'];
+    final headingBuffer = dataBuffers['VFR_HUD.heading'];
+    
+    if (latBuffer != null && latBuffer.points.isNotEmpty && 
+        lonBuffer != null && lonBuffer.points.isNotEmpty) {
+      final lat = latBuffer.points.last.value;
+      final lon = lonBuffer.points.last.value;
+      final heading = headingBuffer != null && headingBuffer.points.isNotEmpty 
+          ? headingBuffer.points.last.value 
+          : null;
       
-      final newLocation = LatLng(
-        gps.lat / 1e7, // Convert from 1E7 format to degrees
-        gps.lon / 1e7,
-      );
+      final newLocation = LatLng(lat / 1e7, lon / 1e7);
       
       setState(() {
         _vehicleLocation = newLocation;
@@ -95,23 +102,20 @@ class _MapViewState extends ConsumerState<MapView> {
         if (_vehiclePath.length > mapSettings.maxPathPoints) {
           _vehiclePath.removeAt(0);
         }
+        
+        // Update heading if available
+        if (heading != null) {
+          _vehicleHeading = heading;
+        }
       });
       
       // Auto-follow vehicle if enabled (preserve current zoom level)
       final mapSettings = ref.read(mapSettingsProvider);
-      if (mapSettings.followVehicle && _vehicleLocation != null && _mapReady) {
+      if (mapSettings.followVehicle && _mapReady) {
         final currentZoom = _mapController.camera.zoom;
-        _mapController.move(_vehicleLocation!, currentZoom);
+        _mapController.move(newLocation, currentZoom);
       }
-    });
-    
-    // Listen for heading updates
-    _hudSubscription = _mavlinkService.vfrHudStream.listen((hud) {
-      if (!mounted) return;
-      setState(() {
-        _vehicleHeading = hud.heading.toDouble();
-      });
-    });
+    }
   }
 
   /// Save current map position and zoom to settings
@@ -135,10 +139,8 @@ class _MapViewState extends ConsumerState<MapView> {
 
   @override
   void dispose() {
-    _gpsSubscription?.cancel();
-    _hudSubscription?.cancel();
+    _dataSubscription?.cancel();
     _saveTimer?.cancel();
-    _mavlinkService.stopSpoofing();
     super.dispose();
   }
 

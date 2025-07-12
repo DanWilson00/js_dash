@@ -1,14 +1,17 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:js_dash/views/telemetry/mavlink_message_monitor.dart';
 
 void main() {
   group('MavlinkMessageMonitor Basic Tests', () {
     testWidgets('should build and display basic structure', (WidgetTester tester) async {
       await tester.pumpWidget(
-        const MaterialApp(
-          home: Scaffold(
-            body: MavlinkMessageMonitor(autoStart: false),
+        ProviderScope(
+          child: MaterialApp(
+            home: Scaffold(
+              body: MavlinkMessageMonitor(autoStart: false),
+            ),
           ),
         ),
       );

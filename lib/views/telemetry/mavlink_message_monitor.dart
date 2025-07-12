@@ -1,8 +1,11 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../services/mavlink_message_tracker.dart';
+import '../../services/telemetry_repository.dart';
+import '../../providers/service_providers.dart';
 
-class MavlinkMessageMonitor extends StatefulWidget {
+class MavlinkMessageMonitor extends ConsumerStatefulWidget {
   const MavlinkMessageMonitor({
     super.key, 
     this.autoStart = true,
@@ -17,12 +20,11 @@ class MavlinkMessageMonitor extends StatefulWidget {
   final Map<String, Color> selectedPlotFields; // Fields in selected plot with their colors
 
   @override
-  State<MavlinkMessageMonitor> createState() => _MavlinkMessageMonitorState();
+  ConsumerState<MavlinkMessageMonitor> createState() => _MavlinkMessageMonitorState();
 }
 
-class _MavlinkMessageMonitorState extends State<MavlinkMessageMonitor> {
+class _MavlinkMessageMonitorState extends ConsumerState<MavlinkMessageMonitor> {
   static const double _monitorWidth = 350.0;
-  final MavlinkMessageTracker _tracker = MavlinkMessageTracker();
   Map<String, MessageStats> _messageStats = {};
   StreamSubscription? _statsSubscription;
   final Set<String> _expandedMessages = {};
@@ -40,16 +42,17 @@ class _MavlinkMessageMonitorState extends State<MavlinkMessageMonitor> {
   }
 
   void _initializeTracker() {
-    if (widget.autoStart) {
-      _tracker.startTracking();
+    // Use centralized message stats stream from TelemetryRepository
+    final repository = ref.read(telemetryRepositoryProvider);
+    if (repository is TelemetryRepository) {
+      _statsSubscription = repository.messageStatsStream.listen((stats) {
+        if (mounted) {
+          setState(() {
+            _messageStats = stats;
+          });
+        }
+      });
     }
-    _statsSubscription = _tracker.statsStream.listen((stats) {
-      if (mounted) {
-        setState(() {
-          _messageStats = stats;
-        });
-      }
-    });
   }
 
   void _toggleExpanded(String messageName) {
@@ -63,7 +66,14 @@ class _MavlinkMessageMonitorState extends State<MavlinkMessageMonitor> {
   }
 
   void _clearStats() {
-    _tracker.clearStats();
+    // Clear data through the centralized repository
+    final repository = ref.read(telemetryRepositoryProvider);
+    repository.clearAllData();
+    
+    // Also clear the local stats state
+    setState(() {
+      _messageStats.clear();
+    });
   }
 
   @override

@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../providers/action_providers.dart';
 import '../../services/settings_manager.dart';
+import '../../core/connection_config.dart';
 
-class ConnectionSettingsPanel extends StatefulWidget {
+class ConnectionSettingsPanel extends ConsumerStatefulWidget {
   final SettingsManager settingsManager;
 
   const ConnectionSettingsPanel({
@@ -11,10 +14,10 @@ class ConnectionSettingsPanel extends StatefulWidget {
   });
 
   @override
-  State<ConnectionSettingsPanel> createState() => _ConnectionSettingsPanelState();
+  ConsumerState<ConnectionSettingsPanel> createState() => _ConnectionSettingsPanelState();
 }
 
-class _ConnectionSettingsPanelState extends State<ConnectionSettingsPanel> {
+class _ConnectionSettingsPanelState extends ConsumerState<ConnectionSettingsPanel> {
   late TextEditingController _hostController;
   late TextEditingController _portController;
   late TextEditingController _serialPortController;
@@ -107,8 +110,36 @@ class _ConnectionSettingsPanelState extends State<ConnectionSettingsPanel> {
                   title: const Text('Enable spoofing'),
                   subtitle: const Text('Use test data instead of real MAVLink connection'),
                   value: connection.enableSpoofing,
-                  onChanged: (value) {
+                  onChanged: (value) async {
+                    // Disconnect current connection before changing mode
+                    try {
+                      final connectionActions = ref.read(connectionActionsProvider);
+                      await connectionActions.disconnect();
+                      
+                      // Clear any existing data to prevent showing stale "connected" status
+                      final dataActions = ref.read(dataActionsProvider);
+                      dataActions.clearAllData();
+                    } catch (e) {
+                      // Continue with settings update even if disconnect fails
+                    }
+                    
+                    // Update the setting
                     widget.settingsManager.updateConnectionMode(value);
+                    
+                    // Auto-start spoofing if enabled
+                    if (value) {
+                      try {
+                        final connectionActions = ref.read(connectionActionsProvider);
+                        final connection = widget.settingsManager.connection;
+                        await connectionActions.connectWith(SpoofConnectionConfig(
+                          systemId: connection.spoofSystemId,
+                          componentId: connection.spoofComponentId,
+                          baudRate: connection.spoofBaudRate,
+                        ));
+                      } catch (e) {
+                        // Silently handle auto-start failures
+                      }
+                    }
                   },
                 ),
               ],

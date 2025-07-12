@@ -1,12 +1,13 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
-import '../../services/timeseries_data_manager.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../providers/service_providers.dart';
 import '../../services/settings_manager.dart';
 import 'mavlink_message_monitor.dart';
 import 'plot_grid.dart';
 import '../settings/settings_dialog.dart';
 
-class RealtimeDataDisplay extends StatefulWidget {
+class RealtimeDataDisplay extends ConsumerStatefulWidget {
   const RealtimeDataDisplay({
     super.key, 
     required this.settingsManager,
@@ -17,11 +18,10 @@ class RealtimeDataDisplay extends StatefulWidget {
   final bool autoStartMonitor;
 
   @override
-  State<RealtimeDataDisplay> createState() => _RealtimeDataDisplayState();
+  ConsumerState<RealtimeDataDisplay> createState() => _RealtimeDataDisplayState();
 }
 
-class _RealtimeDataDisplayState extends State<RealtimeDataDisplay> {
-  final TimeSeriesDataManager _dataManager = TimeSeriesDataManager();
+class _RealtimeDataDisplayState extends ConsumerState<RealtimeDataDisplay> {
   final GlobalKey<PlotGridManagerState> _plotGridKey = GlobalKey<PlotGridManagerState>();
   
   // Current telemetry data (kept for message tracking functionality)  
@@ -38,18 +38,27 @@ class _RealtimeDataDisplayState extends State<RealtimeDataDisplay> {
     // Listen for settings changes
     widget.settingsManager.addListener(_onSettingsChanged);
     
-    // Listen for data changes to update connection status
-    _dataStreamSubscription = _dataManager.dataStream.listen((_) {
+    // Listen for data changes to update connection status via TelemetryRepository
+    // This will be set up in didChangeDependencies when ref is available
+  }
+  
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    
+    // Set up data stream subscription using TelemetryRepository
+    final repository = ref.read(telemetryRepositoryProvider);
+    _dataStreamSubscription = repository.dataStream.listen((_) {
       if (mounted) {
         setState(() {}); // Trigger rebuild to update connection status
       }
     });
     
-    // Sync data manager with current pause state
+    // Sync repository with current pause state
     if (_isPaused) {
-      _dataManager.pause();
+      repository.pause();
     } else {
-      _dataManager.resume();
+      repository.resume();
     }
   }
   
@@ -61,10 +70,11 @@ class _RealtimeDataDisplayState extends State<RealtimeDataDisplay> {
       // Pause state changed
       setState(() {
         _isPaused = newIsPaused;
+        final repository = ref.read(telemetryRepositoryProvider);
         if (_isPaused) {
-          _dataManager.pause();
+          repository.pause();
         } else {
-          _dataManager.resume();
+          repository.resume();
         }
       });
     }
@@ -87,10 +97,11 @@ class _RealtimeDataDisplayState extends State<RealtimeDataDisplay> {
   void _togglePause() {
     setState(() {
       _isPaused = !_isPaused;
+      final repository = ref.read(telemetryRepositoryProvider);
       if (_isPaused) {
-        _dataManager.pause();
+        repository.pause();
       } else {
-        _dataManager.resume();
+        repository.resume();
       }
     });
     
@@ -100,8 +111,10 @@ class _RealtimeDataDisplayState extends State<RealtimeDataDisplay> {
   
   void _clearAllPlots() {
     _plotGridKey.currentState?.clearAllPlots();
-    _dataManager.clearAllData();
+    final repository = ref.read(telemetryRepositoryProvider);
+    repository.clearAllData();
   }
+
 
   void _openSettings() {
     showDialog(
@@ -180,10 +193,10 @@ class _RealtimeDataDisplayState extends State<RealtimeDataDisplay> {
   }
 
   Widget _buildConnectionStatus() {
-    // Determine connection status based on recent data availability and pause state
-    final hasRecentData = _hasRecentData();
-    final isConnected = hasRecentData && !_isPaused;
+    // Get actual connection status from connection manager through providers
+    final isActuallyConnected = ref.watch(isConnectedProvider);
     
+    final isConnected = isActuallyConnected && !_isPaused;
     final connection = widget.settingsManager.connection;
     final statusColor = _isPaused ? Colors.orange : (isConnected ? Colors.green : Colors.red);
     
@@ -224,13 +237,15 @@ class _RealtimeDataDisplayState extends State<RealtimeDataDisplay> {
     final now = DateTime.now();
     final cutoff = now.subtract(const Duration(seconds: 5));
     
+    final repository = ref.read(telemetryRepositoryProvider);
+    
     // Check each available field for recent data points
-    for (final fieldKey in _dataManager.getAvailableFields()) {
+    for (final fieldKey in repository.getAvailableFields()) {
       final parts = fieldKey.split('.');
       if (parts.length >= 2) {
         final messageType = parts[0];
         final fieldName = parts.sublist(1).join('.');
-        final data = _dataManager.getFieldData(messageType, fieldName);
+        final data = repository.getFieldData(messageType, fieldName);
         
         // Check if any data point is recent
         if (data.any((point) => point.timestamp.isAfter(cutoff))) {
