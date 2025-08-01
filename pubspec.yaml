@@ -36,29 +36,29 @@ dependencies:
   dart_mavlink: ^0.1.0 # Use the latest version from pub.dev
 
   # Charting libraries for time-series plots
-  fl_chart: ^0.69.0
+  fl_chart: ^1.0.0
   
   # Date formatting utilities
-  intl: ^0.19.0
+  intl: ^0.20.2
 
   # Settings persistence
   shared_preferences: ^2.2.2
   
   # Window management for desktop
-  window_manager: ^0.3.7
+  window_manager: ^0.5.1
   
   # JSON serialization
   json_annotation: ^4.9.0
   
   # Mapping with Bing Maps satellite imagery
-  flutter_map: ^7.0.2
+  flutter_map: ^8.2.1
   latlong2: ^0.9.1
   
   # HTTP requests for Bing Maps metadata
   http: ^1.1.0
   
   # Serial port communication for MAVLink over USB
-  flutter_libserialport: ^0.4.0
+  flutter_libserialport: ^0.5.0
 
   # State management with Riverpod
   flutter_riverpod: ^2.5.1
@@ -80,7 +80,7 @@ dev_dependencies:
   # activated in the `analysis_options.yaml` file located at the root of your
   # package. See that file for information about deactivating specific lint
   # rules and activating additional ones.
-  flutter_lints: ^5.0.0
+  flutter_lints: ^6.0.0
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec

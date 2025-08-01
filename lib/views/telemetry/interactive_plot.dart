@@ -698,7 +698,6 @@ class _InteractivePlotState extends State<InteractivePlot> {
               },
               touchTooltipData: LineTouchTooltipData(
                 getTooltipColor: (spot) => Theme.of(context).colorScheme.surface.withValues(alpha: 0.9), // Semi-transparent plot background
-                tooltipRoundedRadius: 8,
                 tooltipBorder: BorderSide(
                   color: Theme.of(context).colorScheme.outline,
                   width: 2,
