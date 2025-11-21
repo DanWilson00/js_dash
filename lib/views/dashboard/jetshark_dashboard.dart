@@ -6,6 +6,7 @@ import '../../models/plot_configuration.dart';
 import 'dashboard_config.dart';
 import 'hud_center_cluster.dart';
 import 'hud_side_indicators.dart';
+import 'shader_background.dart';
 
 /// Modular Jetshark Dashboard - Fighter Jet HUD Redesign
 class JetsharkDashboard extends ConsumerStatefulWidget {
@@ -17,33 +18,47 @@ class JetsharkDashboard extends ConsumerStatefulWidget {
 
 class _JetsharkDashboardState extends ConsumerState<JetsharkDashboard>
     with TickerProviderStateMixin {
-  Timer? _updateTimer;
   StreamSubscription? _dataSubscription;
 
   // Animation controllers
   late AnimationController _startupController;
+  late AnimationController _smoothDataController;
 
   // Animated values
   late Animation<double> _startupAnimation;
 
-  // Data values
-  double _rpm = 0.0;
+  // Data values (Raw Targets)
   double _targetRpm = 0.0;
-  double _speed = 0.0;
-  double _leftWing = 0.0;
-  double _rightWing = 0.0;
+  double _targetSpeed = 0.0;
+  double _targetPitch = 0.0;
+  double _targetRoll = 0.0;
+  double _targetYaw = 0.0;
   double _targetLeftWing = 0.0;
   double _targetRightWing = 0.0;
-  double _pitch = 0.0;
-  double _roll = 0.0;
-  double _yaw = 0.0;
+
+  // Smoothed Data Values (for 60fps animation)
+  double _smoothRpm = 0;
+  double _smoothSpeed = 0;
+  double _smoothPitch = 0;
+  double _smoothRoll = 0;
+  double _smoothYaw = 0;
+  double _smoothLeftWing = 0;
+  double _smoothRightWing = 0;
 
   @override
   void initState() {
     super.initState();
     _initializeAnimations();
     _startDataListening();
-    _startUpdates();
+
+    // Setup smooth data animation loop (60fps)
+    _smoothDataController =
+        AnimationController(
+            vsync: this,
+            duration: const Duration(milliseconds: 16),
+          )
+          ..addListener(_updateSmoothData)
+          ..repeat();
   }
 
   void _startDataListening() {
@@ -89,9 +104,9 @@ class _JetsharkDashboardState extends ConsumerState<JetsharkDashboard>
       rightWing = -rollDeg;
 
       setState(() {
-        _pitch = pitchDeg;
-        _roll = rollDeg;
-        _yaw = yawDeg;
+        _targetPitch = pitchDeg;
+        _targetRoll = rollDeg;
+        _targetYaw = yawDeg;
       });
     }
 
@@ -99,7 +114,7 @@ class _JetsharkDashboardState extends ConsumerState<JetsharkDashboard>
       setState(() {
         if (rpm != null) _targetRpm = rpm;
         if (speed != null) {
-          _speed = speed * DashboardConfig.speedConversionFactor;
+          _targetSpeed = speed * DashboardConfig.speedConversionFactor;
         }
         if (leftWing != null) _targetLeftWing = leftWing;
         if (rightWing != null) _targetRightWing = rightWing;
@@ -130,27 +145,27 @@ class _JetsharkDashboardState extends ConsumerState<JetsharkDashboard>
     );
   }
 
-  @override
-  void dispose() {
-    _updateTimer?.cancel();
-    _dataSubscription?.cancel();
-    _startupController.dispose();
-    super.dispose();
+  void _updateSmoothData() {
+    // Smooth interpolation factor (adjust for responsiveness vs smoothness)
+    const double lerpFactor = 0.1;
+
+    setState(() {
+      _smoothRpm += (_targetRpm - _smoothRpm) * lerpFactor;
+      _smoothSpeed += (_targetSpeed - _smoothSpeed) * lerpFactor;
+      _smoothPitch += (_targetPitch - _smoothPitch) * lerpFactor;
+      _smoothRoll += (_targetRoll - _smoothRoll) * lerpFactor;
+      _smoothYaw += (_targetYaw - _smoothYaw) * lerpFactor;
+      _smoothLeftWing += (_targetLeftWing - _smoothLeftWing) * lerpFactor;
+      _smoothRightWing += (_targetRightWing - _smoothRightWing) * lerpFactor;
+    });
   }
 
-  void _startUpdates() {
-    _updateTimer = Timer.periodic(DashboardConfig.updateInterval, (_) {
-      setState(() {
-        _rpm = _rpm + (_targetRpm - _rpm) * DashboardConfig.smoothingFactor;
-
-        _leftWing =
-            _leftWing +
-            (_targetLeftWing - _leftWing) * DashboardConfig.smoothingFactor;
-        _rightWing =
-            _rightWing +
-            (_targetRightWing - _rightWing) * DashboardConfig.smoothingFactor;
-      });
-    });
+  @override
+  void dispose() {
+    _dataSubscription?.cancel();
+    _startupController.dispose();
+    _smoothDataController.dispose();
+    super.dispose();
   }
 
   @override
@@ -162,87 +177,73 @@ class _JetsharkDashboardState extends ConsumerState<JetsharkDashboard>
         builder: (context, child) {
           return Opacity(
             opacity: _startupAnimation.value,
-            child: Container(
-              decoration: BoxDecoration(
-                gradient: RadialGradient(
-                  center: Alignment.center,
-                  radius: 1.2,
-                  colors: [
-                    DashboardConfig.gradientCenter,
-                    DashboardConfig.gradientEdge,
-                  ],
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                // 1. Background Layer - GLSL Shader
+                const Positioned.fill(child: ShaderBackground()),
+
+                // 2. Center Cluster (Attitude + RPM)
+                Positioned.fill(
+                  child: Padding(
+                    padding: const EdgeInsets.all(40.0),
+                    child: HudCenterCluster(
+                      pitch: _smoothPitch,
+                      roll: _smoothRoll,
+                      yaw: _smoothYaw,
+                      rpm: _smoothRpm,
+                    ),
+                  ),
                 ),
-              ),
-              child: SafeArea(
-                child: Stack(
-                  children: [
-                    // 1. Center Cluster (Attitude + RPM)
-                    // We want this to take up most of the screen
-                    Positioned.fill(
-                      child: Padding(
-                        padding: const EdgeInsets.all(40.0),
-                        child: HudCenterCluster(
-                          pitch: _pitch,
-                          roll: _roll,
-                          yaw: _yaw,
-                          rpm: _rpm,
+
+                // 3. Side Indicators (Wings)
+                Positioned(
+                  left: 80,
+                  top: 80,
+                  bottom: 80,
+                  right: 80,
+                  child: HudSideIndicators(
+                    leftWingAngle: _smoothLeftWing,
+                    rightWingAngle: _smoothRightWing,
+                    targetLeftWingAngle: _targetLeftWing,
+                    targetRightWingAngle: _targetRightWing,
+                  ),
+                ),
+
+                // 4. Top Speed Display
+                Positioned(
+                  top: 30,
+                  right: 40,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text(
+                        _smoothSpeed.toStringAsFixed(1),
+                        style: const TextStyle(
+                          color: Color(0xFF00D9FF),
+                          fontSize: 64,
+                          fontWeight: FontWeight.w200,
+                          fontFamily: 'RobotoMono',
+                          shadows: [
+                            Shadow(blurRadius: 20, color: Color(0xFF00D9FF)),
+                          ],
                         ),
                       ),
-                    ),
-
-                    // 2. Side Indicators (Wings)
-                    Positioned(
-                      left: 80,
-                      top: 80,
-                      bottom: 80,
-                      right: 80,
-                      child: HudSideIndicators(
-                        leftWingAngle: _leftWing,
-                        rightWingAngle: _rightWing,
-                        targetLeftWingAngle: _targetLeftWing,
-                        targetRightWingAngle: _targetRightWing,
-                      ),
-                    ),
-
-                    // 3. Top Speed Display
-                    Positioned(
-                      top: 30,
-                      right: 40,
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.end,
-                        children: [
-                          Text(
-                            _speed.toStringAsFixed(1),
-                            style: const TextStyle(
-                              color: Color(0xFF00D9FF),
-                              fontSize: 64,
-                              fontWeight: FontWeight.w200,
-                              fontFamily: 'RobotoMono',
-                              shadows: [
-                                Shadow(
-                                  blurRadius: 20,
-                                  color: Color(0xFF00D9FF),
-                                ),
-                              ],
-                            ),
+                      Text(
+                        'KNOTS',
+                        style: TextStyle(
+                          color: DashboardConfig.textSecondary.withValues(
+                            alpha: 0.6,
                           ),
-                          Text(
-                            'KNOTS',
-                            style: TextStyle(
-                              color: DashboardConfig.textSecondary.withValues(
-                                alpha: 0.6,
-                              ),
-                              fontSize: 14,
-                              letterSpacing: 3.0,
-                              fontWeight: FontWeight.w200,
-                            ),
-                          ),
-                        ],
+                          fontSize: 14,
+                          letterSpacing: 3.0,
+                          fontWeight: FontWeight.w200,
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
-              ),
+              ],
             ),
           );
         },
