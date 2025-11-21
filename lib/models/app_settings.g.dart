@@ -19,6 +19,9 @@ AppSettings _$AppSettingsFromJson(Map<String, dynamic> json) => AppSettings(
     json['performance'] as Map<String, dynamic>,
   ),
   map: MapSettings.fromJson(json['map'] as Map<String, dynamic>),
+  appearance: AppearanceSettings.fromJson(
+    json['appearance'] as Map<String, dynamic>,
+  ),
 );
 
 Map<String, dynamic> _$AppSettingsToJson(AppSettings instance) =>
@@ -29,7 +32,14 @@ Map<String, dynamic> _$AppSettingsToJson(AppSettings instance) =>
       'navigation': instance.navigation,
       'performance': instance.performance,
       'map': instance.map,
+      'appearance': instance.appearance,
     };
+
+AppearanceSettings _$AppearanceSettingsFromJson(Map<String, dynamic> json) =>
+    AppearanceSettings(uiScale: (json['uiScale'] as num).toDouble());
+
+Map<String, dynamic> _$AppearanceSettingsToJson(AppearanceSettings instance) =>
+    <String, dynamic>{'uiScale': instance.uiScale};
 
 WindowSettings _$WindowSettingsFromJson(Map<String, dynamic> json) =>
     WindowSettings(
