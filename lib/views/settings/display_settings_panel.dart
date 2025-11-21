@@ -252,6 +252,17 @@ class _DisplaySettingsPanelState extends State<DisplaySettingsPanel> {
                     },
                   ),
                 ),
+                SwitchListTile(
+                  dense: true,
+                  title: const Text('Plot shading'),
+                  subtitle: const Text('Show gradient fill below plot lines'),
+                  value: plots.showPlotShading,
+                  onChanged: (value) {
+                    widget.settingsManager.updatePlots(
+                      plots.copyWith(showPlotShading: value),
+                    );
+                  },
+                ),
               ],
             ),
           ),

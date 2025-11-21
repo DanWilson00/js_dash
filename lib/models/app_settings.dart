@@ -134,6 +134,7 @@ class PlotSettings {
   final int selectedPlotIndex;
   final bool propertiesPanelVisible;
   final bool selectorPanelVisible;
+  final bool showPlotShading;
 
   const PlotSettings({
     required this.plotCount,
@@ -144,6 +145,7 @@ class PlotSettings {
     required this.selectedPlotIndex,
     required this.propertiesPanelVisible,
     required this.selectorPanelVisible,
+    required this.showPlotShading,
   });
 
   factory PlotSettings.defaults() {
@@ -156,6 +158,7 @@ class PlotSettings {
       selectedPlotIndex: 0,
       propertiesPanelVisible: false,
       selectorPanelVisible: false,
+      showPlotShading: true,
     );
   }
 
@@ -172,6 +175,7 @@ class PlotSettings {
     int? selectedPlotIndex,
     bool? propertiesPanelVisible,
     bool? selectorPanelVisible,
+    bool? showPlotShading,
   }) {
     return PlotSettings(
       plotCount: plotCount ?? this.plotCount,
@@ -183,6 +187,7 @@ class PlotSettings {
       propertiesPanelVisible:
           propertiesPanelVisible ?? this.propertiesPanelVisible,
       selectorPanelVisible: selectorPanelVisible ?? this.selectorPanelVisible,
+      showPlotShading: showPlotShading ?? this.showPlotShading,
     );
   }
 }
