@@ -30,6 +30,8 @@ class PlotGridManagerState extends State<PlotGridManager> {
   String? _resizingPlotId;
   Offset? _dragStartPosition;
   PlotLayoutData? _initialLayoutData;
+  Offset? _dragStartGlobalPosition;
+  Offset? _resizeStartGlobalPosition;
 
   @override
   void initState() {
@@ -274,6 +276,7 @@ class PlotGridManagerState extends State<PlotGridManager> {
     setState(() {
       _draggingPlotId = plot.id;
       _initialLayoutData = plot.layoutData;
+      _dragStartGlobalPosition = details.globalPosition;
       _selectPlot(plot.id);
     });
   }
@@ -283,26 +286,34 @@ class PlotGridManagerState extends State<PlotGridManager> {
     DragUpdateDetails details,
     BoxConstraints constraints,
   ) {
-    if (_draggingPlotId != plot.id || _initialLayoutData == null) return;
+    if (_draggingPlotId != plot.id ||
+        _initialLayoutData == null ||
+        _dragStartGlobalPosition == null)
+      return;
 
-    final deltaX = details.delta.dx / constraints.maxWidth;
-    final deltaY = details.delta.dy / constraints.maxHeight;
+    // Calculate TOTAL delta from drag start (not incremental)
+    final totalDeltaX =
+        (details.globalPosition.dx - _dragStartGlobalPosition!.dx) /
+        constraints.maxWidth;
+    final totalDeltaY =
+        (details.globalPosition.dy - _dragStartGlobalPosition!.dy) /
+        constraints.maxHeight;
 
-    final currentLayout = _plots.firstWhere((p) => p.id == plot.id).layoutData;
-    final updatedX = (currentLayout.x + deltaX).clamp(
+    // Apply total delta to INITIAL layout
+    final updatedX = (_initialLayoutData!.x + totalDeltaX).clamp(
       0.0,
-      1.0 - currentLayout.width,
+      1.0 - _initialLayoutData!.width,
     );
-    final updatedY = (currentLayout.y + deltaY).clamp(
+    final updatedY = (_initialLayoutData!.y + totalDeltaY).clamp(
       0.0,
-      1.0 - currentLayout.height,
+      1.0 - _initialLayoutData!.height,
     );
 
     setState(() {
       final index = _plots.indexWhere((p) => p.id == plot.id);
       if (index != -1) {
         _plots[index] = _plots[index].copyWith(
-          layoutData: currentLayout.copyWith(x: updatedX, y: updatedY),
+          layoutData: _initialLayoutData!.copyWith(x: updatedX, y: updatedY),
         );
       }
     });
@@ -312,6 +323,7 @@ class PlotGridManagerState extends State<PlotGridManager> {
     setState(() {
       _draggingPlotId = null;
       _initialLayoutData = null;
+      _dragStartGlobalPosition = null;
     });
     _saveToSettings();
   }
@@ -322,6 +334,7 @@ class PlotGridManagerState extends State<PlotGridManager> {
     setState(() {
       _resizingPlotId = plot.id;
       _initialLayoutData = plot.layoutData;
+      _resizeStartGlobalPosition = details.globalPosition;
       _selectPlot(plot.id);
     });
   }
@@ -331,30 +344,37 @@ class PlotGridManagerState extends State<PlotGridManager> {
     DragUpdateDetails details,
     BoxConstraints constraints,
   ) {
-    if (_resizingPlotId != plot.id) return;
+    if (_resizingPlotId != plot.id ||
+        _initialLayoutData == null ||
+        _resizeStartGlobalPosition == null)
+      return;
 
-    final deltaWidth = details.delta.dx / constraints.maxWidth;
-    final deltaHeight = details.delta.dy / constraints.maxHeight;
-
-    final currentLayout = _plots.firstWhere((p) => p.id == plot.id).layoutData;
+    // Calculate TOTAL delta from resize start (not incremental)
+    final totalDeltaWidth =
+        (details.globalPosition.dx - _resizeStartGlobalPosition!.dx) /
+        constraints.maxWidth;
+    final totalDeltaHeight =
+        (details.globalPosition.dy - _resizeStartGlobalPosition!.dy) /
+        constraints.maxHeight;
 
     // Minimum size constraints (e.g., 10% of screen)
     final minSize = 0.1;
 
-    final newWidth = (currentLayout.width + deltaWidth).clamp(
+    // Apply total delta to INITIAL size
+    final newWidth = (_initialLayoutData!.width + totalDeltaWidth).clamp(
       minSize,
-      1.0 - currentLayout.x,
+      1.0 - _initialLayoutData!.x,
     );
-    final newHeight = (currentLayout.height + deltaHeight).clamp(
+    final newHeight = (_initialLayoutData!.height + totalDeltaHeight).clamp(
       minSize,
-      1.0 - currentLayout.y,
+      1.0 - _initialLayoutData!.y,
     );
 
     setState(() {
       final index = _plots.indexWhere((p) => p.id == plot.id);
       if (index != -1) {
         _plots[index] = _plots[index].copyWith(
-          layoutData: currentLayout.copyWith(
+          layoutData: _initialLayoutData!.copyWith(
             width: newWidth,
             height: newHeight,
           ),
@@ -367,6 +387,7 @@ class PlotGridManagerState extends State<PlotGridManager> {
     setState(() {
       _resizingPlotId = null;
       _initialLayoutData = null;
+      _resizeStartGlobalPosition = null;
     });
     _saveToSettings();
   }
