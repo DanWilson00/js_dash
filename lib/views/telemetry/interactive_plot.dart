@@ -756,7 +756,7 @@ class _InteractivePlotState extends State<InteractivePlot> {
             barWidth: signal.lineWidth,
             dotData: FlDotData(show: signal.showDots),
             belowBarData: BarAreaData(
-              show: widget.settingsManager.plots.showPlotShading,
+              show: true,
               gradient: LinearGradient(
                 colors: [
                   signal.color.withOpacity(0.2),

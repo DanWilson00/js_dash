@@ -143,6 +143,8 @@ class _RealtimeDataDisplayState extends ConsumerState<RealtimeDataDisplay> {
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
+                    _buildStatusIndicator(uiScale),
+                    SizedBox(width: 16 * uiScale),
                     IconButton(
                       icon: Icon(_isPaused ? Icons.play_arrow : Icons.pause),
                       iconSize: 24 * uiScale,
@@ -179,7 +181,6 @@ class _RealtimeDataDisplayState extends ConsumerState<RealtimeDataDisplay> {
                       _plotGridKey.currentState?.allPlottedFields ?? {},
                   selectedPlotFields:
                       _plotGridKey.currentState?.selectedPlotFields ?? {},
-                  header: _buildConnectionStatus(uiScale),
                   uiScale: uiScale,
                 ),
                 Expanded(
@@ -203,7 +204,7 @@ class _RealtimeDataDisplayState extends ConsumerState<RealtimeDataDisplay> {
     );
   }
 
-  Widget _buildConnectionStatus(double uiScale) {
+  Widget _buildStatusIndicator(double uiScale) {
     // Get actual connection status from connection manager through providers
     final isActuallyConnected = ref.watch(isConnectedProvider);
 
@@ -224,34 +225,20 @@ class _RealtimeDataDisplayState extends ConsumerState<RealtimeDataDisplay> {
       statusText = isConnected ? 'Connected' : 'Disconnected';
     }
 
-    return Container(
-      padding: EdgeInsets.all(16.0 * uiScale),
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surfaceContainerHighest,
-        border: Border(
-          bottom: BorderSide(
-            color: Theme.of(context).colorScheme.outline,
-            width: 1,
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(Icons.circle, color: statusColor, size: 12 * uiScale),
+        SizedBox(width: 8 * uiScale),
+        Text(
+          statusText,
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+            color: statusColor,
+            fontSize: 14 * uiScale,
           ),
         ),
-      ),
-      child: Row(
-        children: [
-          Icon(Icons.circle, color: statusColor, size: 12 * uiScale),
-          SizedBox(width: 8 * uiScale),
-          Flexible(
-            child: Text(
-              statusText,
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                color: statusColor,
-                fontSize: 14 * uiScale,
-              ),
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-        ],
-      ),
+      ],
     );
   }
 }
