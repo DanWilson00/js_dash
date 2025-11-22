@@ -32,6 +32,7 @@ class PlotGridManagerState extends State<PlotGridManager> {
   PlotLayoutData? _initialLayoutData;
   Offset? _dragStartGlobalPosition;
   Offset? _resizeStartGlobalPosition;
+  PlotLayoutData? _previewLayoutData;
 
   @override
   void initState() {
@@ -112,6 +113,10 @@ class PlotGridManagerState extends State<PlotGridManager> {
                       ),
                     ),
 
+                  // Ghost Preview (if dragging)
+                  if (_draggingPlotId != null && _previewLayoutData != null)
+                    _buildGhostPreview(context, constraints),
+
                   // Render all plots
                   ..._plots.map(
                     (plot) => _buildDraggablePlot(context, plot, constraints),
@@ -130,7 +135,12 @@ class PlotGridManagerState extends State<PlotGridManager> {
     PlotConfiguration plot,
     BoxConstraints constraints,
   ) {
-    final layout = plot.layoutData;
+    // If this plot is being dragged, render it at its initial position
+    // The ghost preview will show the final snapped position
+    final layout = (_draggingPlotId == plot.id && _initialLayoutData != null)
+        ? _initialLayoutData!
+        : plot.layoutData;
+
     final pixelX = layout.x * constraints.maxWidth;
     final pixelY = layout.y * constraints.maxHeight;
     final pixelWidth = layout.width * constraints.maxWidth;
@@ -277,6 +287,8 @@ class PlotGridManagerState extends State<PlotGridManager> {
       _draggingPlotId = plot.id;
       _initialLayoutData = plot.layoutData;
       _dragStartGlobalPosition = details.globalPosition;
+      _previewLayoutData =
+          plot.layoutData; // Initialize preview to current position
       _selectPlot(plot.id);
     });
   }
@@ -299,31 +311,48 @@ class PlotGridManagerState extends State<PlotGridManager> {
         (details.globalPosition.dy - _dragStartGlobalPosition!.dy) /
         constraints.maxHeight;
 
-    // Apply total delta to INITIAL layout
-    final updatedX = (_initialLayoutData!.x + totalDeltaX).clamp(
+    // Calculate raw new position
+    var rawX = (_initialLayoutData!.x + totalDeltaX).clamp(
       0.0,
       1.0 - _initialLayoutData!.width,
     );
-    final updatedY = (_initialLayoutData!.y + totalDeltaY).clamp(
+    var rawY = (_initialLayoutData!.y + totalDeltaY).clamp(
       0.0,
       1.0 - _initialLayoutData!.height,
     );
 
+    // Snap to grid (24 columns/rows)
+    const gridSize = 1.0 / 24.0;
+    final snappedX = (rawX / gridSize).round() * gridSize;
+    final snappedY = (rawY / gridSize).round() * gridSize;
+
+    // Create preview layout with snapped position
     setState(() {
-      final index = _plots.indexWhere((p) => p.id == plot.id);
-      if (index != -1) {
-        _plots[index] = _plots[index].copyWith(
-          layoutData: _initialLayoutData!.copyWith(x: updatedX, y: updatedY),
-        );
-      }
+      _previewLayoutData = _initialLayoutData!.copyWith(
+        x: snappedX,
+        y: snappedY,
+      );
     });
   }
 
   void _onDragEnd() {
+    // Apply preview position to actual plot
+    if (_draggingPlotId != null && _previewLayoutData != null) {
+      final index = _plots.indexWhere((p) => p.id == _draggingPlotId);
+      if (index != -1) {
+        setState(() {
+          _plots[index] = _plots[index].copyWith(
+            layoutData: _previewLayoutData!,
+          );
+        });
+      }
+    }
+
     setState(() {
       _draggingPlotId = null;
       _initialLayoutData = null;
       _dragStartGlobalPosition = null;
+      _previewLayoutData = null;
     });
     _saveToSettings();
   }
@@ -601,5 +630,66 @@ class PlotGridManagerState extends State<PlotGridManager> {
       if (_showSelectorPanel) _showPropertiesPanel = false;
     });
     _saveToSettings();
+  }
+
+  Widget _buildGhostPreview(BuildContext context, BoxConstraints constraints) {
+    if (_previewLayoutData == null) return const SizedBox.shrink();
+
+    final layout = _previewLayoutData!;
+    final pixelX = layout.x * constraints.maxWidth;
+    final pixelY = layout.y * constraints.maxHeight;
+    final pixelWidth = layout.width * constraints.maxWidth;
+    final pixelHeight = layout.height * constraints.maxHeight;
+
+    return Positioned(
+      left: pixelX,
+      top: pixelY,
+      width: pixelWidth,
+      height: pixelHeight,
+      child: IgnorePointer(
+        child: Container(
+          decoration: BoxDecoration(
+            color: Colors.transparent,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: Theme.of(context).colorScheme.primary.withOpacity(0.8),
+              width: 2,
+              style: BorderStyle.solid,
+            ),
+          ),
+          child: Stack(
+            children: [
+              // Corner markers
+              ...[
+                Alignment.topLeft,
+                Alignment.topRight,
+                Alignment.bottomLeft,
+                Alignment.bottomRight,
+              ].map(
+                (alignment) => Align(
+                  alignment: alignment,
+                  child: Container(
+                    width: 12,
+                    height: 12,
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).colorScheme.primary,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                ),
+              ),
+              // Center crosshair
+              Center(
+                child: Icon(
+                  Icons.add,
+                  color: Theme.of(context).colorScheme.primary,
+                  size: 24,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }
