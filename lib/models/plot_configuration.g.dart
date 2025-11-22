@@ -62,6 +62,22 @@ const _$ScalingModeEnumMap = {
   ScalingMode.autoScale: 'autoScale',
 };
 
+PlotLayoutData _$PlotLayoutDataFromJson(Map<String, dynamic> json) =>
+    PlotLayoutData(
+      x: (json['x'] as num?)?.toDouble() ?? 0.0,
+      y: (json['y'] as num?)?.toDouble() ?? 0.0,
+      width: (json['width'] as num?)?.toDouble() ?? 0.5,
+      height: (json['height'] as num?)?.toDouble() ?? 0.5,
+    );
+
+Map<String, dynamic> _$PlotLayoutDataToJson(PlotLayoutData instance) =>
+    <String, dynamic>{
+      'x': instance.x,
+      'y': instance.y,
+      'width': instance.width,
+      'height': instance.height,
+    };
+
 PlotConfiguration _$PlotConfigurationFromJson(
   Map<String, dynamic> json,
 ) => PlotConfiguration(
@@ -73,6 +89,9 @@ PlotConfiguration _$PlotConfigurationFromJson(
   timeWindow: json['timeWindow'] == null
       ? const Duration(minutes: 5)
       : const DurationConverter().fromJson((json['timeWindow'] as num).toInt()),
+  layoutData: json['layoutData'] == null
+      ? null
+      : PlotLayoutData.fromJson(json['layoutData'] as Map<String, dynamic>),
 );
 
 Map<String, dynamic> _$PlotConfigurationToJson(PlotConfiguration instance) =>
@@ -81,4 +100,5 @@ Map<String, dynamic> _$PlotConfigurationToJson(PlotConfiguration instance) =>
       'title': instance.title,
       'yAxis': instance.yAxis,
       'timeWindow': const DurationConverter().toJson(instance.timeWindow),
+      'layoutData': instance.layoutData,
     };

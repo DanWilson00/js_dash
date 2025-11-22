@@ -217,19 +217,55 @@ class PlotAxisConfiguration {
 }
 
 @JsonSerializable()
+class PlotLayoutData {
+  final double x;
+  final double y;
+  final double width;
+  final double height;
+
+  const PlotLayoutData({
+    this.x = 0.0,
+    this.y = 0.0,
+    this.width = 0.5,
+    this.height = 0.5,
+  });
+
+  factory PlotLayoutData.fromJson(Map<String, dynamic> json) =>
+      _$PlotLayoutDataFromJson(json);
+  Map<String, dynamic> toJson() => _$PlotLayoutDataToJson(this);
+
+  PlotLayoutData copyWith({
+    double? x,
+    double? y,
+    double? width,
+    double? height,
+  }) {
+    return PlotLayoutData(
+      x: x ?? this.x,
+      y: y ?? this.y,
+      width: width ?? this.width,
+      height: height ?? this.height,
+    );
+  }
+}
+
+@JsonSerializable()
 class PlotConfiguration {
   final String id;
   final String title;
   final PlotAxisConfiguration yAxis;
   @DurationConverter()
   final Duration timeWindow;
+  final PlotLayoutData layoutData;
 
   PlotConfiguration({
     required this.id,
     this.title = 'Time Series Plot',
     PlotAxisConfiguration? yAxis,
     this.timeWindow = const Duration(minutes: 5),
-  }) : yAxis = yAxis ?? PlotAxisConfiguration();
+    PlotLayoutData? layoutData,
+  }) : yAxis = yAxis ?? PlotAxisConfiguration(),
+       layoutData = layoutData ?? const PlotLayoutData();
 
   factory PlotConfiguration.fromJson(Map<String, dynamic> json) =>
       _$PlotConfigurationFromJson(json);
@@ -240,12 +276,14 @@ class PlotConfiguration {
     String? title,
     PlotAxisConfiguration? yAxis,
     Duration? timeWindow,
+    PlotLayoutData? layoutData,
   }) {
     return PlotConfiguration(
       id: id ?? this.id,
       title: title ?? this.title,
       yAxis: yAxis ?? this.yAxis,
       timeWindow: timeWindow ?? this.timeWindow,
+      layoutData: layoutData ?? this.layoutData,
     );
   }
 
@@ -261,14 +299,6 @@ class PlotConfiguration {
   PlotConfiguration updateSignal(PlotSignalConfiguration updatedSignal) {
     return copyWith(yAxis: yAxis.updateSignal(updatedSignal));
   }
-}
-
-enum PlotLayoutType {
-  single, // 1x1
-  horizontal, // 1x2
-  vertical, // 2x1
-  grid2x2, // 2x2
-  grid3x2, // 3x2
 }
 
 class TimeWindowOption {
@@ -354,75 +384,4 @@ class SignalColorPalette {
   }
 
   static List<Color> get availableColors => List.unmodifiable(_colors);
-}
-
-class PlotLayout {
-  final PlotLayoutType type;
-  final int rows;
-  final int columns;
-
-  const PlotLayout._(this.type, this.rows, this.columns);
-
-  static const PlotLayout single = PlotLayout._(PlotLayoutType.single, 1, 1);
-  static const PlotLayout horizontal = PlotLayout._(
-    PlotLayoutType.horizontal,
-    1,
-    2,
-  );
-  static const PlotLayout vertical = PlotLayout._(
-    PlotLayoutType.vertical,
-    2,
-    1,
-  );
-  static const PlotLayout grid2x2 = PlotLayout._(PlotLayoutType.grid2x2, 2, 2);
-  static const PlotLayout grid3x2 = PlotLayout._(PlotLayoutType.grid3x2, 2, 3);
-
-  int get maxPlots => rows * columns;
-
-  static List<PlotLayout> getAvailableLayouts(int plotCount) {
-    final layouts = <PlotLayout>[];
-
-    if (plotCount >= 1) layouts.add(single);
-    if (plotCount >= 2) {
-      layouts.add(horizontal);
-      layouts.add(vertical);
-    }
-    if (plotCount >= 3) layouts.add(grid2x2);
-    if (plotCount >= 5) layouts.add(grid3x2);
-
-    return layouts;
-  }
-
-  static PlotLayout getDefaultLayout(int plotCount) {
-    switch (plotCount) {
-      case 1:
-        return single;
-      case 2:
-        return horizontal;
-      case 3:
-      case 4:
-        return grid2x2;
-      case 5:
-      case 6:
-        return grid3x2;
-      default:
-        return single;
-    }
-  }
-
-  @override
-  String toString() {
-    switch (type) {
-      case PlotLayoutType.single:
-        return '1×1';
-      case PlotLayoutType.horizontal:
-        return '1×2';
-      case PlotLayoutType.vertical:
-        return '2×1';
-      case PlotLayoutType.grid2x2:
-        return '2×2';
-      case PlotLayoutType.grid3x2:
-        return '2×3';
-    }
-  }
 }

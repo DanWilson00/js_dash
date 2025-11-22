@@ -144,20 +144,6 @@ class _DisplaySettingsPanelState extends State<DisplaySettingsPanel> {
                     ),
                   ),
                 ),
-                ListTile(
-                  dense: true,
-                  title: const Text('Layout style'),
-                  subtitle: const Text('How plots are arranged on screen'),
-                  trailing: DropdownButton<String>(
-                    value: plots.layout,
-                    items: _getLayoutOptions(plots.plotCount),
-                    onChanged: (value) {
-                      if (value != null) {
-                        widget.settingsManager.updatePlotLayout(value);
-                      }
-                    },
-                  ),
-                ),
               ],
             ),
           ),
@@ -258,44 +244,5 @@ class _DisplaySettingsPanelState extends State<DisplaySettingsPanel> {
         ],
       ),
     );
-  }
-
-  List<DropdownMenuItem<String>> _getLayoutOptions(int plotCount) {
-    final options = <DropdownMenuItem<String>>[];
-
-    if (plotCount >= 1) {
-      options.add(
-        const DropdownMenuItem(value: 'single', child: Text('Single (1×1)')),
-      );
-    }
-
-    if (plotCount >= 2) {
-      options.add(
-        const DropdownMenuItem(
-          value: 'horizontal',
-          child: Text('Horizontal (1×2)'),
-        ),
-      );
-      options.add(
-        const DropdownMenuItem(
-          value: 'vertical',
-          child: Text('Vertical (2×1)'),
-        ),
-      );
-    }
-
-    if (plotCount >= 3) {
-      options.add(
-        const DropdownMenuItem(value: 'grid2x2', child: Text('Grid (2×2)')),
-      );
-    }
-
-    if (plotCount >= 5) {
-      options.add(
-        const DropdownMenuItem(value: 'grid3x2', child: Text('Grid (2×3)')),
-      );
-    }
-
-    return options;
   }
 }

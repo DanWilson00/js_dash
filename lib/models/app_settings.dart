@@ -127,7 +127,7 @@ class WindowSettings {
 @JsonSerializable()
 class PlotSettings {
   final int plotCount;
-  final String layout; // PlotLayout enum as string
+  // Layout is now handled per-plot via PlotConfiguration.layoutData
   final String timeWindow; // TimeWindowOption enum as string
   final List<PlotConfiguration> configurations;
   final String scalingMode; // ScalingMode enum as string
@@ -137,7 +137,6 @@ class PlotSettings {
 
   const PlotSettings({
     required this.plotCount,
-    required this.layout,
     required this.timeWindow,
     required this.configurations,
     required this.scalingMode,
@@ -149,7 +148,6 @@ class PlotSettings {
   factory PlotSettings.defaults() {
     return PlotSettings(
       plotCount: 1,
-      layout: 'single',
       timeWindow: '10s',
       configurations: [PlotConfiguration(id: 'plot_0')],
       scalingMode: 'autoScale',
@@ -165,7 +163,6 @@ class PlotSettings {
 
   PlotSettings copyWith({
     int? plotCount,
-    String? layout,
     String? timeWindow,
     List<PlotConfiguration>? configurations,
     String? scalingMode,
@@ -175,7 +172,6 @@ class PlotSettings {
   }) {
     return PlotSettings(
       plotCount: plotCount ?? this.plotCount,
-      layout: layout ?? this.layout,
       timeWindow: timeWindow ?? this.timeWindow,
       configurations: configurations ?? this.configurations,
       scalingMode: scalingMode ?? this.scalingMode,

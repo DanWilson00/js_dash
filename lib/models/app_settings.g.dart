@@ -61,7 +61,6 @@ Map<String, dynamic> _$WindowSettingsToJson(WindowSettings instance) =>
 
 PlotSettings _$PlotSettingsFromJson(Map<String, dynamic> json) => PlotSettings(
   plotCount: (json['plotCount'] as num).toInt(),
-  layout: json['layout'] as String,
   timeWindow: json['timeWindow'] as String,
   configurations: (json['configurations'] as List<dynamic>)
       .map((e) => PlotConfiguration.fromJson(e as Map<String, dynamic>))
@@ -75,7 +74,6 @@ PlotSettings _$PlotSettingsFromJson(Map<String, dynamic> json) => PlotSettings(
 Map<String, dynamic> _$PlotSettingsToJson(PlotSettings instance) =>
     <String, dynamic>{
       'plotCount': instance.plotCount,
-      'layout': instance.layout,
       'timeWindow': instance.timeWindow,
       'configurations': instance.configurations,
       'scalingMode': instance.scalingMode,

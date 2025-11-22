@@ -125,11 +125,6 @@ class SettingsManager extends ChangeNotifier {
     );
   }
 
-  /// Update plot layout
-  void updatePlotLayout(String layout) {
-    updatePlots(_settings.plots.copyWith(layout: layout));
-  }
-
   /// Update time window
   void updateTimeWindow(String timeWindow) {
     updatePlots(_settings.plots.copyWith(timeWindow: timeWindow));
@@ -138,22 +133,6 @@ class SettingsManager extends ChangeNotifier {
   /// Update scaling mode
   void updateScalingMode(String scalingMode) {
     updatePlots(_settings.plots.copyWith(scalingMode: scalingMode));
-  }
-
-  /// Update selected plot index
-  void updateSelectedPlotIndex(int index) {
-    updatePlots(_settings.plots.copyWith(selectedPlotIndex: index));
-  }
-
-  /// Update panel visibility
-  void updatePanelVisibility({bool? properties, bool? selector}) {
-    updatePlots(
-      _settings.plots.copyWith(
-        propertiesPanelVisible:
-            properties ?? _settings.plots.propertiesPanelVisible,
-        selectorPanelVisible: selector ?? _settings.plots.selectorPanelVisible,
-      ),
-    );
   }
 
   /// Update plot configuration at specific index

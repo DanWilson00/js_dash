@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../providers/service_providers.dart';
 import '../../services/settings_manager.dart';
+import '../../models/plot_configuration.dart';
 import 'mavlink_message_monitor.dart';
 import 'plot_grid.dart';
 import '../settings/settings_dialog.dart';
@@ -144,6 +145,59 @@ class _RealtimeDataDisplayState extends ConsumerState<RealtimeDataDisplay> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     _buildStatusIndicator(uiScale),
+                    SizedBox(width: 16 * uiScale),
+                    // Time Window Selector
+                    Container(
+                      padding: EdgeInsets.symmetric(horizontal: 8 * uiScale),
+                      decoration: BoxDecoration(
+                        color: Theme.of(
+                          context,
+                        ).colorScheme.surfaceContainerHighest,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: DropdownButton<TimeWindowOption>(
+                        value:
+                            TimeWindowOption.getDefault(), // TODO: Sync with actual state
+                        items: TimeWindowOption.availableWindows
+                            .map(
+                              (w) => DropdownMenuItem(
+                                value: w,
+                                child: Text(
+                                  w.label,
+                                  style: TextStyle(fontSize: 14 * uiScale),
+                                ),
+                              ),
+                            )
+                            .toList(),
+                        onChanged: (window) {
+                          if (window != null) {
+                            _plotGridKey.currentState?.updateTimeWindow(window);
+                            // Force rebuild to update dropdown value if we were tracking it here
+                            // For now, we just send it to the grid
+                            setState(() {});
+                          }
+                        },
+                        underline: const SizedBox(),
+                        isDense: true,
+                        icon: const Icon(Icons.access_time, size: 16),
+                      ),
+                    ),
+                    SizedBox(width: 8 * uiScale),
+                    // New Plot Button
+                    ElevatedButton.icon(
+                      onPressed: () => _plotGridKey.currentState?.addNewPlot(),
+                      icon: Icon(Icons.add_chart, size: 18 * uiScale),
+                      label: Text(
+                        'New Plot',
+                        style: TextStyle(fontSize: 14 * uiScale),
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        padding: EdgeInsets.symmetric(
+                          horizontal: 12 * uiScale,
+                          vertical: 12 * uiScale,
+                        ),
+                      ),
+                    ),
                     SizedBox(width: 16 * uiScale),
                     IconButton(
                       icon: Icon(_isPaused ? Icons.play_arrow : Icons.pause),
