@@ -418,9 +418,7 @@ class _InteractivePlotState extends State<InteractivePlot> {
       children: [
         Expanded(
           child: Text(
-            widget.configuration.yAxis.hasData
-                ? widget.configuration.yAxis.displayName
-                : 'Click to select signals',
+            widget.configuration.yAxis.hasData ? '' : 'Click to select signals',
             style: Theme.of(context).textTheme.titleSmall?.copyWith(
               fontWeight: FontWeight.bold,
               color: widget.configuration.yAxis.hasData
