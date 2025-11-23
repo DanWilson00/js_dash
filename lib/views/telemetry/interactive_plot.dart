@@ -4,7 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 import '../../models/plot_configuration.dart';
-import '../../models/app_settings.dart';
+
 import '../../services/timeseries_data_manager.dart';
 import '../../services/settings_manager.dart';
 import 'plot_legend.dart';
@@ -357,7 +357,7 @@ class _InteractivePlotState extends State<InteractivePlot> {
           borderRadius: BorderRadius.circular(12),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.05),
+              color: Colors.black.withValues(alpha: 0.05),
               blurRadius: 10,
               offset: const Offset(0, 4),
             ),
@@ -444,7 +444,7 @@ class _InteractivePlotState extends State<InteractivePlot> {
                     border: Border.all(
                       color: Theme.of(
                         context,
-                      ).colorScheme.outline.withOpacity(0.5),
+                      ).colorScheme.outline.withValues(alpha: 0.5),
                     ),
                   ),
                   child: Row(
@@ -537,10 +537,13 @@ class _InteractivePlotState extends State<InteractivePlot> {
                 }
               },
               touchTooltipData: LineTouchTooltipData(
-                getTooltipColor: (spot) =>
-                    Theme.of(context).colorScheme.surface.withOpacity(0.95),
+                getTooltipColor: (spot) => Theme.of(
+                  context,
+                ).colorScheme.surface.withValues(alpha: 0.95),
                 tooltipBorder: BorderSide(
-                  color: Theme.of(context).colorScheme.outline.withOpacity(0.5),
+                  color: Theme.of(
+                    context,
+                  ).colorScheme.outline.withValues(alpha: 0.5),
                   width: 1,
                 ),
                 tooltipPadding: const EdgeInsets.symmetric(
@@ -586,7 +589,7 @@ class _InteractivePlotState extends State<InteractivePlot> {
                         FlLine(
                           color: Theme.of(
                             context,
-                          ).colorScheme.primary.withOpacity(0.5),
+                          ).colorScheme.primary.withValues(alpha: 0.5),
                           strokeWidth: 2,
                           dashArray: [5, 5],
                         ),
@@ -616,12 +619,16 @@ class _InteractivePlotState extends State<InteractivePlot> {
                       _zoomLevel) /
                   5,
               getDrawingHorizontalLine: (value) => FlLine(
-                color: Theme.of(context).colorScheme.outline.withOpacity(0.1),
+                color: Theme.of(
+                  context,
+                ).colorScheme.outline.withValues(alpha: 0.1),
                 strokeWidth: 1,
                 dashArray: [5, 5],
               ),
               getDrawingVerticalLine: (value) => FlLine(
-                color: Theme.of(context).colorScheme.outline.withOpacity(0.1),
+                color: Theme.of(
+                  context,
+                ).colorScheme.outline.withValues(alpha: 0.1),
                 strokeWidth: 1,
                 dashArray: [5, 5],
               ),
@@ -654,7 +661,9 @@ class _InteractivePlotState extends State<InteractivePlot> {
             borderData: FlBorderData(
               show: true,
               border: Border.all(
-                color: Theme.of(context).colorScheme.outline.withOpacity(0.3),
+                color: Theme.of(
+                  context,
+                ).colorScheme.outline.withValues(alpha: 0.3),
               ),
             ),
             minX: _calculateMinX(),
@@ -663,13 +672,8 @@ class _InteractivePlotState extends State<InteractivePlot> {
             maxY: _maxY,
             lineBarsData: _buildLineChartBars(),
           ),
-          // Configurable animation duration
-          duration: widget.settingsManager.performance.enableSmoothAnimations
-              ? Duration(
-                  milliseconds:
-                      widget.settingsManager.performance.animationDuration,
-                )
-              : Duration.zero,
+          // Animations disabled for performance
+          duration: Duration.zero,
         ),
         // Legend overlay
         if (widget.configuration.yAxis.visibleSignals.isNotEmpty)
@@ -686,7 +690,9 @@ class _InteractivePlotState extends State<InteractivePlot> {
               painter: SelectionRectanglePainter(
                 start: _dragStart!,
                 end: _dragEnd!,
-                color: Theme.of(context).colorScheme.primary.withOpacity(0.3),
+                color: Theme.of(
+                  context,
+                ).colorScheme.primary.withValues(alpha: 0.3),
               ),
             ),
           ),
@@ -712,8 +718,8 @@ class _InteractivePlotState extends State<InteractivePlot> {
               show: true,
               gradient: LinearGradient(
                 colors: [
-                  signal.color.withOpacity(0.2),
-                  signal.color.withOpacity(0.0),
+                  signal.color.withValues(alpha: 0.2),
+                  signal.color.withValues(alpha: 0.0),
                 ],
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
@@ -881,14 +887,14 @@ class SelectionRectanglePainter extends CustomPainter {
 
     // Draw border
     final borderPaint = Paint()
-      ..color = color.withOpacity(math.min(1.0, color.opacity * 3))
+      ..color = color.withValues(alpha: math.min(1.0, color.a * 3))
       ..style = PaintingStyle.stroke
       ..strokeWidth = 3.0;
     canvas.drawRect(rect, borderPaint);
 
     // Draw dashed lines for better visibility
     final dashPaint = Paint()
-      ..color = color.withOpacity(0.8)
+      ..color = color.withValues(alpha: 0.8)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1.0;
 

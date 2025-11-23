@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import '../../services/settings_manager.dart';
-import '../../models/plot_configuration.dart';
 
 class DisplaySettingsPanel extends StatefulWidget {
   final SettingsManager settingsManager;
@@ -101,91 +100,6 @@ class _DisplaySettingsPanelState extends State<DisplaySettingsPanel> {
                         ],
                       ),
                     ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 16),
-          Card(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.grid_view, size: 20),
-                      const SizedBox(width: 8),
-                      Text(
-                        'Plot Layout',
-                        style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                ListTile(
-                  dense: true,
-                  title: const Text('Number of plots'),
-                  subtitle: Text('${plots.plotCount} plots visible'),
-                  trailing: SizedBox(
-                    width: 200,
-                    child: Slider(
-                      value: plots.plotCount.toDouble(),
-                      min: 1,
-                      max: 6,
-                      divisions: 5,
-                      label: plots.plotCount.toString(),
-                      onChanged: (value) {
-                        widget.settingsManager.updatePlotCount(value.round());
-                      },
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 16),
-          Card(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.schedule, size: 20),
-                      const SizedBox(width: 8),
-                      Text(
-                        'Time Window',
-                        style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                ListTile(
-                  dense: true,
-                  title: const Text('Default time window'),
-                  subtitle: const Text('How much historical data to display'),
-                  trailing: DropdownButton<String>(
-                    value: plots.timeWindow,
-                    items: TimeWindowOption.availableWindows
-                        .map(
-                          (window) => DropdownMenuItem(
-                            value: window.label,
-                            child: Text(window.label),
-                          ),
-                        )
-                        .toList(),
-                    onChanged: (value) {
-                      if (value != null) {
-                        widget.settingsManager.updateTimeWindow(value);
-                      }
-                    },
                   ),
                 ),
               ],

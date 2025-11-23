@@ -1,8 +1,6 @@
-import 'dart:math' as math;
 import 'package:fl_chart/fl_chart.dart';
 import '../../models/plot_configuration.dart';
 import '../../models/app_settings.dart';
-import '../../services/timeseries_data_manager.dart';
 
 // Data transfer objects
 class ComputeInput {
@@ -239,9 +237,7 @@ List<TimeSeriesPoint> largestTriangleThreeBuckets(
     // Fallback if no point selected (shouldn't happen with maxArea = -1)
     selectedPoint ??= data[bucketStart];
 
-    if (selectedPoint != null) {
-      result.add(selectedPoint);
-    }
+    result.add(selectedPoint);
   }
 
   result.add(data.last);

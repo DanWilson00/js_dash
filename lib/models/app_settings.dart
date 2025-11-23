@@ -126,7 +126,6 @@ class WindowSettings {
 
 @JsonSerializable()
 class PlotSettings {
-  final int plotCount;
   // Layout is now handled per-plot via PlotConfiguration.layoutData
   final String timeWindow; // TimeWindowOption enum as string
   final List<PlotConfiguration> configurations;
@@ -136,7 +135,6 @@ class PlotSettings {
   final bool selectorPanelVisible;
 
   const PlotSettings({
-    required this.plotCount,
     required this.timeWindow,
     required this.configurations,
     required this.scalingMode,
@@ -147,7 +145,6 @@ class PlotSettings {
 
   factory PlotSettings.defaults() {
     return PlotSettings(
-      plotCount: 1,
       timeWindow: '10s',
       configurations: [PlotConfiguration(id: 'plot_0')],
       scalingMode: 'autoScale',
@@ -162,7 +159,6 @@ class PlotSettings {
   Map<String, dynamic> toJson() => _$PlotSettingsToJson(this);
 
   PlotSettings copyWith({
-    int? plotCount,
     String? timeWindow,
     List<PlotConfiguration>? configurations,
     String? scalingMode,
@@ -171,7 +167,6 @@ class PlotSettings {
     bool? selectorPanelVisible,
   }) {
     return PlotSettings(
-      plotCount: plotCount ?? this.plotCount,
       timeWindow: timeWindow ?? this.timeWindow,
       configurations: configurations ?? this.configurations,
       scalingMode: scalingMode ?? this.scalingMode,
@@ -234,7 +229,8 @@ class ConnectionSettings {
       spoofComponentId: 1,
       // General defaults
       autoStartMonitor: true,
-      isPaused: true, // Start paused by default
+      isPaused:
+          false, // Start running by default (will be overridden by persistence)
     );
   }
 
@@ -314,8 +310,6 @@ class PerformanceSettings {
   final int decimationThreshold;
   final bool enableUpdateThrottling;
   final int updateInterval; // milliseconds
-  final bool enableSmoothAnimations;
-  final int animationDuration; // milliseconds
   final int dataBufferSize;
   final int dataRetentionMinutes;
 
@@ -324,8 +318,6 @@ class PerformanceSettings {
     required this.decimationThreshold,
     required this.enableUpdateThrottling,
     required this.updateInterval,
-    required this.enableSmoothAnimations,
-    required this.animationDuration,
     required this.dataBufferSize,
     required this.dataRetentionMinutes,
   });
@@ -336,8 +328,6 @@ class PerformanceSettings {
       decimationThreshold: 1000,
       enableUpdateThrottling: true,
       updateInterval: 100, // 10 FPS
-      enableSmoothAnimations: true,
-      animationDuration: 150,
       dataBufferSize: 2000,
       dataRetentionMinutes: 10,
     );
@@ -352,8 +342,6 @@ class PerformanceSettings {
     int? decimationThreshold,
     bool? enableUpdateThrottling,
     int? updateInterval,
-    bool? enableSmoothAnimations,
-    int? animationDuration,
     int? dataBufferSize,
     int? dataRetentionMinutes,
   }) {
@@ -364,9 +352,6 @@ class PerformanceSettings {
       enableUpdateThrottling:
           enableUpdateThrottling ?? this.enableUpdateThrottling,
       updateInterval: updateInterval ?? this.updateInterval,
-      enableSmoothAnimations:
-          enableSmoothAnimations ?? this.enableSmoothAnimations,
-      animationDuration: animationDuration ?? this.animationDuration,
       dataBufferSize: dataBufferSize ?? this.dataBufferSize,
       dataRetentionMinutes: dataRetentionMinutes ?? this.dataRetentionMinutes,
     );

@@ -60,7 +60,6 @@ Map<String, dynamic> _$WindowSettingsToJson(WindowSettings instance) =>
     };
 
 PlotSettings _$PlotSettingsFromJson(Map<String, dynamic> json) => PlotSettings(
-  plotCount: (json['plotCount'] as num).toInt(),
   timeWindow: json['timeWindow'] as String,
   configurations: (json['configurations'] as List<dynamic>)
       .map((e) => PlotConfiguration.fromJson(e as Map<String, dynamic>))
@@ -73,7 +72,6 @@ PlotSettings _$PlotSettingsFromJson(Map<String, dynamic> json) => PlotSettings(
 
 Map<String, dynamic> _$PlotSettingsToJson(PlotSettings instance) =>
     <String, dynamic>{
-      'plotCount': instance.plotCount,
       'timeWindow': instance.timeWindow,
       'configurations': instance.configurations,
       'scalingMode': instance.scalingMode,
@@ -132,8 +130,6 @@ PerformanceSettings _$PerformanceSettingsFromJson(Map<String, dynamic> json) =>
       decimationThreshold: (json['decimationThreshold'] as num).toInt(),
       enableUpdateThrottling: json['enableUpdateThrottling'] as bool,
       updateInterval: (json['updateInterval'] as num).toInt(),
-      enableSmoothAnimations: json['enableSmoothAnimations'] as bool,
-      animationDuration: (json['animationDuration'] as num).toInt(),
       dataBufferSize: (json['dataBufferSize'] as num).toInt(),
       dataRetentionMinutes: (json['dataRetentionMinutes'] as num).toInt(),
     );
@@ -145,8 +141,6 @@ Map<String, dynamic> _$PerformanceSettingsToJson(
   'decimationThreshold': instance.decimationThreshold,
   'enableUpdateThrottling': instance.enableUpdateThrottling,
   'updateInterval': instance.updateInterval,
-  'enableSmoothAnimations': instance.enableSmoothAnimations,
-  'animationDuration': instance.animationDuration,
   'dataBufferSize': instance.dataBufferSize,
   'dataRetentionMinutes': instance.dataRetentionMinutes,
 };

@@ -92,7 +92,6 @@ class PlotGridManagerState extends State<PlotGridManager> {
 
     widget.settingsManager.updatePlots(
       widget.settingsManager.plots.copyWith(
-        plotCount: _plots.length,
         configurations: _plots,
         selectedPlotIndex: selectedIndex.clamp(0, _plots.length - 1),
         propertiesPanelVisible: _showPropertiesPanel,

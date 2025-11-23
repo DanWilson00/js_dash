@@ -97,33 +97,8 @@ class SettingsManager extends ChangeNotifier {
   }
 
   /// Update plot count and regenerate configurations if needed
-  void updatePlotCount(int count) {
-    final currentCount = _settings.plots.plotCount;
-    if (currentCount == count) return;
-
-    final configurations = <PlotConfiguration>[];
-
-    // Keep existing configurations
-    for (
-      int i = 0;
-      i < count && i < _settings.plots.configurations.length;
-      i++
-    ) {
-      configurations.add(_settings.plots.configurations[i]);
-    }
-
-    // Add new empty configurations if needed
-    for (int i = _settings.plots.configurations.length; i < count; i++) {
-      configurations.add(PlotConfiguration(id: 'plot_$i'));
-    }
-
-    updatePlots(
-      _settings.plots.copyWith(
-        plotCount: count,
-        configurations: configurations,
-      ),
-    );
-  }
+  // Deprecated: Plot count is now dynamic based on added plots
+  // void updatePlotCount(int count) { ... }
 
   /// Update time window
   void updateTimeWindow(String timeWindow) {
@@ -264,15 +239,8 @@ class SettingsManager extends ChangeNotifier {
     );
   }
 
-  /// Update animation settings
-  void updateAnimations({bool? enabled, int? duration}) {
-    updatePerformance(
-      _settings.performance.copyWith(
-        enableSmoothAnimations: enabled,
-        animationDuration: duration,
-      ),
-    );
-  }
+  // Deprecated: Animations are now always disabled
+  // void updateAnimations({bool? enabled, int? duration}) { ... }
 
   /// Update data management settings
   void updateDataManagement({int? bufferSize, int? retentionMinutes}) {
