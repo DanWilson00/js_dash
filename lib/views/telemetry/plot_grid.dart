@@ -45,14 +45,13 @@ class PlotGridManagerState extends State<PlotGridManager> {
 
   void _loadFromSettings() {
     final plotSettings = widget.settingsManager.plots;
-    _plots = List.from(plotSettings.configurations);
+    // Disable plot persistence - always start fresh
+    _plots = [];
     _showPropertiesPanel = plotSettings.propertiesPanelVisible;
     _showSelectorPanel = plotSettings.selectorPanelVisible;
 
-    final selectedIndex = plotSettings.selectedPlotIndex;
-    if (selectedIndex < _plots.length && selectedIndex >= 0) {
-      _selectedPlotId = _plots[selectedIndex].id;
-    }
+    // Don't load selected plot from settings
+    _selectedPlotId = null;
   }
 
   void _initializeController() {
