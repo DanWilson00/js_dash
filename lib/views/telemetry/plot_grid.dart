@@ -416,55 +416,76 @@ class PlotGridManagerState extends State<PlotGridManager> {
                 child: Column(
                   children: [
                     // Header / Drag Handle
-                    GestureDetector(
-                      onTap: () => _selectPlot(plot.id),
-                      child: Container(
-                        height: 24,
-                        decoration: BoxDecoration(
-                          color: isSelected
-                              ? Theme.of(
-                                  context,
-                                ).colorScheme.primary.withValues(alpha: 0.1)
-                              : Theme.of(
-                                  context,
-                                ).colorScheme.surfaceContainerHighest,
-                          borderRadius: const BorderRadius.vertical(
-                            top: Radius.circular(7),
-                          ),
+                    Container(
+                      height: 24,
+                      decoration: BoxDecoration(
+                        color: isSelected
+                            ? Theme.of(
+                                context,
+                              ).colorScheme.primary.withValues(alpha: 0.1)
+                            : Theme.of(
+                                context,
+                              ).colorScheme.surfaceContainerHighest,
+                        borderRadius: const BorderRadius.vertical(
+                          top: Radius.circular(7),
                         ),
-                        child: Row(
-                          children: [
-                            const SizedBox(width: 8),
-                            Icon(
-                              Icons.drag_indicator,
-                              size: 16,
-                              color: Theme.of(context).colorScheme.primary,
-                            ),
-                            const SizedBox(width: 4),
-                            Expanded(
-                              child: Text(
-                                plot.yAxis.hasData
-                                    ? plot.yAxis.displayName
-                                    : 'Plot ${_getPlotIndex(plot.id) + 1}',
-                                style: Theme.of(context).textTheme.labelSmall,
-                                overflow: TextOverflow.ellipsis,
+                      ),
+                      child: Row(
+                        children: [
+                          // Draggable area with move cursor
+                          Expanded(
+                            child: MouseRegion(
+                              cursor: SystemMouseCursors.move,
+                              child: Row(
+                                children: [
+                                  const SizedBox(width: 8),
+                                  Icon(
+                                    Icons.drag_indicator,
+                                    size: 16,
+                                    color: Theme.of(
+                                      context,
+                                    ).colorScheme.primary,
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Expanded(
+                                    child: GestureDetector(
+                                      onTap: () => _selectPlot(plot.id),
+                                      child: Text(
+                                        plot.yAxis.hasData
+                                            ? plot.yAxis.displayName
+                                            : 'Plot ${_getPlotIndex(plot.id) + 1}',
+                                        style: Theme.of(
+                                          context,
+                                        ).textTheme.labelSmall,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
-                            // Close Button
-                            InkWell(
-                              onTap: () => _removePlot(plot.id),
-                              child: Padding(
-                                padding: const EdgeInsets.all(4.0),
-                                child: Icon(
-                                  Icons.close,
-                                  size: 14,
-                                  color: Theme.of(context).colorScheme.outline,
+                          ),
+                          // Close Button - now clickable with default cursor!
+                          MouseRegion(
+                            cursor: SystemMouseCursors.click,
+                            child: Material(
+                              color: Colors.transparent,
+                              child: InkWell(
+                                onTap: () => _removePlot(plot.id),
+                                borderRadius: BorderRadius.circular(4),
+                                child: Padding(
+                                  padding: const EdgeInsets.all(4.0),
+                                  child: Icon(
+                                    Icons.close,
+                                    size: 16,
+                                    color: Theme.of(context).colorScheme.error,
+                                  ),
                                 ),
                               ),
                             ),
-                            const SizedBox(width: 4),
-                          ],
-                        ),
+                          ),
+                          const SizedBox(width: 4),
+                        ],
                       ),
                     ),
                     // Plot Area

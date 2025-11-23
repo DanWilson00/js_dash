@@ -30,6 +30,7 @@ class _RealtimeDataDisplayState extends ConsumerState<RealtimeDataDisplay> {
   // Current telemetry data (kept for message tracking functionality)
   late bool _isPaused;
   StreamSubscription? _dataStreamSubscription;
+  double _messagePanelWidth = 350.0;
 
   @override
   void initState() {
@@ -219,14 +220,44 @@ class _RealtimeDataDisplayState extends ConsumerState<RealtimeDataDisplay> {
           Expanded(
             child: Row(
               children: [
-                MavlinkMessageMonitor(
-                  autoStart: widget.autoStartMonitor,
-                  onFieldSelected: _onFieldSelected,
-                  plottedFields:
-                      _plotGridKey.currentState?.allPlottedFields ?? {},
-                  selectedPlotFields:
-                      _plotGridKey.currentState?.selectedPlotFields ?? {},
-                  uiScale: uiScale,
+                SizedBox(
+                  width: _messagePanelWidth,
+                  child: MavlinkMessageMonitor(
+                    autoStart: widget.autoStartMonitor,
+                    onFieldSelected: _onFieldSelected,
+                    plottedFields:
+                        _plotGridKey.currentState?.allPlottedFields ?? {},
+                    selectedPlotFields:
+                        _plotGridKey.currentState?.selectedPlotFields ?? {},
+                    uiScale: uiScale,
+                  ),
+                ),
+                // Resizable divider - almost invisible
+                MouseRegion(
+                  cursor: SystemMouseCursors.resizeColumn,
+                  child: GestureDetector(
+                    onHorizontalDragUpdate: (details) {
+                      setState(() {
+                        _messagePanelWidth =
+                            (_messagePanelWidth + details.delta.dx).clamp(
+                              250.0,
+                              600.0,
+                            );
+                      });
+                    },
+                    child: Container(
+                      width: 8,
+                      color: Colors.transparent,
+                      child: Center(
+                        child: Container(
+                          width: 1,
+                          color: Theme.of(
+                            context,
+                          ).colorScheme.outline.withValues(alpha: 0.15),
+                        ),
+                      ),
+                    ),
+                  ),
                 ),
                 Expanded(
                   child: Padding(
