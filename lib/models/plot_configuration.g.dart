@@ -64,10 +64,10 @@ const _$ScalingModeEnumMap = {
 
 PlotLayoutData _$PlotLayoutDataFromJson(Map<String, dynamic> json) =>
     PlotLayoutData(
-      x: (json['x'] as num?)?.toDouble() ?? 0.0,
-      y: (json['y'] as num?)?.toDouble() ?? 0.0,
-      width: (json['width'] as num?)?.toDouble() ?? 0.5,
-      height: (json['height'] as num?)?.toDouble() ?? 0.5,
+      x: (json['x'] as num?)?.toInt() ?? 0,
+      y: (json['y'] as num?)?.toInt() ?? 0,
+      width: (json['width'] as num?)?.toInt() ?? 6,
+      height: (json['height'] as num?)?.toInt() ?? 4,
     );
 
 Map<String, dynamic> _$PlotLayoutDataToJson(PlotLayoutData instance) =>

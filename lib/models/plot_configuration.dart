@@ -218,28 +218,23 @@ class PlotAxisConfiguration {
 
 @JsonSerializable()
 class PlotLayoutData {
-  final double x;
-  final double y;
-  final double width;
-  final double height;
+  final int x;
+  final int y;
+  final int width;
+  final int height;
 
   const PlotLayoutData({
-    this.x = 0.0,
-    this.y = 0.0,
-    this.width = 0.5,
-    this.height = 0.5,
+    this.x = 0,
+    this.y = 0,
+    this.width = 6,
+    this.height = 4,
   });
 
   factory PlotLayoutData.fromJson(Map<String, dynamic> json) =>
       _$PlotLayoutDataFromJson(json);
   Map<String, dynamic> toJson() => _$PlotLayoutDataToJson(this);
 
-  PlotLayoutData copyWith({
-    double? x,
-    double? y,
-    double? width,
-    double? height,
-  }) {
+  PlotLayoutData copyWith({int? x, int? y, int? width, int? height}) {
     return PlotLayoutData(
       x: x ?? this.x,
       y: y ?? this.y,
