@@ -34,13 +34,6 @@ class PlotGridManagerState extends State<PlotGridManager> {
     super.initState();
     _loadFromSettings();
     _initializeController();
-
-    // Enable edit mode after first frame to avoid rebuild issues
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) {
-        _itemController.isEditing = true;
-      }
-    });
   }
 
   void _loadFromSettings() {
@@ -187,6 +180,10 @@ class PlotGridManagerState extends State<PlotGridManager> {
       _itemController.clear();
     });
     _saveToSettings();
+  }
+
+  void setEditMode(bool enabled) {
+    _itemController.isEditing = enabled;
   }
 
   void updateTimeWindow(TimeWindowOption window) {
@@ -488,15 +485,18 @@ class PlotGridManagerState extends State<PlotGridManager> {
                         ],
                       ),
                     ),
-                    // Plot Area
+                    // Plot Area - force basic cursor to override dashboard's move cursor
                     Expanded(
-                      child: InteractivePlot(
-                        configuration: plot,
-                        settingsManager: widget.settingsManager,
-                        isAxisSelected: isSelected,
-                        onAxisTap: () => _selectPlot(plot.id),
-                        onClearAxis: () => _clearPlotAxis(plot.id),
-                        onLegendTap: () => _toggleSignalPanel(plot.id),
+                      child: MouseRegion(
+                        cursor: SystemMouseCursors.basic,
+                        child: InteractivePlot(
+                          configuration: plot,
+                          settingsManager: widget.settingsManager,
+                          isAxisSelected: isSelected,
+                          onAxisTap: () => _selectPlot(plot.id),
+                          onClearAxis: () => _clearPlotAxis(plot.id),
+                          onLegendTap: () => _toggleSignalPanel(plot.id),
+                        ),
                       ),
                     ),
                   ],

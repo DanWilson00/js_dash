@@ -31,6 +31,7 @@ class _RealtimeDataDisplayState extends ConsumerState<RealtimeDataDisplay> {
   late bool _isPaused;
   StreamSubscription? _dataStreamSubscription;
   double _messagePanelWidth = 350.0;
+  bool _isEditMode = false;
 
   @override
   void initState() {
@@ -112,6 +113,13 @@ class _RealtimeDataDisplayState extends ConsumerState<RealtimeDataDisplay> {
 
     // Save pause state to settings
     widget.settingsManager.updatePauseState(_isPaused);
+  }
+
+  void _toggleEditMode() {
+    setState(() {
+      _isEditMode = !_isEditMode;
+      _plotGridKey.currentState?.setEditMode(_isEditMode);
+    });
   }
 
   void _clearAllPlots() {
@@ -198,6 +206,15 @@ class _RealtimeDataDisplayState extends ConsumerState<RealtimeDataDisplay> {
                       tooltip: _isPaused
                           ? 'PAUSED (click to resume)'
                           : 'PLAYING (click to pause & enable zoom/hover)',
+                    ),
+                    IconButton(
+                      icon: Icon(_isEditMode ? Icons.lock_open : Icons.lock),
+                      iconSize: 24 * uiScale,
+                      onPressed: _toggleEditMode,
+                      tooltip: _isEditMode
+                          ? 'EDIT MODE (drag/resize plots)'
+                          : 'VIEW MODE (interact with plots)',
+                      color: _isEditMode ? Colors.orange : null,
                     ),
                     IconButton(
                       icon: const Icon(Icons.clear_all),
