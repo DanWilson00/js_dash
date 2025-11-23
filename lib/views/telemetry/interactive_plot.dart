@@ -427,51 +427,6 @@ class _InteractivePlotState extends State<InteractivePlot> {
             ),
           ),
         ),
-        // Zoom controls (only show when paused and has data)
-        if (_dataManager.isPaused && widget.configuration.yAxis.hasData) ...[
-          IconButton(
-            icon: const Icon(Icons.zoom_out, size: 20),
-            onPressed: _zoomLevel > _minZoom
-                ? () {
-                    setState(() {
-                      _zoomLevel = (_zoomLevel * 0.8).clamp(_minZoom, _maxZoom);
-                      if (_zoomLevel <= 1.0) _timeOffset = 0;
-                    });
-                  }
-                : null,
-            tooltip: 'Zoom Out',
-            padding: EdgeInsets.zero,
-            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-          ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.surfaceContainerHighest,
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Text(
-              '${(_zoomLevel * 100).toStringAsFixed(0)}%',
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
-          ),
-          IconButton(
-            icon: const Icon(Icons.zoom_in, size: 20),
-            onPressed: _zoomLevel < _maxZoom
-                ? () {
-                    setState(() {
-                      _zoomLevel = (_zoomLevel * 1.25).clamp(
-                        _minZoom,
-                        _maxZoom,
-                      );
-                    });
-                  }
-                : null,
-            tooltip: 'Zoom In',
-            padding: EdgeInsets.zero,
-            constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-          ),
-          const SizedBox(width: 8),
-        ],
         GestureDetector(
           onTap: widget.onLegendTap,
           child: widget.configuration.yAxis.hasData

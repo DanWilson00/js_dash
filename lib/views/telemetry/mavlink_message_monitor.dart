@@ -343,18 +343,6 @@ class _MavlinkMessageMonitorState extends ConsumerState<MavlinkMessageMonitor> {
                                 ),
                           ),
                         ),
-                        if (widget.onFieldSelected != null)
-                          Icon(
-                            isInSelectedPlot
-                                ? Icons.remove_circle
-                                : (isPlotted
-                                      ? Icons.add_circle_outline
-                                      : Icons.add_circle),
-                            size: 16 * widget.uiScale,
-                            color: isInSelectedPlot
-                                ? fieldColor
-                                : Theme.of(context).colorScheme.primary,
-                          ),
                       ],
                     ),
                   ),

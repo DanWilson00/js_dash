@@ -5,7 +5,6 @@ import '../../models/plot_configuration.dart';
 import '../../services/settings_manager.dart';
 import 'interactive_plot.dart';
 import 'signal_properties_panel.dart';
-import 'signal_selector_panel.dart';
 
 class PlotGridManager extends StatefulWidget {
   final SettingsManager settingsManager;
@@ -25,7 +24,6 @@ class PlotGridManagerState extends State<PlotGridManager> {
   late List<PlotConfiguration> _plots;
   String? _selectedPlotId;
   late bool _showPropertiesPanel;
-  late bool _showSelectorPanel;
 
   late DashboardItemController _itemController;
 
@@ -41,7 +39,6 @@ class PlotGridManagerState extends State<PlotGridManager> {
     // Disable plot persistence - always start fresh
     _plots = [];
     _showPropertiesPanel = plotSettings.propertiesPanelVisible;
-    _showSelectorPanel = plotSettings.selectorPanelVisible;
 
     // Don't load selected plot from settings
     _selectedPlotId = null;
@@ -99,7 +96,6 @@ class PlotGridManagerState extends State<PlotGridManager> {
         configurations: _plots,
         selectedPlotIndex: selectedIndex.clamp(0, _plots.length - 1),
         propertiesPanelVisible: _showPropertiesPanel,
-        selectorPanelVisible: _showSelectorPanel,
       ),
     );
   }
@@ -142,12 +138,74 @@ class PlotGridManagerState extends State<PlotGridManager> {
     _saveToSettings();
   }
 
-  void _toggleSignalPanel(String plotId) {
+  void _handleLegendTap(String plotId, PlotSignalConfiguration signal) {
+    _showColorPicker(plotId, signal);
+  }
+
+  void _showColorPicker(String plotId, PlotSignalConfiguration signal) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Select Color for ${signal.fieldName}'),
+        content: SingleChildScrollView(
+          child: Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: SignalColorPalette.availableColors.map((color) {
+              return GestureDetector(
+                onTap: () {
+                  _updateSignalColor(plotId, signal.id, color);
+                  Navigator.of(context).pop();
+                },
+                child: Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    color: color,
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: signal.color == color
+                          ? Theme.of(context).colorScheme.primary
+                          : Theme.of(
+                              context,
+                            ).colorScheme.outline.withValues(alpha: 0.2),
+                      width: signal.color == color ? 3 : 1,
+                    ),
+                  ),
+                ),
+              );
+            }).toList(),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancel'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _updateSignalColor(String plotId, String signalId, Color newColor) {
     setState(() {
-      if (_selectedPlotId != plotId) {
-        _selectedPlotId = plotId;
+      final plotIndex = _plots.indexWhere((p) => p.id == plotId);
+      if (plotIndex != -1) {
+        final signalIndex = _plots[plotIndex].yAxis.signals.indexWhere(
+          (s) => s.id == signalId,
+        );
+        if (signalIndex != -1) {
+          final updatedSignals = List<PlotSignalConfiguration>.from(
+            _plots[plotIndex].yAxis.signals,
+          );
+          updatedSignals[signalIndex] = updatedSignals[signalIndex].copyWith(
+            color: newColor,
+          );
+          _plots[plotIndex] = _plots[plotIndex].copyWith(
+            yAxis: _plots[plotIndex].yAxis.copyWith(signals: updatedSignals),
+          );
+        }
       }
-      _showSelectorPanel = !_showSelectorPanel;
     });
     _saveToSettings();
   }
@@ -315,32 +373,7 @@ class PlotGridManagerState extends State<PlotGridManager> {
         _saveToSettings();
       },
       onAddSignals: () {
-        setState(() {
-          _showSelectorPanel = true;
-        });
-        _saveToSettings();
-      },
-      scalingMode: plot.yAxis.scalingMode,
-      onScalingModeChanged: (mode) {
-        setState(() {
-          final index = _plots.indexWhere((p) => p.id == plot.id);
-          if (index != -1) {
-            _plots[index] = _plots[index].copyWith(
-              yAxis: _plots[index].yAxis.copyWith(scalingMode: mode),
-            );
-          }
-        });
-        _saveToSettings();
-      },
-    );
-  }
-
-  Widget _buildSignalSelectorPanel() {
-    final plot = _plots.firstWhere((p) => p.id == _selectedPlotId);
-    return SignalSelectorPanel(
-      activeSignals: plot.yAxis.signals,
-      onSignalToggle: (messageType, fieldName) {
-        assignFieldToSelectedPlot(messageType, fieldName);
+        // TODO: Show color picker or handle add signal
       },
       scalingMode: plot.yAxis.scalingMode,
       onScalingModeChanged: (mode) {
@@ -363,10 +396,6 @@ class PlotGridManagerState extends State<PlotGridManager> {
       children: [
         if (_selectedPlotId != null && _showPropertiesPanel) ...[
           _buildSignalPropertiesPanel(),
-          const SizedBox(height: 8),
-        ],
-        if (_selectedPlotId != null && _showSelectorPanel) ...[
-          _buildSignalSelectorPanel(),
           const SizedBox(height: 8),
         ],
 
@@ -495,7 +524,48 @@ class PlotGridManagerState extends State<PlotGridManager> {
                           isAxisSelected: isSelected,
                           onAxisTap: () => _selectPlot(plot.id),
                           onClearAxis: () => _clearPlotAxis(plot.id),
-                          onLegendTap: () => _toggleSignalPanel(plot.id),
+                          onLegendTap: () {
+                            if (plot.yAxis.signals.isNotEmpty) {
+                              if (plot.yAxis.signals.length == 1) {
+                                _handleLegendTap(
+                                  plot.id,
+                                  plot.yAxis.signals.first,
+                                );
+                              } else {
+                                // Show a simple dialog to pick a signal
+                                showDialog(
+                                  context: context,
+                                  builder: (context) => SimpleDialog(
+                                    title: const Text(
+                                      'Select Signal to Edit Color',
+                                    ),
+                                    children: plot.yAxis.signals.map((signal) {
+                                      return SimpleDialogOption(
+                                        onPressed: () {
+                                          Navigator.pop(context);
+                                          _handleLegendTap(plot.id, signal);
+                                        },
+                                        child: Row(
+                                          children: [
+                                            Container(
+                                              width: 16,
+                                              height: 16,
+                                              decoration: BoxDecoration(
+                                                color: signal.color,
+                                                shape: BoxShape.circle,
+                                              ),
+                                            ),
+                                            const SizedBox(width: 8),
+                                            Text(signal.fieldName),
+                                          ],
+                                        ),
+                                      );
+                                    }).toList(),
+                                  ),
+                                );
+                              }
+                            }
+                          },
                         ),
                       ),
                     ),
