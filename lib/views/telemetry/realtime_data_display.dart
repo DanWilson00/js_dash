@@ -183,20 +183,11 @@ class _RealtimeDataDisplayState extends ConsumerState<RealtimeDataDisplay> {
                       ),
                     ),
                     SizedBox(width: 8 * uiScale),
-                    // New Plot Button
-                    ElevatedButton.icon(
+                    IconButton(
+                      icon: const Icon(Icons.add),
+                      iconSize: 24 * uiScale,
                       onPressed: () => _plotGridKey.currentState?.addNewPlot(),
-                      icon: Icon(Icons.add_chart, size: 18 * uiScale),
-                      label: Text(
-                        'New Plot',
-                        style: TextStyle(fontSize: 14 * uiScale),
-                      ),
-                      style: ElevatedButton.styleFrom(
-                        padding: EdgeInsets.symmetric(
-                          horizontal: 12 * uiScale,
-                          vertical: 12 * uiScale,
-                        ),
-                      ),
+                      tooltip: 'Add Plot',
                     ),
                     SizedBox(width: 16 * uiScale),
                     IconButton(

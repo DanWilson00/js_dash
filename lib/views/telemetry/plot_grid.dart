@@ -28,13 +28,19 @@ class PlotGridManagerState extends State<PlotGridManager> {
   late bool _showSelectorPanel;
 
   late DashboardItemController _itemController;
-  bool _isEditing = false;
 
   @override
   void initState() {
     super.initState();
     _loadFromSettings();
     _initializeController();
+
+    // Enable edit mode after first frame to avoid rebuild issues
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        _itemController.isEditing = true;
+      }
+    });
   }
 
   void _loadFromSettings() {
@@ -359,53 +365,6 @@ class PlotGridManagerState extends State<PlotGridManager> {
   Widget build(BuildContext context) {
     return Column(
       children: [
-        // Toolbar
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 4.0),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.end,
-            children: [
-              if (_isEditing)
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 4,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.amber.withValues(alpha: 0.2),
-                    borderRadius: BorderRadius.circular(4),
-                    border: Border.all(color: Colors.amber),
-                  ),
-                  child: const Text(
-                    'Editing Layout',
-                    style: TextStyle(
-                      color: Colors.amber,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 12,
-                    ),
-                  ),
-                ),
-              const Spacer(),
-              IconButton(
-                icon: Icon(_isEditing ? Icons.check : Icons.edit),
-                tooltip: _isEditing ? 'Finish Editing' : 'Edit Layout',
-                onPressed: () {
-                  setState(() {
-                    _isEditing = !_isEditing;
-                    _itemController.isEditing = _isEditing;
-                  });
-                },
-              ),
-              const SizedBox(width: 8),
-              IconButton(
-                icon: const Icon(Icons.add),
-                tooltip: 'Add Plot',
-                onPressed: () => addNewPlot(),
-              ),
-            ],
-          ),
-        ),
-
         if (_selectedPlotId != null && _showPropertiesPanel) ...[
           _buildSignalPropertiesPanel(),
           const SizedBox(height: 8),
@@ -419,6 +378,13 @@ class PlotGridManagerState extends State<PlotGridManager> {
           child: Dashboard(
             dashboardItemController: _itemController,
             slotCount: 24,
+            editModeSettings: EditModeSettings(
+              paintBackgroundLines: false,
+              fillEditingBackground: false,
+              resizeCursorSide: 15,
+              curve: Curves.easeOut,
+              duration: const Duration(milliseconds: 300),
+            ),
             itemBuilder: (DashboardItem item) {
               // Find the plot config.
               final plot = _plots.firstWhere(
@@ -473,10 +439,7 @@ class PlotGridManagerState extends State<PlotGridManager> {
                             Icon(
                               Icons.drag_indicator,
                               size: 16,
-                              color: _isEditing
-                                  ? Theme.of(context).colorScheme.primary
-                                  : Theme.of(context).colorScheme.outline
-                                        .withValues(alpha: 0.5),
+                              color: Theme.of(context).colorScheme.primary,
                             ),
                             const SizedBox(width: 4),
                             Expanded(
