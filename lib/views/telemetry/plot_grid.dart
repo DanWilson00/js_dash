@@ -9,11 +9,13 @@ import 'signal_properties_panel.dart';
 class PlotGridManager extends StatefulWidget {
   final SettingsManager settingsManager;
   final VoidCallback? onFieldAssignment;
+  final String tabId;
 
   const PlotGridManager({
     super.key,
     required this.settingsManager,
     this.onFieldAssignment,
+    required this.tabId,
   });
 
   @override
@@ -36,18 +38,21 @@ class PlotGridManagerState extends State<PlotGridManager> {
 
   void _loadFromSettings() {
     final plotSettings = widget.settingsManager.plots;
-    // Load plots from settings
-    _plots = List<PlotConfiguration>.from(plotSettings.configurations);
+
+    // Find the tab by ID
+    final tab = plotSettings.tabs.firstWhere(
+      (t) => t.id == widget.tabId,
+      orElse: () => plotSettings.tabs.first, // Fallback
+    );
+
+    // Load plots from the specific tab
+    _plots = List<PlotConfiguration>.from(tab.plots);
     _showPropertiesPanel = plotSettings.propertiesPanelVisible;
 
-    // Restore selected plot index
+    // Restore selected plot index (global setting, might need per-tab later)
+    // For now, just select the first plot if available
     if (_plots.isNotEmpty) {
-      final index = plotSettings.selectedPlotIndex;
-      if (index >= 0 && index < _plots.length) {
-        _selectedPlotId = _plots[index].id;
-      } else {
-        _selectedPlotId = _plots.first.id;
-      }
+      _selectedPlotId = _plots.first.id;
     } else {
       _selectedPlotId = null;
     }
@@ -105,22 +110,7 @@ class PlotGridManagerState extends State<PlotGridManager> {
   }
 
   void _saveToSettings() {
-    final selectedIndex = _selectedPlotId != null
-        ? _plots.indexWhere((plot) => plot.id == _selectedPlotId)
-        : 0;
-
-    // Handle empty list safely for clamp
-    final safeIndex = _plots.isEmpty
-        ? 0
-        : selectedIndex.clamp(0, _plots.length - 1);
-
-    widget.settingsManager.updatePlots(
-      widget.settingsManager.plots.copyWith(
-        configurations: _plots,
-        selectedPlotIndex: safeIndex,
-        propertiesPanelVisible: _showPropertiesPanel,
-      ),
-    );
+    widget.settingsManager.updatePlotsInTab(widget.tabId, _plots);
   }
 
   void _updateLayoutFromDelegate(List<DashboardItem> items) {

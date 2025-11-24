@@ -29,7 +29,6 @@ class _DisplaySettingsPanelState extends State<DisplaySettingsPanel> {
 
   @override
   Widget build(BuildContext context) {
-    final plots = widget.settingsManager.plots;
     final appearance = widget.settingsManager.appearance;
 
     return SingleChildScrollView(
@@ -106,55 +105,56 @@ class _DisplaySettingsPanelState extends State<DisplaySettingsPanel> {
             ),
           ),
           const SizedBox(height: 16),
-          Card(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.auto_graph, size: 20),
-                      const SizedBox(width: 8),
-                      Text(
-                        'Default Scaling',
-                        style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                ListTile(
-                  dense: true,
-                  title: const Text('Y-axis scaling mode'),
-                  subtitle: const Text('Default scaling for new plots'),
-                  trailing: DropdownButton<String>(
-                    value: plots.scalingMode,
-                    items: const [
-                      DropdownMenuItem(
-                        value: 'autoScale',
-                        child: Text('Auto Scale'),
-                      ),
-                      DropdownMenuItem(
-                        value: 'unified',
-                        child: Text('Unified'),
-                      ),
-                      DropdownMenuItem(
-                        value: 'independent',
-                        child: Text('Independent'),
-                      ),
-                    ],
-                    onChanged: (value) {
-                      if (value != null) {
-                        widget.settingsManager.updateScalingMode(value);
-                      }
-                    },
-                  ),
-                ),
-              ],
-            ),
-          ),
+          // Scaling mode settings removed as they are now per-plot
+          // Card(
+          //   child: Column(
+          //     crossAxisAlignment: CrossAxisAlignment.start,
+          //     children: [
+          //       Padding(
+          //         padding: const EdgeInsets.all(16),
+          //         child: Row(
+          //           children: [
+          //             const Icon(Icons.auto_graph, size: 20),
+          //             const SizedBox(width: 8),
+          //             Text(
+          //               'Default Scaling',
+          //               style: Theme.of(context).textTheme.titleSmall?.copyWith(
+          //                 fontWeight: FontWeight.bold,
+          //               ),
+          //             ),
+          //           ],
+          //         ),
+          //       ),
+          //       ListTile(
+          //         dense: true,
+          //         title: const Text('Y-axis scaling mode'),
+          //         subtitle: const Text('Default scaling for new plots'),
+          //         trailing: DropdownButton<String>(
+          //           value: plots.scalingMode,
+          //           items: const [
+          //             DropdownMenuItem(
+          //               value: 'autoScale',
+          //               child: Text('Auto Scale'),
+          //             ),
+          //             DropdownMenuItem(
+          //               value: 'unified',
+          //               child: Text('Unified'),
+          //             ),
+          //             DropdownMenuItem(
+          //               value: 'independent',
+          //               child: Text('Independent'),
+          //             ),
+          //           ],
+          //           onChanged: (value) {
+          //             if (value != null) {
+          //               widget.settingsManager.updateScalingMode(value);
+          //             }
+          //           },
+          //         ),
+          //       ),
+          //     ],
+          //   ),
+          // ),
         ],
       ),
     );

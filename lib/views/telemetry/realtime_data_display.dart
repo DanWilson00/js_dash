@@ -24,8 +24,16 @@ class RealtimeDataDisplay extends ConsumerStatefulWidget {
 }
 
 class _RealtimeDataDisplayState extends ConsumerState<RealtimeDataDisplay> {
-  GlobalKey<PlotGridManagerState> get _currentPlotGridKey =>
-      _tabs[_selectedTabIndex].key;
+  // Map to store GlobalKeys for each tab ID
+  final Map<String, GlobalKey<PlotGridManagerState>> _tabKeys = {};
+
+  GlobalKey<PlotGridManagerState> get _currentPlotGridKey {
+    final selectedId = widget.settingsManager.plots.selectedTabId;
+    if (!_tabKeys.containsKey(selectedId)) {
+      _tabKeys[selectedId] = GlobalKey<PlotGridManagerState>();
+    }
+    return _tabKeys[selectedId]!;
+  }
 
   // Current telemetry data (kept for message tracking functionality)
   late bool _isPaused;
@@ -35,13 +43,8 @@ class _RealtimeDataDisplayState extends ConsumerState<RealtimeDataDisplay> {
   bool _isEditMode = false;
   Timer? _panelWidthSaveTimer;
 
-  // Tab management (in-memory, not persisted)
-  final List<({String id, String name, GlobalKey<PlotGridManagerState> key})>
-  _tabs = [];
-  int _selectedTabIndex = 0;
-
   // Inline editing state
-  int? _editingTabIndex;
+  String? _editingTabId;
   late TextEditingController _renameController;
   late FocusNode _renameFocusNode;
 
@@ -57,18 +60,8 @@ class _RealtimeDataDisplayState extends ConsumerState<RealtimeDataDisplay> {
     _currentTimeWindow = widget.settingsManager.plots.timeWindow;
     _messagePanelWidth = widget.settingsManager.plots.messagePanelWidth;
 
-    // Initialize with one default tab
-    _tabs.add((
-      id: 'tab_0',
-      name: 'Main',
-      key: GlobalKey<PlotGridManagerState>(),
-    ));
-
     // Listen for settings changes
     widget.settingsManager.addListener(_onSettingsChanged);
-
-    // Listen for data changes to update connection status via TelemetryRepository
-    // This will be set up in didChangeDependencies when ref is available
   }
 
   @override
@@ -110,6 +103,8 @@ class _RealtimeDataDisplayState extends ConsumerState<RealtimeDataDisplay> {
         }
       });
     }
+    // Trigger rebuild for tab changes
+    setState(() {});
   }
 
   @override
@@ -167,50 +162,27 @@ class _RealtimeDataDisplayState extends ConsumerState<RealtimeDataDisplay> {
   }
 
   void _addTab() {
-    setState(() {
-      final tabId = 'tab_${DateTime.now().millisecondsSinceEpoch}';
-      _tabs.add((
-        id: tabId,
-        name: 'Tab ${_tabs.length + 1}',
-        key: GlobalKey<PlotGridManagerState>(),
-      ));
-      _selectedTabIndex = _tabs.length - 1;
-    });
-
-    // Clear plots in the new tab after it's built
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _tabs[_selectedTabIndex].key.currentState?.clearAllPlots();
-    });
+    widget.settingsManager.addPlotTab(
+      'Tab ${widget.settingsManager.plots.tabs.length + 1}',
+    );
   }
 
-  void _removeTab(int index) {
-    if (_tabs.length <= 1) return; // Keep at least one tab
-
-    setState(() {
-      _tabs.removeAt(index);
-      if (_selectedTabIndex >= _tabs.length) {
-        _selectedTabIndex = _tabs.length - 1;
-      }
-    });
+  void _removeTab(String tabId) {
+    widget.settingsManager.removePlotTab(tabId);
   }
 
-  void _renameTab(int index, String newName) {
-    setState(() {
-      final tab = _tabs[index];
-      _tabs[index] = (id: tab.id, name: newName, key: tab.key);
-    });
+  void _renameTab(String tabId, String newName) {
+    widget.settingsManager.renamePlotTab(tabId, newName);
   }
 
-  void _selectTab(int index) {
-    setState(() {
-      _selectedTabIndex = index;
-    });
+  void _selectTab(String tabId) {
+    widget.settingsManager.selectPlotTab(tabId);
   }
 
-  void _startEditing(int index) {
+  void _startEditing(String tabId, String currentName) {
     setState(() {
-      _editingTabIndex = index;
-      _renameController.text = _tabs[index].name;
+      _editingTabId = tabId;
+      _renameController.text = currentName;
       // Request focus after build
       WidgetsBinding.instance.addPostFrameCallback((_) {
         _renameFocusNode.requestFocus();
@@ -219,12 +191,12 @@ class _RealtimeDataDisplayState extends ConsumerState<RealtimeDataDisplay> {
   }
 
   void _stopEditing() {
-    if (_editingTabIndex != null) {
+    if (_editingTabId != null) {
       if (_renameController.text.isNotEmpty) {
-        _renameTab(_editingTabIndex!, _renameController.text);
+        _renameTab(_editingTabId!, _renameController.text);
       }
       setState(() {
-        _editingTabIndex = null;
+        _editingTabId = null;
       });
     }
   }
@@ -232,6 +204,18 @@ class _RealtimeDataDisplayState extends ConsumerState<RealtimeDataDisplay> {
   @override
   Widget build(BuildContext context) {
     final uiScale = widget.settingsManager.appearance.uiScale;
+    final tabs = widget.settingsManager.plots.tabs;
+    final selectedTabId = widget.settingsManager.plots.selectedTabId;
+
+    // Ensure keys exist for all tabs
+    for (var tab in tabs) {
+      if (!_tabKeys.containsKey(tab.id)) {
+        _tabKeys[tab.id] = GlobalKey<PlotGridManagerState>();
+      }
+    }
+
+    // Cleanup keys for removed tabs
+    _tabKeys.removeWhere((key, _) => !tabs.any((t) => t.id == key));
 
     // Get current time window from settings
     final currentTimeWindowLabel = widget.settingsManager.plots.timeWindow;
@@ -253,17 +237,17 @@ class _RealtimeDataDisplayState extends ConsumerState<RealtimeDataDisplay> {
             child: Row(
               children: [
                 // Tabs on the left
-                Flexible(
+                Expanded(
                   child: SingleChildScrollView(
                     scrollDirection: Axis.horizontal,
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        for (int i = 0; i < _tabs.length; i++)
+                        for (var tab in tabs)
                           Padding(
                             padding: EdgeInsets.only(right: 4 * uiScale),
                             child: Material(
-                              color: i == _selectedTabIndex
+                              color: tab.id == selectedTabId
                                   ? Theme.of(
                                       context,
                                     ).colorScheme.primaryContainer
@@ -272,8 +256,11 @@ class _RealtimeDataDisplayState extends ConsumerState<RealtimeDataDisplay> {
                                     ).colorScheme.surfaceContainer,
                               borderRadius: BorderRadius.circular(4),
                               child: InkWell(
-                                onTap: () => _selectTab(i),
-                                onDoubleTap: () => _startEditing(i),
+                                onTap: () => _selectTab(tab.id),
+                                onDoubleTap: () =>
+                                    _startEditing(tab.id, tab.name),
+                                splashColor: Colors.transparent,
+                                highlightColor: Colors.transparent,
                                 borderRadius: BorderRadius.circular(4),
                                 child: Padding(
                                   padding: EdgeInsets.symmetric(
@@ -283,7 +270,7 @@ class _RealtimeDataDisplayState extends ConsumerState<RealtimeDataDisplay> {
                                   child: Row(
                                     mainAxisSize: MainAxisSize.min,
                                     children: [
-                                      if (_editingTabIndex == i)
+                                      if (_editingTabId == tab.id)
                                         SizedBox(
                                           width: 100 * uiScale,
                                           child: TextField(
@@ -304,19 +291,19 @@ class _RealtimeDataDisplayState extends ConsumerState<RealtimeDataDisplay> {
                                         )
                                       else
                                         Text(
-                                          _tabs[i].name,
+                                          tab.name,
                                           style: TextStyle(
                                             fontSize: 14 * uiScale,
-                                            fontWeight: i == _selectedTabIndex
+                                            fontWeight: tab.id == selectedTabId
                                                 ? FontWeight.bold
                                                 : FontWeight.normal,
                                           ),
                                         ),
-                                      if (_tabs.length > 1 &&
-                                          _editingTabIndex != i) ...[
+                                      if (tabs.length > 1 &&
+                                          _editingTabId != tab.id) ...[
                                         SizedBox(width: 8 * uiScale),
                                         InkWell(
-                                          onTap: () => _removeTab(i),
+                                          onTap: () => _removeTab(tab.id),
                                           child: Icon(
                                             Icons.close,
                                             size: 16 * uiScale,
@@ -488,12 +475,15 @@ class _RealtimeDataDisplayState extends ConsumerState<RealtimeDataDisplay> {
                   child: Padding(
                     padding: EdgeInsets.all(8.0 * uiScale),
                     child: IndexedStack(
-                      index: _selectedTabIndex,
+                      index: tabs
+                          .indexWhere((t) => t.id == selectedTabId)
+                          .clamp(0, tabs.length - 1),
                       children: [
-                        for (var tab in _tabs)
+                        for (var tab in tabs)
                           PlotGridManager(
-                            key: tab.key,
+                            key: _tabKeys[tab.id],
                             settingsManager: widget.settingsManager,
+                            tabId: tab.id,
                             onFieldAssignment: () {
                               // Force refresh to update field highlighting
                               setState(() {});

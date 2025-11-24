@@ -60,25 +60,21 @@ Map<String, dynamic> _$WindowSettingsToJson(WindowSettings instance) =>
     };
 
 PlotSettings _$PlotSettingsFromJson(Map<String, dynamic> json) => PlotSettings(
-  timeWindow: json['timeWindow'] as String,
-  configurations: (json['configurations'] as List<dynamic>)
-      .map((e) => PlotConfiguration.fromJson(e as Map<String, dynamic>))
-      .toList(),
-  scalingMode: json['scalingMode'] as String,
-  selectedPlotIndex: (json['selectedPlotIndex'] as num).toInt(),
-  propertiesPanelVisible: json['propertiesPanelVisible'] as bool,
-  selectorPanelVisible: json['selectorPanelVisible'] as bool,
-  messagePanelWidth: (json['messagePanelWidth'] as num).toDouble(),
+  tabs:
+      (json['tabs'] as List<dynamic>?)
+          ?.map((e) => PlotTab.fromJson(e as Map<String, dynamic>))
+          .toList() ??
+      const [],
+  selectedTabId: json['selectedTabId'] as String? ?? 'main',
+  timeWindow: json['timeWindow'] as String? ?? '1 Minute',
+  messagePanelWidth: (json['messagePanelWidth'] as num?)?.toDouble() ?? 350.0,
 );
 
 Map<String, dynamic> _$PlotSettingsToJson(PlotSettings instance) =>
     <String, dynamic>{
+      'tabs': instance.tabs,
+      'selectedTabId': instance.selectedTabId,
       'timeWindow': instance.timeWindow,
-      'configurations': instance.configurations,
-      'scalingMode': instance.scalingMode,
-      'selectedPlotIndex': instance.selectedPlotIndex,
-      'propertiesPanelVisible': instance.propertiesPanelVisible,
-      'selectorPanelVisible': instance.selectorPanelVisible,
       'messagePanelWidth': instance.messagePanelWidth,
     };
 

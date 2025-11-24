@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import '../models/app_settings.dart';
 import '../models/plot_configuration.dart';
+import '../models/plot_tab.dart';
 import 'settings_service.dart';
 
 /// Central settings manager with automatic persistence and change notification
@@ -95,35 +96,101 @@ class SettingsManager extends ChangeNotifier {
     _debouncedSave();
   }
 
-  /// Update plot count and regenerate configurations if needed
-  // Deprecated: Plot count is now dynamic based on added plots
-  // void updatePlotCount(int count) { ... }
-
-  /// Update time window
+  // Plot Settings
   void updateTimeWindow(String timeWindow) {
-    updatePlots(_settings.plots.copyWith(timeWindow: timeWindow));
-  }
-
-  /// Update message panel width
-  void updateMessagePanelWidth(double width) {
-    updatePlots(_settings.plots.copyWith(messagePanelWidth: width));
-  }
-
-  /// Update scaling mode
-  void updateScalingMode(String scalingMode) {
-    updatePlots(_settings.plots.copyWith(scalingMode: scalingMode));
-  }
-
-  /// Update plot configuration at specific index
-  void updatePlotConfiguration(int index, PlotConfiguration configuration) {
-    if (index < 0 || index >= _settings.plots.configurations.length) return;
-
-    final configurations = List<PlotConfiguration>.from(
-      _settings.plots.configurations,
+    _settings = _settings.copyWith(
+      plots: _settings.plots.copyWith(timeWindow: timeWindow),
     );
-    configurations[index] = configuration;
+    _debouncedSave();
+  }
 
-    updatePlots(_settings.plots.copyWith(configurations: configurations));
+  void updateMessagePanelWidth(double width) {
+    _settings = _settings.copyWith(
+      plots: _settings.plots.copyWith(messagePanelWidth: width),
+    );
+    _debouncedSave();
+  }
+
+  // Tab Management
+  void addPlotTab(String name) {
+    final newTab = PlotTab(
+      id: 'tab_${DateTime.now().millisecondsSinceEpoch}',
+      name: name,
+      plots: [],
+    );
+    final updatedTabs = List<PlotTab>.from(_settings.plots.tabs)..add(newTab);
+
+    _settings = _settings.copyWith(
+      plots: _settings.plots.copyWith(
+        tabs: updatedTabs,
+        selectedTabId: newTab.id,
+      ),
+    );
+    _debouncedSave();
+  }
+
+  void removePlotTab(String tabId) {
+    if (_settings.plots.tabs.length <= 1) return; // Prevent removing last tab
+
+    final updatedTabs = List<PlotTab>.from(_settings.plots.tabs)
+      ..removeWhere((t) => t.id == tabId);
+
+    // If we removed the selected tab, select the last one
+    String newSelectedId = _settings.plots.selectedTabId;
+    if (tabId == _settings.plots.selectedTabId) {
+      newSelectedId = updatedTabs.last.id;
+    }
+
+    _settings = _settings.copyWith(
+      plots: _settings.plots.copyWith(
+        tabs: updatedTabs,
+        selectedTabId: newSelectedId,
+      ),
+    );
+    _debouncedSave();
+  }
+
+  void renamePlotTab(String tabId, String newName) {
+    final updatedTabs = _settings.plots.tabs.map((tab) {
+      return tab.id == tabId ? tab.copyWith(name: newName) : tab;
+    }).toList();
+
+    _settings = _settings.copyWith(
+      plots: _settings.plots.copyWith(tabs: updatedTabs),
+    );
+    _debouncedSave();
+  }
+
+  void selectPlotTab(String tabId) {
+    if (_settings.plots.selectedTabId == tabId) return;
+
+    _settings = _settings.copyWith(
+      plots: _settings.plots.copyWith(selectedTabId: tabId),
+    );
+    _debouncedSave();
+  }
+
+  void updatePlotsInTab(String tabId, List<PlotConfiguration> plots) {
+    final updatedTabs = _settings.plots.tabs.map((tab) {
+      return tab.id == tabId ? tab.copyWith(plots: plots) : tab;
+    }).toList();
+
+    _settings = _settings.copyWith(
+      plots: _settings.plots.copyWith(tabs: updatedTabs),
+    );
+    _debouncedSave();
+  }
+
+  PlotTab? getCurrentTab() {
+    try {
+      return _settings.plots.tabs.firstWhere(
+        (t) => t.id == _settings.plots.selectedTabId,
+      );
+    } catch (_) {
+      return _settings.plots.tabs.isNotEmpty
+          ? _settings.plots.tabs.first
+          : null;
+    }
   }
 
   /// Update connection settings

@@ -1,6 +1,7 @@
 import 'package:json_annotation/json_annotation.dart';
 import 'package:flutter/material.dart';
 import 'plot_configuration.dart';
+import 'plot_tab.dart';
 
 part 'app_settings.g.dart';
 
@@ -126,61 +127,67 @@ class WindowSettings {
 
 @JsonSerializable()
 class PlotSettings {
-  // Layout is now handled per-plot via PlotConfiguration.layoutData
-  final String timeWindow; // TimeWindowOption enum as string
-  final List<PlotConfiguration> configurations;
-  final String scalingMode; // ScalingMode enum as string
-  final int selectedPlotIndex;
-  final bool propertiesPanelVisible;
-  final bool selectorPanelVisible;
+  final List<PlotTab> tabs;
+  final String selectedTabId;
+  final String timeWindow;
   final double messagePanelWidth;
+  final bool propertiesPanelVisible;
 
   const PlotSettings({
-    required this.timeWindow,
-    required this.configurations,
-    required this.scalingMode,
-    required this.selectedPlotIndex,
-    required this.propertiesPanelVisible,
-    required this.selectorPanelVisible,
-    required this.messagePanelWidth,
+    this.tabs = const [],
+    this.selectedTabId = 'main',
+    this.timeWindow = '1 Minute',
+    this.messagePanelWidth = 350.0,
+    this.propertiesPanelVisible = false,
   });
 
   factory PlotSettings.defaults() {
-    return PlotSettings(
-      timeWindow: '10s',
-      configurations: [PlotConfiguration(id: 'plot_0')],
-      scalingMode: 'autoScale',
-      selectedPlotIndex: 0,
-      propertiesPanelVisible: false,
-      selectorPanelVisible: false,
+    return const PlotSettings(
+      tabs: [PlotTab(id: 'main', name: 'Main', plots: [])],
+      selectedTabId: 'main',
+      timeWindow: '1 Minute',
       messagePanelWidth: 350.0,
+      propertiesPanelVisible: false,
     );
   }
-
-  factory PlotSettings.fromJson(Map<String, dynamic> json) =>
-      _$PlotSettingsFromJson(json);
-  Map<String, dynamic> toJson() => _$PlotSettingsToJson(this);
 
   PlotSettings copyWith({
+    List<PlotTab>? tabs,
+    String? selectedTabId,
     String? timeWindow,
-    List<PlotConfiguration>? configurations,
-    String? scalingMode,
-    int? selectedPlotIndex,
-    bool? propertiesPanelVisible,
-    bool? selectorPanelVisible,
     double? messagePanelWidth,
+    bool? propertiesPanelVisible,
   }) {
     return PlotSettings(
+      tabs: tabs ?? this.tabs,
+      selectedTabId: selectedTabId ?? this.selectedTabId,
       timeWindow: timeWindow ?? this.timeWindow,
-      configurations: configurations ?? this.configurations,
-      scalingMode: scalingMode ?? this.scalingMode,
-      selectedPlotIndex: selectedPlotIndex ?? this.selectedPlotIndex,
+      messagePanelWidth: messagePanelWidth ?? this.messagePanelWidth,
       propertiesPanelVisible:
           propertiesPanelVisible ?? this.propertiesPanelVisible,
-      selectorPanelVisible: selectorPanelVisible ?? this.selectorPanelVisible,
-      messagePanelWidth: messagePanelWidth ?? this.messagePanelWidth,
     );
   }
+
+  factory PlotSettings.fromJson(Map<String, dynamic> json) {
+    // Migration logic for old format
+    if (json['configurations'] != null && json['tabs'] == null) {
+      final oldPlots = (json['configurations'] as List)
+          .map((e) => PlotConfiguration.fromJson(e as Map<String, dynamic>))
+          .toList();
+
+      return PlotSettings(
+        tabs: [PlotTab(id: 'main', name: 'Main', plots: oldPlots)],
+        selectedTabId: 'main',
+        timeWindow: json['timeWindow'] as String? ?? '1 Minute',
+        messagePanelWidth:
+            (json['messagePanelWidth'] as num?)?.toDouble() ?? 350.0,
+      );
+    }
+
+    return _$PlotSettingsFromJson(json);
+  }
+
+  Map<String, dynamic> toJson() => _$PlotSettingsToJson(this);
 }
 
 @JsonSerializable()

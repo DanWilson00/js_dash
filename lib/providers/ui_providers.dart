@@ -285,8 +285,14 @@ final selectedFieldsProvider = StateProvider<Set<String>>((ref) => <String>{});
 final plotConfigurationProvider = StateProvider.family<PlotConfiguration?, int>(
   (ref, plotIndex) {
     final plotSettings = ref.watch(plotSettingsProvider);
-    if (plotIndex >= 0 && plotIndex < plotSettings.configurations.length) {
-      return plotSettings.configurations[plotIndex];
+    // Find current tab
+    final tab = plotSettings.tabs.firstWhere(
+      (t) => t.id == plotSettings.selectedTabId,
+      orElse: () => plotSettings.tabs.first,
+    );
+
+    if (plotIndex >= 0 && plotIndex < tab.plots.length) {
+      return tab.plots[plotIndex];
     }
     return null;
   },
