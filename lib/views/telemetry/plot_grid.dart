@@ -54,9 +54,10 @@ class PlotGridManagerState extends State<PlotGridManager> {
   }
 
   void _initializeController() {
-    if (_plots.isEmpty) {
-      _addDefaultPlot(save: false);
-    }
+    // Removed forced default plot creation to allow empty state persistence
+    // if (_plots.isEmpty) {
+    //   _addDefaultPlot(save: false);
+    // }
 
     _itemController = DashboardItemController.withDelegate(
       itemStorageDelegate: _PlotGridStorageDelegate(
@@ -108,10 +109,15 @@ class PlotGridManagerState extends State<PlotGridManager> {
         ? _plots.indexWhere((plot) => plot.id == _selectedPlotId)
         : 0;
 
+    // Handle empty list safely for clamp
+    final safeIndex = _plots.isEmpty
+        ? 0
+        : selectedIndex.clamp(0, _plots.length - 1);
+
     widget.settingsManager.updatePlots(
       widget.settingsManager.plots.copyWith(
         configurations: _plots,
-        selectedPlotIndex: selectedIndex.clamp(0, _plots.length - 1),
+        selectedPlotIndex: safeIndex,
         propertiesPanelVisible: _showPropertiesPanel,
       ),
     );

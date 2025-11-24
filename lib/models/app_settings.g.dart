@@ -68,6 +68,7 @@ PlotSettings _$PlotSettingsFromJson(Map<String, dynamic> json) => PlotSettings(
   selectedPlotIndex: (json['selectedPlotIndex'] as num).toInt(),
   propertiesPanelVisible: json['propertiesPanelVisible'] as bool,
   selectorPanelVisible: json['selectorPanelVisible'] as bool,
+  messagePanelWidth: (json['messagePanelWidth'] as num).toDouble(),
 );
 
 Map<String, dynamic> _$PlotSettingsToJson(PlotSettings instance) =>
@@ -78,6 +79,7 @@ Map<String, dynamic> _$PlotSettingsToJson(PlotSettings instance) =>
       'selectedPlotIndex': instance.selectedPlotIndex,
       'propertiesPanelVisible': instance.propertiesPanelVisible,
       'selectorPanelVisible': instance.selectorPanelVisible,
+      'messagePanelWidth': instance.messagePanelWidth,
     };
 
 ConnectionSettings _$ConnectionSettingsFromJson(Map<String, dynamic> json) =>

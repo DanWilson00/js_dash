@@ -133,6 +133,7 @@ class PlotSettings {
   final int selectedPlotIndex;
   final bool propertiesPanelVisible;
   final bool selectorPanelVisible;
+  final double messagePanelWidth;
 
   const PlotSettings({
     required this.timeWindow,
@@ -141,6 +142,7 @@ class PlotSettings {
     required this.selectedPlotIndex,
     required this.propertiesPanelVisible,
     required this.selectorPanelVisible,
+    required this.messagePanelWidth,
   });
 
   factory PlotSettings.defaults() {
@@ -151,6 +153,7 @@ class PlotSettings {
       selectedPlotIndex: 0,
       propertiesPanelVisible: false,
       selectorPanelVisible: false,
+      messagePanelWidth: 350.0,
     );
   }
 
@@ -165,6 +168,7 @@ class PlotSettings {
     int? selectedPlotIndex,
     bool? propertiesPanelVisible,
     bool? selectorPanelVisible,
+    double? messagePanelWidth,
   }) {
     return PlotSettings(
       timeWindow: timeWindow ?? this.timeWindow,
@@ -174,6 +178,7 @@ class PlotSettings {
       propertiesPanelVisible:
           propertiesPanelVisible ?? this.propertiesPanelVisible,
       selectorPanelVisible: selectorPanelVisible ?? this.selectorPanelVisible,
+      messagePanelWidth: messagePanelWidth ?? this.messagePanelWidth,
     );
   }
 }

@@ -104,6 +104,11 @@ class SettingsManager extends ChangeNotifier {
     updatePlots(_settings.plots.copyWith(timeWindow: timeWindow));
   }
 
+  /// Update message panel width
+  void updateMessagePanelWidth(double width) {
+    updatePlots(_settings.plots.copyWith(messagePanelWidth: width));
+  }
+
   /// Update scaling mode
   void updateScalingMode(String scalingMode) {
     updatePlots(_settings.plots.copyWith(scalingMode: scalingMode));

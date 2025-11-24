@@ -31,8 +31,9 @@ class _RealtimeDataDisplayState extends ConsumerState<RealtimeDataDisplay> {
   late bool _isPaused;
   late String _currentTimeWindow;
   StreamSubscription? _dataStreamSubscription;
-  double _messagePanelWidth = 350.0;
+  late double _messagePanelWidth;
   bool _isEditMode = false;
+  Timer? _panelWidthSaveTimer;
 
   @override
   void initState() {
@@ -41,6 +42,7 @@ class _RealtimeDataDisplayState extends ConsumerState<RealtimeDataDisplay> {
     // Initialize from settings
     _isPaused = widget.settingsManager.connection.isPaused;
     _currentTimeWindow = widget.settingsManager.plots.timeWindow;
+    _messagePanelWidth = widget.settingsManager.plots.messagePanelWidth;
 
     // Listen for settings changes
     widget.settingsManager.addListener(_onSettingsChanged);
@@ -92,6 +94,7 @@ class _RealtimeDataDisplayState extends ConsumerState<RealtimeDataDisplay> {
 
   @override
   void dispose() {
+    _panelWidthSaveTimer?.cancel();
     widget.settingsManager.removeListener(_onSettingsChanged);
     _dataStreamSubscription?.cancel();
     super.dispose();
@@ -274,6 +277,17 @@ class _RealtimeDataDisplayState extends ConsumerState<RealtimeDataDisplay> {
                               600.0,
                             );
                       });
+
+                      // Debounce saves to avoid excessive writes
+                      _panelWidthSaveTimer?.cancel();
+                      _panelWidthSaveTimer = Timer(
+                        const Duration(milliseconds: 500),
+                        () {
+                          widget.settingsManager.updateMessagePanelWidth(
+                            _messagePanelWidth,
+                          );
+                        },
+                      );
                     },
                     child: Container(
                       width: 8,
