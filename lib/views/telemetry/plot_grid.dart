@@ -65,8 +65,17 @@ class PlotGridManagerState extends State<PlotGridManager> {
 
   void _addDefaultPlot({bool save = true}) {
     final newId = 'plot_${DateTime.now().millisecondsSinceEpoch}';
+
+    // Get current time window from settings
+    final timeWindowLabel = widget.settingsManager.plots.timeWindow;
+    final timeWindowOption = TimeWindowOption.availableWindows.firstWhere(
+      (w) => w.label == timeWindowLabel,
+      orElse: () => TimeWindowOption.getDefault(),
+    );
+
     final newPlot = PlotConfiguration(
       id: newId,
+      timeWindow: timeWindowOption.duration,
       layoutData: const PlotLayoutData(x: 0, y: 0, width: 8, height: 6),
     );
 

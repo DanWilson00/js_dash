@@ -29,6 +29,7 @@ class _RealtimeDataDisplayState extends ConsumerState<RealtimeDataDisplay> {
 
   // Current telemetry data (kept for message tracking functionality)
   late bool _isPaused;
+  late String _currentTimeWindow;
   StreamSubscription? _dataStreamSubscription;
   double _messagePanelWidth = 350.0;
   bool _isEditMode = false;
@@ -39,6 +40,7 @@ class _RealtimeDataDisplayState extends ConsumerState<RealtimeDataDisplay> {
 
     // Initialize from settings
     _isPaused = widget.settingsManager.connection.isPaused;
+    _currentTimeWindow = widget.settingsManager.plots.timeWindow;
 
     // Listen for settings changes
     widget.settingsManager.addListener(_onSettingsChanged);
@@ -68,13 +70,16 @@ class _RealtimeDataDisplayState extends ConsumerState<RealtimeDataDisplay> {
   }
 
   void _onSettingsChanged() {
-    // Only handle pause state changes - connection management is in MainNavigation
+    // Check for pause state changes
     final newIsPaused = widget.settingsManager.connection.isPaused;
+    // Check for time window changes
+    final newTimeWindow = widget.settingsManager.plots.timeWindow;
 
-    if (newIsPaused != _isPaused) {
-      // Pause state changed
+    if (newIsPaused != _isPaused || newTimeWindow != _currentTimeWindow) {
       setState(() {
         _isPaused = newIsPaused;
+        _currentTimeWindow = newTimeWindow;
+
         final repository = ref.read(telemetryRepositoryProvider);
         if (_isPaused) {
           repository.pause();
@@ -140,6 +145,13 @@ class _RealtimeDataDisplayState extends ConsumerState<RealtimeDataDisplay> {
   Widget build(BuildContext context) {
     final uiScale = widget.settingsManager.appearance.uiScale;
 
+    // Get current time window from settings
+    final currentTimeWindowLabel = widget.settingsManager.plots.timeWindow;
+    final currentTimeWindow = TimeWindowOption.availableWindows.firstWhere(
+      (w) => w.label == currentTimeWindowLabel,
+      orElse: () => TimeWindowOption.getDefault(),
+    );
+
     return Scaffold(
       body: Column(
         children: [
@@ -165,8 +177,7 @@ class _RealtimeDataDisplayState extends ConsumerState<RealtimeDataDisplay> {
                         borderRadius: BorderRadius.circular(8),
                       ),
                       child: DropdownButton<TimeWindowOption>(
-                        value:
-                            TimeWindowOption.getDefault(), // TODO: Sync with actual state
+                        value: currentTimeWindow,
                         items: TimeWindowOption.availableWindows
                             .map(
                               (w) => DropdownMenuItem(
@@ -180,10 +191,12 @@ class _RealtimeDataDisplayState extends ConsumerState<RealtimeDataDisplay> {
                             .toList(),
                         onChanged: (window) {
                           if (window != null) {
+                            // Update global settings
+                            widget.settingsManager.updateTimeWindow(
+                              window.label,
+                            );
+                            // Update existing plots
                             _plotGridKey.currentState?.updateTimeWindow(window);
-                            // Force rebuild to update dropdown value if we were tracking it here
-                            // For now, we just send it to the grid
-                            setState(() {});
                           }
                         },
                         underline: const SizedBox(),
