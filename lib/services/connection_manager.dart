@@ -1,6 +1,9 @@
 import 'dart:async';
 import '../core/connection_config.dart';
-import '../core/service_locator.dart';
+import '../core/connection_status.dart';
+import '../interfaces/disposable.dart';
+import 'mavlink_message_tracker.dart';
+
 import '../interfaces/i_connection_manager.dart';
 import '../interfaces/i_data_source.dart';
 import 'mavlink_service.dart';
@@ -13,13 +16,15 @@ class ConnectionManager implements IConnectionManager, Disposable {
   // Singleton support for backward compatibility - will be deprecated
   static ConnectionManager? _instance;
   factory ConnectionManager() => _instance ??= ConnectionManager._internal();
-  ConnectionManager._internal();
+  ConnectionManager._internal() : _injectedTracker = null;
   
   // New constructor for dependency injection
-  ConnectionManager.injected();
+  ConnectionManager.injected(this._injectedTracker);
   
   // For testing - allows creating fresh instances
-  ConnectionManager.forTesting();
+  ConnectionManager.forTesting() : _injectedTracker = null;
+
+  final MavlinkMessageTracker? _injectedTracker;
 
   IDataSource? _currentDataSource;
   ConnectionConfig? _currentConfig;
@@ -146,25 +151,17 @@ class ConnectionManager implements IConnectionManager, Disposable {
 
   /// Create MAVLink service for UDP/Serial connections
   IDataSource _createMavlinkService(ConnectionConfig config) {
-    // Try to get from service locator first (DI), fallback to constructor
-    try {
-      return GetIt.get<MavlinkService>();
-    } catch (e) {
-      // Service not registered, create new instance
-      return MavlinkService.injected();
-    }
+    // Create new instance for dependency injection
+    // Use injected tracker if available, otherwise create a new one (fallback for legacy/testing)
+    final tracker = _injectedTracker ?? MavlinkMessageTracker();
+    return MavlinkService(tracker: tracker);
   }
 
   /// Create spoof service based on configuration
   IDataSource _createSpoofService(SpoofConnectionConfig config) {
-    // For now, use USB Serial Spoof Service as default
-    // This could be configurable in the future
-    try {
-      return GetIt.get<UsbSerialSpoofService>();
-    } catch (e) {
-      // Service not registered, create new instance
-      return UsbSerialSpoofService.injected();
-    }
+    // Create new instance - USB Serial Spoof Service as default
+    final tracker = _injectedTracker ?? MavlinkMessageTracker();
+    return UsbSerialSpoofService(tracker: tracker);
   }
 
   /// Update connection state and notify listeners

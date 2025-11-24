@@ -9,12 +9,10 @@ import '../../providers/ui_providers.dart';
 import '../../services/settings_manager.dart';
 import '../../services/bing_maps_service.dart';
 import '../../models/plot_configuration.dart';
+import '../../core/circular_buffer.dart';
 
 class MapView extends ConsumerStatefulWidget {
-  const MapView({
-    super.key,
-    required this.settingsManager,
-  });
+  const MapView({super.key, required this.settingsManager});
 
   final SettingsManager settingsManager;
 
@@ -24,24 +22,24 @@ class MapView extends ConsumerStatefulWidget {
 
 class _MapViewState extends ConsumerState<MapView> {
   final MapController _mapController = MapController();
-  
+
   // Map layers
   BingMapType _currentLayer = BingMapType.aerial;
-  
+
   // Vehicle location (updated by MAVLink data)
   LatLng? _vehicleLocation;
   double? _vehicleHeading;
-  
+
   // Path tracking
   final List<LatLng> _vehiclePath = [];
-  
+
   // Map ready state
   bool _mapReady = false;
-  
+
   // Track last saved zoom to detect changes
   double? _lastSavedZoom;
   Timer? _saveTimer;
-  
+
   // Subscription for telemetry data
   StreamSubscription<Map<String, CircularBuffer>>? _dataSubscription;
 
@@ -57,7 +55,8 @@ class _MapViewState extends ConsumerState<MapView> {
     _saveTimer = Timer.periodic(const Duration(seconds: 2), (_) {
       if (_mapReady) {
         final currentZoom = _mapController.camera.zoom;
-        if (_lastSavedZoom == null || (currentZoom - _lastSavedZoom!).abs() > 0.1) {
+        if (_lastSavedZoom == null ||
+            (currentZoom - _lastSavedZoom!).abs() > 0.1) {
           _lastSavedZoom = currentZoom;
           _saveMapState();
         }
@@ -68,47 +67,49 @@ class _MapViewState extends ConsumerState<MapView> {
   /// Setup telemetry listening from repository
   void _setupTelemetryListening() {
     final repository = ref.read(telemetryRepositoryProvider);
-    
+
     // Listen to telemetry data stream from the repository
     _dataSubscription = repository.dataStream.listen((dataBuffers) {
       if (!mounted) return;
       _updateMapFromDataBuffers(dataBuffers);
     });
   }
-  
+
   /// Update map view from telemetry data buffers
   void _updateMapFromDataBuffers(Map<String, CircularBuffer> dataBuffers) {
     // Extract GPS position from data buffers
     final latBuffer = dataBuffers['GLOBAL_POSITION_INT.lat'];
     final lonBuffer = dataBuffers['GLOBAL_POSITION_INT.lon'];
     final headingBuffer = dataBuffers['VFR_HUD.heading'];
-    
-    if (latBuffer != null && latBuffer.points.isNotEmpty && 
-        lonBuffer != null && lonBuffer.points.isNotEmpty) {
+
+    if (latBuffer != null &&
+        latBuffer.points.isNotEmpty &&
+        lonBuffer != null &&
+        lonBuffer.points.isNotEmpty) {
       final lat = latBuffer.points.last.value;
       final lon = lonBuffer.points.last.value;
-      final heading = headingBuffer != null && headingBuffer.points.isNotEmpty 
-          ? headingBuffer.points.last.value 
+      final heading = headingBuffer != null && headingBuffer.points.isNotEmpty
+          ? headingBuffer.points.last.value
           : null;
-      
+
       final newLocation = LatLng(lat / 1e7, lon / 1e7);
-      
+
       setState(() {
         _vehicleLocation = newLocation;
         _vehiclePath.add(newLocation);
-        
+
         // Limit path length based on settings
         final mapSettings = ref.read(mapSettingsProvider);
         if (_vehiclePath.length > mapSettings.maxPathPoints) {
           _vehiclePath.removeAt(0);
         }
-        
+
         // Update heading if available
         if (heading != null) {
           _vehicleHeading = heading;
         }
       });
-      
+
       // Auto-follow vehicle if enabled (preserve current zoom level)
       final mapSettings = ref.read(mapSettingsProvider);
       if (mapSettings.followVehicle && _mapReady) {
@@ -122,7 +123,7 @@ class _MapViewState extends ConsumerState<MapView> {
   void _saveMapState() {
     final camera = _mapController.camera;
     final mapSettings = ref.read(mapSettingsProvider);
-    
+
     // Always save zoom, but only save position if not following vehicle
     if (mapSettings.followVehicle) {
       // When following vehicle, only save zoom level, keep saved position
@@ -147,9 +148,12 @@ class _MapViewState extends ConsumerState<MapView> {
   @override
   Widget build(BuildContext context) {
     final mapSettings = ref.watch(mapSettingsProvider);
-    final defaultCenter = LatLng(mapSettings.centerLatitude, mapSettings.centerLongitude);
+    final defaultCenter = LatLng(
+      mapSettings.centerLatitude,
+      mapSettings.centerLongitude,
+    );
     // Loading map with saved settings
-    
+
     return Scaffold(
       backgroundColor: Colors.black,
       body: Stack(
@@ -175,20 +179,24 @@ class _MapViewState extends ConsumerState<MapView> {
                   if (!mapSettings.followVehicle) {
                     Future.microtask(() {
                       _mapController.move(
-                        LatLng(mapSettings.centerLatitude, mapSettings.centerLongitude),
+                        LatLng(
+                          mapSettings.centerLatitude,
+                          mapSettings.centerLongitude,
+                        ),
                         mapSettings.zoomLevel,
                       );
                     });
                   }
                 }
-                
+
                 // Save map state when user stops interacting or zooming
-                if (mapEvent is MapEventMoveEnd || mapEvent is MapEventRotateEnd) {
+                if (mapEvent is MapEventMoveEnd ||
+                    mapEvent is MapEventRotateEnd) {
                   _saveMapState();
                 }
                 // Also save on any zoom or scroll events
                 final eventName = mapEvent.runtimeType.toString();
-                if (eventName.contains('Zoom') || 
+                if (eventName.contains('Zoom') ||
                     eventName.contains('Scroll') ||
                     eventName.contains('Scale') ||
                     eventName.contains('Tap')) {
@@ -197,7 +205,7 @@ class _MapViewState extends ConsumerState<MapView> {
                   });
                 }
                 // Disable following when user manually pans the map
-                if (mapEvent is MapEventMoveStart && 
+                if (mapEvent is MapEventMoveStart &&
                     mapEvent.source == MapEventSource.onDrag) {
                   if (mapSettings.followVehicle) {
                     widget.settingsManager.updateMapFollowVehicle(false);
@@ -211,7 +219,7 @@ class _MapViewState extends ConsumerState<MapView> {
                 urlTemplate: _getTileUrl(),
                 userAgentPackageName: 'com.example.js_dash',
               ),
-              
+
               // Vehicle path layer
               if (mapSettings.showPath && _vehiclePath.length > 1)
                 PolylineLayer(
@@ -223,7 +231,7 @@ class _MapViewState extends ConsumerState<MapView> {
                     ),
                   ],
                 ),
-              
+
               // Vehicle marker layer
               if (_vehicleLocation != null)
                 MarkerLayer(
@@ -245,10 +253,9 @@ class _MapViewState extends ConsumerState<MapView> {
                 ),
             ],
           ),
-          
+
           // Map controls overlay
           _buildMapControls(),
-          
         ],
       ),
     );
@@ -272,7 +279,7 @@ class _MapViewState extends ConsumerState<MapView> {
 
   Widget _buildMapControls() {
     final mapSettings = ref.watch(mapSettingsProvider);
-    
+
     return Positioned(
       top: 20,
       right: 20,
@@ -293,9 +300,9 @@ class _MapViewState extends ConsumerState<MapView> {
               ],
             ),
           ),
-          
+
           const SizedBox(height: 16),
-          
+
           // Zoom controls
           Container(
             decoration: BoxDecoration(
@@ -336,9 +343,9 @@ class _MapViewState extends ConsumerState<MapView> {
               ],
             ),
           ),
-          
+
           const SizedBox(height: 16),
-          
+
           // Path controls
           Container(
             decoration: BoxDecoration(
@@ -351,11 +358,15 @@ class _MapViewState extends ConsumerState<MapView> {
                 // Toggle path visibility
                 IconButton(
                   icon: Icon(
-                    mapSettings.showPath ? Icons.timeline : Icons.timeline_outlined,
+                    mapSettings.showPath
+                        ? Icons.timeline
+                        : Icons.timeline_outlined,
                     color: mapSettings.showPath ? Colors.blue : Colors.white,
                   ),
                   onPressed: () {
-                    widget.settingsManager.updateMapShowPath(!mapSettings.showPath);
+                    widget.settingsManager.updateMapShowPath(
+                      !mapSettings.showPath,
+                    );
                   },
                   tooltip: mapSettings.showPath ? 'Hide Path' : 'Show Path',
                 ),
@@ -388,9 +399,9 @@ class _MapViewState extends ConsumerState<MapView> {
               ],
             ),
           ),
-          
+
           const SizedBox(height: 16),
-          
+
           // Vehicle following controls
           if (_vehicleLocation != null)
             Container(
@@ -404,24 +415,40 @@ class _MapViewState extends ConsumerState<MapView> {
                   // Follow vehicle toggle
                   IconButton(
                     icon: Icon(
-                      mapSettings.followVehicle ? Icons.gps_fixed : Icons.gps_not_fixed,
-                      color: mapSettings.followVehicle ? Colors.green : Colors.white,
+                      mapSettings.followVehicle
+                          ? Icons.gps_fixed
+                          : Icons.gps_not_fixed,
+                      color: mapSettings.followVehicle
+                          ? Colors.green
+                          : Colors.white,
                     ),
                     onPressed: () {
-                      widget.settingsManager.updateMapFollowVehicle(!mapSettings.followVehicle);
+                      widget.settingsManager.updateMapFollowVehicle(
+                        !mapSettings.followVehicle,
+                      );
                       // If enabling follow mode, immediately center on vehicle
-                      if (!mapSettings.followVehicle && _vehicleLocation != null && _mapReady) {
-                        _mapController.move(_vehicleLocation!, _mapController.camera.zoom);
+                      if (!mapSettings.followVehicle &&
+                          _vehicleLocation != null &&
+                          _mapReady) {
+                        _mapController.move(
+                          _vehicleLocation!,
+                          _mapController.camera.zoom,
+                        );
                       }
                     },
-                    tooltip: mapSettings.followVehicle ? 'Stop Following Vehicle' : 'Follow Vehicle',
+                    tooltip: mapSettings.followVehicle
+                        ? 'Stop Following Vehicle'
+                        : 'Follow Vehicle',
                   ),
                   // Manual center on vehicle button
                   IconButton(
                     icon: const Icon(Icons.my_location, color: Colors.white),
                     onPressed: () {
                       if (_vehicleLocation != null && _mapReady) {
-                        _mapController.move(_vehicleLocation!, _mapController.camera.zoom);
+                        _mapController.move(
+                          _vehicleLocation!,
+                          _mapController.camera.zoom,
+                        );
                       }
                     },
                     tooltip: 'Center on Vehicle',
@@ -449,14 +476,11 @@ class _MapViewState extends ConsumerState<MapView> {
           foregroundColor: Colors.white,
           padding: const EdgeInsets.symmetric(vertical: 8),
         ),
-        child: Text(
-          label,
-          style: const TextStyle(fontSize: 12),
-        ),
+        child: Text(label, style: const TextStyle(fontSize: 12)),
       ),
     );
   }
-  
+
   // Show path configuration dialog
   void _showPathConfigDialog() {
     final mapSettings = ref.read(mapSettingsProvider);
@@ -500,7 +524,9 @@ class _MapViewState extends ConsumerState<MapView> {
                 ),
                 TextButton(
                   onPressed: () {
-                    widget.settingsManager.updateMapMaxPathPoints(tempMaxPathPoints);
+                    widget.settingsManager.updateMapMaxPathPoints(
+                      tempMaxPathPoints,
+                    );
                     // Trim existing path if it's too long
                     setState(() {
                       while (_vehiclePath.length > tempMaxPathPoints) {

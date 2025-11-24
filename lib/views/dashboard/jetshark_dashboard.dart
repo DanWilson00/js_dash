@@ -2,7 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../providers/service_providers.dart';
-import '../../models/plot_configuration.dart';
+import '../../core/circular_buffer.dart';
 import 'dashboard_config.dart';
 import 'hud_center_cluster.dart';
 import 'hud_side_indicators.dart';

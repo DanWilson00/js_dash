@@ -1,139 +1,81 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../core/service_locator.dart';
-import '../interfaces/i_connection_manager.dart';
-import '../interfaces/i_data_repository.dart';
-import '../interfaces/i_data_source.dart';
 import '../services/connection_manager.dart';
-import '../services/telemetry_repository.dart';
+import '../services/mavlink_message_tracker.dart';
 import '../services/settings_manager.dart';
+import '../services/telemetry_repository.dart';
+import '../services/timeseries_data_manager.dart';
+import '../interfaces/i_data_source.dart';
+import '../core/connection_status.dart';
 
-/// Core service providers using Riverpod
-/// These providers manage the lifecycle of our core services and provide
-/// them to the widget tree with proper dependency injection
+/// Settings Manager Provider
+final settingsManagerProvider = Provider<SettingsManager>((ref) {
+  return SettingsManager();
+});
+
+/// Mavlink Message Tracker Provider
+final mavlinkMessageTrackerProvider = Provider<MavlinkMessageTracker>((ref) {
+  return MavlinkMessageTracker();
+});
 
 /// Connection Manager Provider
-/// Manages MAVLink connections (UDP/Serial/Spoof)
-final connectionManagerProvider = Provider<IConnectionManager>((ref) {
-  // Try to get from service locator first, fallback to direct instantiation
-  try {
-    return GetIt.get<ConnectionManager>();
-  } catch (e) {
-    final manager = ConnectionManager.injected();
-    // Register in service locator for future use
-    GetIt.registerSingleton<ConnectionManager>(manager);
-    return manager;
-  }
+final connectionManagerProvider = Provider<ConnectionManager>((ref) {
+  final tracker = ref.watch(mavlinkMessageTrackerProvider);
+  final manager = ConnectionManager.injected(tracker);
+  ref.onDispose(() => manager.dispose());
+  return manager;
+});
+
+/// Time Series Data Manager Provider
+final timeSeriesDataManagerProvider = Provider<TimeSeriesDataManager>((ref) {
+  final tracker = ref.watch(mavlinkMessageTrackerProvider);
+  final settingsManager = ref.watch(settingsManagerProvider);
+  final manager = TimeSeriesDataManager.injected(tracker, settingsManager);
+  ref.onDispose(() => manager.dispose());
+  return manager;
 });
 
 /// Telemetry Repository Provider
-/// Provides unified access to all telemetry data
-final telemetryRepositoryProvider = Provider<IDataRepository>((ref) {
-  // Get connection manager from provider
-  final connectionManager = ref.read(connectionManagerProvider) as ConnectionManager;
-  
-  // Try to get from service locator first
-  try {
-    return GetIt.get<TelemetryRepository>();
-  } catch (e) {
-    final repository = TelemetryRepository.injected(
-      connectionManager: connectionManager,
-    );
-    // Register in service locator for future use
-    GetIt.registerSingleton<TelemetryRepository>(repository);
-    return repository;
-  }
-});
-
-/// Settings Manager Provider
-/// Manages application settings and preferences
-final settingsManagerProvider = Provider<SettingsManager>((ref) {
-  try {
-    return GetIt.get<SettingsManager>();
-  } catch (e) {
-    final manager = SettingsManager();
-    GetIt.registerSingleton<SettingsManager>(manager);
-    return manager;
-  }
+final telemetryRepositoryProvider = Provider<TelemetryRepository>((ref) {
+  final connectionManager = ref.watch(connectionManagerProvider);
+  final timeSeriesManager = ref.watch(timeSeriesDataManagerProvider);
+  final repository = TelemetryRepository(
+    connectionManager: connectionManager,
+    timeSeriesManager: timeSeriesManager,
+  );
+  ref.onDispose(() => repository.dispose());
+  return repository;
 });
 
 /// Current Data Source Provider
-/// Provides access to the currently active data source
 final currentDataSourceProvider = Provider<IDataSource?>((ref) {
-  final connectionManager = ref.watch(connectionManagerProvider) as ConnectionManager;
+  final connectionManager = ref.watch(connectionManagerProvider);
   return connectionManager.currentDataSource;
 });
 
 /// Connection Status Provider
-/// Provides reactive connection status updates
 final connectionStatusProvider = StreamProvider<ConnectionStatus>((ref) {
   final connectionManager = ref.watch(connectionManagerProvider);
   return connectionManager.statusStream;
 });
 
-/// Telemetry Data Stream Provider
-/// Provides reactive telemetry data updates
-final telemetryDataProvider = StreamProvider((ref) {
-  final repository = ref.watch(telemetryRepositoryProvider);
-  return repository.dataStream;
-});
-
-/// Connection State Provider (convenience)
-/// Provides just the connection state for UI widgets
+/// Connection State Provider (derived from status)
 final connectionStateProvider = Provider<ConnectionState>((ref) {
-  final status = ref.watch(connectionStatusProvider);
-  return status.when(
+  final statusAsync = ref.watch(connectionStatusProvider);
+  return statusAsync.when(
     data: (status) => status.state,
     loading: () => ConnectionState.disconnected,
-    error: (_, __) => ConnectionState.error,
+    error: (error, stackTrace) => ConnectionState.error,
   );
 });
 
-/// Is Connected Provider (convenience)
-/// Simple boolean for connection status
+/// Is Connected Provider
 final isConnectedProvider = Provider<bool>((ref) {
   final state = ref.watch(connectionStateProvider);
   return state == ConnectionState.connected;
 });
 
 /// Available Fields Provider
-/// Provides list of available telemetry fields
 final availableFieldsProvider = Provider<List<String>>((ref) {
   final repository = ref.watch(telemetryRepositoryProvider);
   return repository.getAvailableFields();
 });
-
-/// Data Summary Provider
-/// Provides summary of current data buffers
-final dataSummaryProvider = Provider<Map<String, int>>((ref) {
-  final repository = ref.watch(telemetryRepositoryProvider);
-  return repository.getDataSummary();
-});
-
-/// Provider lifecycle management
-/// Call this to dispose of providers when app shuts down
-void disposeProviders() {
-  // Dispose services if they implement Disposable
-  try {
-    final connectionManager = GetIt.get<ConnectionManager>();
-    connectionManager.dispose();
-  } catch (e) {
-    // Service not registered
-  }
-
-  try {
-    final repository = GetIt.get<TelemetryRepository>();
-    repository.dispose();
-  } catch (e) {
-    // Service not registered
-  }
-
-  try {
-    final settingsManager = GetIt.get<SettingsManager>();
-    settingsManager.dispose();
-  } catch (e) {
-    // Service not registered
-  }
-
-  // Reset service locator
-  GetIt.reset();
-}

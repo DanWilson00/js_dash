@@ -1,45 +1,10 @@
-import 'dart:collection';
 import 'package:flutter/material.dart';
 import 'package:json_annotation/json_annotation.dart';
+import '../core/timeseries_point.dart';
+import '../core/circular_buffer.dart';
 import 'json_converters.dart';
 
 part 'plot_configuration.g.dart';
-
-class TimeSeriesPoint {
-  final DateTime timestamp;
-  final double value;
-
-  TimeSeriesPoint(this.timestamp, this.value);
-}
-
-class CircularBuffer {
-  final Queue<TimeSeriesPoint> _buffer = Queue<TimeSeriesPoint>();
-  final int maxSize;
-
-  CircularBuffer(this.maxSize);
-
-  void add(TimeSeriesPoint point) {
-    if (_buffer.length >= maxSize) {
-      _buffer.removeFirst();
-    }
-    _buffer.addLast(point);
-  }
-
-  List<TimeSeriesPoint> get points => _buffer.toList();
-
-  void clear() {
-    _buffer.clear();
-  }
-
-  void removeOldData(DateTime cutoff) {
-    while (_buffer.isNotEmpty && _buffer.first.timestamp.isBefore(cutoff)) {
-      _buffer.removeFirst();
-    }
-  }
-
-  bool get isEmpty => _buffer.isEmpty;
-  int get length => _buffer.length;
-}
 
 enum ScalingMode {
   unified, // All signals share same Y-axis bounds

@@ -52,8 +52,7 @@ class SettingsManager extends ChangeNotifier {
     _settings = _settings.copyWith(window: newWindow);
     notifyListeners();
 
-    // Save window state immediately (for window close events)
-    _settingsService.saveWindowState(newWindow);
+    // Save window state
     _debouncedSave();
   }
 

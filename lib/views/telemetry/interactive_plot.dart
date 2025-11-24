@@ -2,15 +2,18 @@ import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:fl_chart/fl_chart.dart';
 import '../../models/plot_configuration.dart';
+import '../../core/timeseries_point.dart';
 
 import '../../services/timeseries_data_manager.dart';
 import '../../services/settings_manager.dart';
+import '../../providers/service_providers.dart';
 import 'plot_legend.dart';
 import 'plot_data_processor.dart';
 
-class InteractivePlot extends StatefulWidget {
+class InteractivePlot extends ConsumerStatefulWidget {
   final PlotConfiguration configuration;
   final bool isAxisSelected;
   final VoidCallback? onAxisTap;
@@ -29,11 +32,12 @@ class InteractivePlot extends StatefulWidget {
   });
 
   @override
-  State<InteractivePlot> createState() => _InteractivePlotState();
+  ConsumerState<InteractivePlot> createState() => _InteractivePlotState();
 }
 
-class _InteractivePlotState extends State<InteractivePlot> {
-  final TimeSeriesDataManager _dataManager = TimeSeriesDataManager();
+class _InteractivePlotState extends ConsumerState<InteractivePlot> {
+  // Access dataManager from Riverpod provider
+  late final TimeSeriesDataManager _dataManager;
   Map<String, List<FlSpot>> _signalSpots = {};
   Map<String, Map<double, double>> _originalValues =
       {}; // signal -> x -> original value
@@ -70,6 +74,8 @@ class _InteractivePlotState extends State<InteractivePlot> {
   @override
   void initState() {
     super.initState();
+    // Get dataManager from Riverpod provider
+    _dataManager = ref.read(timeSeriesDataManagerProvider);
     _initializeData();
     _setupDataListener();
 

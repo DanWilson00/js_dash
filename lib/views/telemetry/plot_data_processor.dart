@@ -1,6 +1,7 @@
 import 'package:fl_chart/fl_chart.dart';
 import '../../models/plot_configuration.dart';
 import '../../models/app_settings.dart';
+import '../../core/timeseries_point.dart';
 
 // Data transfer objects
 class ComputeInput {

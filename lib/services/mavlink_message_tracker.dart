@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'package:dart_mavlink/mavlink_message.dart';
 import 'package:dart_mavlink/dialects/common.dart';
-import '../core/service_locator.dart';
 
 class MessageStats {
   int count = 0;
@@ -9,7 +8,7 @@ class MessageStats {
   DateTime lastReceived = DateTime.now();
   MavlinkMessage? lastMessage;
   double frequency = 0.0;
-  
+
   // For more responsive frequency calculation
   final List<DateTime> _recentTimestamps = [];
 
@@ -17,19 +16,22 @@ class MessageStats {
     count++;
     lastReceived = DateTime.now();
     lastMessage = message;
-    
+
     // Track recent timestamps for responsive frequency calculation
     _recentTimestamps.add(lastReceived);
-    
+
     // Keep only timestamps from the last 5 seconds
     final cutoff = lastReceived.subtract(const Duration(seconds: 5));
     _recentTimestamps.removeWhere((timestamp) => timestamp.isBefore(cutoff));
-    
+
     // Calculate frequency based on recent activity (messages in last 5 seconds)
     if (_recentTimestamps.length > 1) {
-      final timeSpan = _recentTimestamps.last.difference(_recentTimestamps.first);
+      final timeSpan = _recentTimestamps.last.difference(
+        _recentTimestamps.first,
+      );
       if (timeSpan.inMilliseconds > 0) {
-        frequency = (_recentTimestamps.length - 1) / (timeSpan.inMilliseconds / 1000.0);
+        frequency =
+            (_recentTimestamps.length - 1) / (timeSpan.inMilliseconds / 1000.0);
       }
     } else if (_recentTimestamps.length == 1) {
       frequency = 0.0; // Only one data point, can't calculate frequency yet
@@ -38,20 +40,12 @@ class MessageStats {
 
   Map<String, dynamic> getMessageFields() {
     if (lastMessage == null) return {};
-    
-    // Return cached fields if available and recent
-    final tracker = MavlinkMessageTracker();
-    final messageName = tracker._getMessageName(lastMessage!);
-    final cachedFields = tracker._fieldCache[messageName];
-    final lastUpdate = tracker._lastFieldUpdate[messageName];
-    
-    if (cachedFields != null && lastUpdate != null && 
-        DateTime.now().difference(lastUpdate).inMilliseconds < 200) {
-      return Map.from(cachedFields);
-    }
-    
+
+    // Note: We don't use caching here anymore to avoid circular dependency or complex lookup
+    // Just extract fields directly
+
     final fields = <String, dynamic>{};
-    
+
     if (lastMessage is Heartbeat) {
       final msg = lastMessage as Heartbeat;
       fields['Type'] = _getVehicleTypeName(msg.type);
@@ -101,61 +95,76 @@ class MessageStats {
       fields['Message ID'] = lastMessage!.mavlinkMessageId.toString();
       fields['CRC Extra'] = lastMessage!.mavlinkCrcExtra.toString();
     }
-    
+
     return fields;
   }
 
   String _getVehicleTypeName(int type) {
     switch (type) {
-      case mavTypeGeneric: return 'Generic';
-      case mavTypeFixedWing: return 'Fixed Wing';
-      case mavTypeQuadrotor: return 'Quadrotor';
-      case mavTypeCoaxial: return 'Coaxial';
-      case mavTypeHelicopter: return 'Helicopter';
-      case mavTypeAntennaTracker: return 'Antenna Tracker';
-      case mavTypeGcs: return 'Ground Station';
-      case mavTypeSubmarine: return 'Submarine';
-      default: return 'Unknown ($type)';
+      case mavTypeGeneric:
+        return 'Generic';
+      case mavTypeFixedWing:
+        return 'Fixed Wing';
+      case mavTypeQuadrotor:
+        return 'Quadrotor';
+      case mavTypeCoaxial:
+        return 'Coaxial';
+      case mavTypeHelicopter:
+        return 'Helicopter';
+      case mavTypeAntennaTracker:
+        return 'Antenna Tracker';
+      case mavTypeGcs:
+        return 'Ground Station';
+      case mavTypeSubmarine:
+        return 'Submarine';
+      default:
+        return 'Unknown ($type)';
     }
   }
 
   String _getAutopilotName(int autopilot) {
     switch (autopilot) {
-      case mavAutopilotGeneric: return 'Generic';
-      case mavAutopilotArdupilotmega: return 'ArduPilot';
-      case mavAutopilotPx4: return 'PX4';
-      default: return 'Unknown ($autopilot)';
+      case mavAutopilotGeneric:
+        return 'Generic';
+      case mavAutopilotArdupilotmega:
+        return 'ArduPilot';
+      case mavAutopilotPx4:
+        return 'PX4';
+      default:
+        return 'Unknown ($autopilot)';
     }
   }
 
   String _getSystemStatusName(int status) {
     switch (status) {
-      case mavStateActive: return 'Active';
-      case mavStateStandby: return 'Standby';
-      case mavStateCritical: return 'Critical';
-      case mavStateEmergency: return 'Emergency';
-      case mavStatePoweroff: return 'Power Off';
-      default: return 'Unknown ($status)';
+      case mavStateActive:
+        return 'Active';
+      case mavStateStandby:
+        return 'Standby';
+      case mavStateCritical:
+        return 'Critical';
+      case mavStateEmergency:
+        return 'Emergency';
+      case mavStatePoweroff:
+        return 'Power Off';
+      default:
+        return 'Unknown ($status)';
     }
   }
 }
 
-class MavlinkMessageTracker implements Disposable {
+class MavlinkMessageTracker {
   static const Duration _statsUpdateInterval = Duration(milliseconds: 100);
-  
-  // Singleton support for backward compatibility - will be deprecated
-  static MavlinkMessageTracker? _instance;
-  factory MavlinkMessageTracker() => _instance ??= MavlinkMessageTracker._internal();
-  MavlinkMessageTracker._internal();
-  
-  // New constructor for dependency injection
-  MavlinkMessageTracker.injected();
-  
+
+  // Removed Singleton - use Dependency Injection
+
+  MavlinkMessageTracker();
+
   // For testing - allows creating fresh instances
   MavlinkMessageTracker.forTesting();
 
   final Map<String, MessageStats> _messageStats = {};
-  final StreamController<Map<String, MessageStats>> _statsController = 
+  final StreamController<Map<String, MessageStats>> _statsController =
       StreamController<Map<String, MessageStats>>.broadcast();
 
   Stream<Map<String, MessageStats>> get statsStream => _statsController.stream;
@@ -163,17 +172,16 @@ class MavlinkMessageTracker implements Disposable {
 
   Timer? _updateTimer;
   bool _isTracking = false;
-  
+
   // Caching
   final Map<String, Map<String, dynamic>> _fieldCache = {};
-  final Map<String, DateTime> _lastFieldUpdate = {};
 
   void startTracking() {
     if (_isTracking) return;
     _isTracking = true;
-    
+
     // Stream is available directly through _statsController
-    
+
     // Update stats stream periodically
     _updateTimer = Timer.periodic(_statsUpdateInterval, (_) {
       if (!_statsController.isClosed) {
@@ -192,16 +200,16 @@ class MavlinkMessageTracker implements Disposable {
 
   void trackMessage(MavlinkMessage message) {
     if (!_isTracking) return;
-    
+
     final messageName = _getMessageName(message);
-    
+
     _messageStats.putIfAbsent(messageName, () => MessageStats());
     _messageStats[messageName]!.updateMessage(message);
-    
+
     // Cache field processing to avoid redundant calculations
     _updateFieldCache(messageName, _messageStats[messageName]!);
   }
-  
+
   void _updateFieldCache(String messageName, MessageStats stats) {
     // Only update field cache if message has actually changed
     if (stats.lastMessage != null) {
@@ -269,23 +277,25 @@ class MavlinkMessageTracker implements Disposable {
   };
 
   String _getMessageName(MavlinkMessage message) {
-    return _messageTypeMap[message.runtimeType] ?? 'MSG_${message.mavlinkMessageId}';
+    return _messageTypeMap[message.runtimeType] ??
+        'MSG_${message.mavlinkMessageId}';
   }
 
   void _updateFrequencies() {
     final now = DateTime.now();
-    
+
     // Update frequency for each message based on recent activity
     for (final stats in _messageStats.values) {
       final timeSinceLastMessage = now.difference(stats.lastReceived);
-      
+
       // If no message received in the last 2 seconds, start decaying frequency
       if (timeSinceLastMessage.inMilliseconds > 2000) {
         // Decay frequency exponentially to zero over time
         // After 5 seconds of no data, frequency should be near zero
-        final decayFactor = 1.0 - (timeSinceLastMessage.inMilliseconds - 2000) / 3000.0;
+        final decayFactor =
+            1.0 - (timeSinceLastMessage.inMilliseconds - 2000) / 3000.0;
         stats.frequency = (stats.frequency * decayFactor.clamp(0.0, 1.0));
-        
+
         // Set to exactly zero if very low to avoid tiny numbers
         if (stats.frequency < 0.01) {
           stats.frequency = 0.0;
@@ -297,28 +307,15 @@ class MavlinkMessageTracker implements Disposable {
   void clearStats() {
     _messageStats.clear();
     _fieldCache.clear();
-    _lastFieldUpdate.clear();
     if (!_statsController.isClosed) {
       _statsController.add({});
     }
   }
 
-  @override
   void dispose() {
     stopTracking();
     if (!_statsController.isClosed) {
       _statsController.close();
-    }
-  }
-
-  // For testing - stop tracking and clean up completely
-  static void resetInstanceForTesting() {
-    if (_instance != null) {
-      _instance!.stopTracking();
-      if (!_instance!._statsController.isClosed) {
-        _instance!._statsController.close();
-      }
-      _instance = null;
     }
   }
 }
