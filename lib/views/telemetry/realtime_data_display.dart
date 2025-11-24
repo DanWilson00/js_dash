@@ -24,8 +24,8 @@ class RealtimeDataDisplay extends ConsumerStatefulWidget {
 }
 
 class _RealtimeDataDisplayState extends ConsumerState<RealtimeDataDisplay> {
-  final GlobalKey<PlotGridManagerState> _plotGridKey =
-      GlobalKey<PlotGridManagerState>();
+  GlobalKey<PlotGridManagerState> get _currentPlotGridKey =>
+      _tabs[_selectedTabIndex].key;
 
   // Current telemetry data (kept for message tracking functionality)
   late bool _isPaused;
@@ -35,14 +35,34 @@ class _RealtimeDataDisplayState extends ConsumerState<RealtimeDataDisplay> {
   bool _isEditMode = false;
   Timer? _panelWidthSaveTimer;
 
+  // Tab management (in-memory, not persisted)
+  final List<({String id, String name, GlobalKey<PlotGridManagerState> key})>
+  _tabs = [];
+  int _selectedTabIndex = 0;
+
+  // Inline editing state
+  int? _editingTabIndex;
+  late TextEditingController _renameController;
+  late FocusNode _renameFocusNode;
+
   @override
   void initState() {
     super.initState();
+
+    _renameController = TextEditingController();
+    _renameFocusNode = FocusNode();
 
     // Initialize from settings
     _isPaused = widget.settingsManager.connection.isPaused;
     _currentTimeWindow = widget.settingsManager.plots.timeWindow;
     _messagePanelWidth = widget.settingsManager.plots.messagePanelWidth;
+
+    // Initialize with one default tab
+    _tabs.add((
+      id: 'tab_0',
+      name: 'Main',
+      key: GlobalKey<PlotGridManagerState>(),
+    ));
 
     // Listen for settings changes
     widget.settingsManager.addListener(_onSettingsChanged);
@@ -97,12 +117,14 @@ class _RealtimeDataDisplayState extends ConsumerState<RealtimeDataDisplay> {
     _panelWidthSaveTimer?.cancel();
     widget.settingsManager.removeListener(_onSettingsChanged);
     _dataStreamSubscription?.cancel();
+    _renameController.dispose();
+    _renameFocusNode.dispose();
     super.dispose();
   }
 
   void _onFieldSelected(String messageType, String fieldName) {
     // Assign the selected field to the currently selected plot
-    _plotGridKey.currentState?.assignFieldToSelectedPlot(
+    _currentPlotGridKey.currentState?.assignFieldToSelectedPlot(
       messageType,
       fieldName,
     );
@@ -126,12 +148,12 @@ class _RealtimeDataDisplayState extends ConsumerState<RealtimeDataDisplay> {
   void _toggleEditMode() {
     setState(() {
       _isEditMode = !_isEditMode;
-      _plotGridKey.currentState?.setEditMode(_isEditMode);
+      _currentPlotGridKey.currentState?.setEditMode(_isEditMode);
     });
   }
 
   void _clearAllPlots() {
-    _plotGridKey.currentState?.clearAllPlots();
+    _currentPlotGridKey.currentState?.clearAllPlots();
     final repository = ref.read(telemetryRepositoryProvider);
     repository.clearAllData();
   }
@@ -142,6 +164,69 @@ class _RealtimeDataDisplayState extends ConsumerState<RealtimeDataDisplay> {
       builder: (context) =>
           SettingsDialog(settingsManager: widget.settingsManager),
     );
+  }
+
+  void _addTab() {
+    setState(() {
+      final tabId = 'tab_${DateTime.now().millisecondsSinceEpoch}';
+      _tabs.add((
+        id: tabId,
+        name: 'Tab ${_tabs.length + 1}',
+        key: GlobalKey<PlotGridManagerState>(),
+      ));
+      _selectedTabIndex = _tabs.length - 1;
+    });
+
+    // Clear plots in the new tab after it's built
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _tabs[_selectedTabIndex].key.currentState?.clearAllPlots();
+    });
+  }
+
+  void _removeTab(int index) {
+    if (_tabs.length <= 1) return; // Keep at least one tab
+
+    setState(() {
+      _tabs.removeAt(index);
+      if (_selectedTabIndex >= _tabs.length) {
+        _selectedTabIndex = _tabs.length - 1;
+      }
+    });
+  }
+
+  void _renameTab(int index, String newName) {
+    setState(() {
+      final tab = _tabs[index];
+      _tabs[index] = (id: tab.id, name: newName, key: tab.key);
+    });
+  }
+
+  void _selectTab(int index) {
+    setState(() {
+      _selectedTabIndex = index;
+    });
+  }
+
+  void _startEditing(int index) {
+    setState(() {
+      _editingTabIndex = index;
+      _renameController.text = _tabs[index].name;
+      // Request focus after build
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _renameFocusNode.requestFocus();
+      });
+    });
+  }
+
+  void _stopEditing() {
+    if (_editingTabIndex != null) {
+      if (_renameController.text.isNotEmpty) {
+        _renameTab(_editingTabIndex!, _renameController.text);
+      }
+      setState(() {
+        _editingTabIndex = null;
+      });
+    }
   }
 
   @override
@@ -158,14 +243,105 @@ class _RealtimeDataDisplayState extends ConsumerState<RealtimeDataDisplay> {
     return Scaffold(
       body: Column(
         children: [
-          // Floating action buttons in top-right corner
-          SizedBox(
+          // Tab bar
+          Container(
             width: double.infinity,
-            child: Align(
-              alignment: Alignment.topRight,
-              child: Padding(
-                padding: EdgeInsets.all(8.0 * uiScale),
-                child: Row(
+            padding: EdgeInsets.all(8.0 * uiScale),
+            color: Theme.of(
+              context,
+            ).colorScheme.surfaceContainerHighest.withValues(alpha: 0.3),
+            child: Row(
+              children: [
+                // Tabs on the left
+                Flexible(
+                  child: SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        for (int i = 0; i < _tabs.length; i++)
+                          Padding(
+                            padding: EdgeInsets.only(right: 4 * uiScale),
+                            child: Material(
+                              color: i == _selectedTabIndex
+                                  ? Theme.of(
+                                      context,
+                                    ).colorScheme.primaryContainer
+                                  : Theme.of(
+                                      context,
+                                    ).colorScheme.surfaceContainer,
+                              borderRadius: BorderRadius.circular(4),
+                              child: InkWell(
+                                onTap: () => _selectTab(i),
+                                onDoubleTap: () => _startEditing(i),
+                                borderRadius: BorderRadius.circular(4),
+                                child: Padding(
+                                  padding: EdgeInsets.symmetric(
+                                    horizontal: 12 * uiScale,
+                                    vertical: 6 * uiScale,
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      if (_editingTabIndex == i)
+                                        SizedBox(
+                                          width: 100 * uiScale,
+                                          child: TextField(
+                                            controller: _renameController,
+                                            focusNode: _renameFocusNode,
+                                            style: TextStyle(
+                                              fontSize: 14 * uiScale,
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                            decoration: const InputDecoration(
+                                              isDense: true,
+                                              contentPadding: EdgeInsets.zero,
+                                              border: InputBorder.none,
+                                            ),
+                                            onSubmitted: (_) => _stopEditing(),
+                                            onTapOutside: (_) => _stopEditing(),
+                                          ),
+                                        )
+                                      else
+                                        Text(
+                                          _tabs[i].name,
+                                          style: TextStyle(
+                                            fontSize: 14 * uiScale,
+                                            fontWeight: i == _selectedTabIndex
+                                                ? FontWeight.bold
+                                                : FontWeight.normal,
+                                          ),
+                                        ),
+                                      if (_tabs.length > 1 &&
+                                          _editingTabIndex != i) ...[
+                                        SizedBox(width: 8 * uiScale),
+                                        InkWell(
+                                          onTap: () => _removeTab(i),
+                                          child: Icon(
+                                            Icons.close,
+                                            size: 16 * uiScale,
+                                          ),
+                                        ),
+                                      ],
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        IconButton(
+                          icon: const Icon(Icons.add),
+                          iconSize: 20 * uiScale,
+                          onPressed: _addTab,
+                          tooltip: 'Add Tab',
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                SizedBox(width: 16 * uiScale),
+                // Controls on the right
+                Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     _buildStatusIndicator(uiScale),
@@ -199,7 +375,9 @@ class _RealtimeDataDisplayState extends ConsumerState<RealtimeDataDisplay> {
                               window.label,
                             );
                             // Update existing plots
-                            _plotGridKey.currentState?.updateTimeWindow(window);
+                            _currentPlotGridKey.currentState?.updateTimeWindow(
+                              window,
+                            );
                           }
                         },
                         underline: const SizedBox(),
@@ -211,7 +389,8 @@ class _RealtimeDataDisplayState extends ConsumerState<RealtimeDataDisplay> {
                     IconButton(
                       icon: const Icon(Icons.add),
                       iconSize: 24 * uiScale,
-                      onPressed: () => _plotGridKey.currentState?.addNewPlot(),
+                      onPressed: () =>
+                          _currentPlotGridKey.currentState?.addNewPlot(),
                       tooltip: 'Add Plot',
                     ),
                     SizedBox(width: 16 * uiScale),
@@ -247,7 +426,7 @@ class _RealtimeDataDisplayState extends ConsumerState<RealtimeDataDisplay> {
                     ),
                   ],
                 ),
-              ),
+              ],
             ),
           ),
           Expanded(
@@ -259,9 +438,11 @@ class _RealtimeDataDisplayState extends ConsumerState<RealtimeDataDisplay> {
                     autoStart: widget.autoStartMonitor,
                     onFieldSelected: _onFieldSelected,
                     plottedFields:
-                        _plotGridKey.currentState?.allPlottedFields ?? {},
+                        _currentPlotGridKey.currentState?.allPlottedFields ??
+                        {},
                     selectedPlotFields:
-                        _plotGridKey.currentState?.selectedPlotFields ?? {},
+                        _currentPlotGridKey.currentState?.selectedPlotFields ??
+                        {},
                     uiScale: uiScale,
                   ),
                 ),
@@ -306,13 +487,19 @@ class _RealtimeDataDisplayState extends ConsumerState<RealtimeDataDisplay> {
                 Expanded(
                   child: Padding(
                     padding: EdgeInsets.all(8.0 * uiScale),
-                    child: PlotGridManager(
-                      key: _plotGridKey,
-                      settingsManager: widget.settingsManager,
-                      onFieldAssignment: () {
-                        // Force refresh to update field highlighting
-                        setState(() {});
-                      },
+                    child: IndexedStack(
+                      index: _selectedTabIndex,
+                      children: [
+                        for (var tab in _tabs)
+                          PlotGridManager(
+                            key: tab.key,
+                            settingsManager: widget.settingsManager,
+                            onFieldAssignment: () {
+                              // Force refresh to update field highlighting
+                              setState(() {});
+                            },
+                          ),
+                      ],
                     ),
                   ),
                 ),
