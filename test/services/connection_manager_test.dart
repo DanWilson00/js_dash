@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:js_dash/core/connection_config.dart';
-import 'package:js_dash/interfaces/i_connection_manager.dart';
+import 'package:js_dash/core/connection_status.dart';
 import 'package:js_dash/services/connection_manager.dart';
 
 void main() {
@@ -16,13 +16,19 @@ void main() {
     });
 
     test('should start in disconnected state', () {
-      expect(connectionManager.currentStatus.state, ConnectionState.disconnected);
+      expect(
+        connectionManager.currentStatus.state,
+        ConnectionState.disconnected,
+      );
       expect(connectionManager.isConnected, false);
       expect(connectionManager.isConnecting, false);
     });
 
     test('should create UDP connection config', () {
-      final config = ConnectionManager.createUdpConfig(host: '192.168.1.1', port: 14550);
+      final config = ConnectionManager.createUdpConfig(
+        host: '192.168.1.1',
+        port: 14550,
+      );
       expect(config, isA<UdpConnectionConfig>());
       final udpConfig = config as UdpConnectionConfig;
       expect(udpConfig.host, '192.168.1.1');
@@ -30,7 +36,10 @@ void main() {
     });
 
     test('should create serial connection config', () {
-      final config = ConnectionManager.createSerialConfig(port: '/dev/ttyUSB0', baudRate: 115200);
+      final config = ConnectionManager.createSerialConfig(
+        port: '/dev/ttyUSB0',
+        baudRate: 115200,
+      );
       expect(config, isA<SerialConnectionConfig>());
       final serialConfig = config as SerialConnectionConfig;
       expect(serialConfig.port, '/dev/ttyUSB0');
@@ -39,9 +48,9 @@ void main() {
 
     test('should create spoof connection config', () {
       final config = ConnectionManager.createSpoofConfig(
-        systemId: 2, 
-        componentId: 3, 
-        baudRate: 57600
+        systemId: 2,
+        componentId: 3,
+        baudRate: 57600,
       );
       expect(config, isA<SpoofConnectionConfig>());
       final spoofConfig = config as SpoofConnectionConfig;
@@ -55,13 +64,13 @@ void main() {
       connectionManager.statusStream.listen(statusUpdates.add);
 
       final spoofConfig = ConnectionManager.createSpoofConfig();
-      
+
       // Attempt connection (may fail due to lack of real spoof service setup, but should emit status)
       await connectionManager.connect(spoofConfig);
-      
+
       // Give some time for async operations
       await Future.delayed(const Duration(milliseconds: 10));
-      
+
       // Should have received at least one status update
       expect(statusUpdates.isNotEmpty, true);
     });
@@ -69,12 +78,12 @@ void main() {
     test('should handle pause and resume', () {
       // Initially not paused
       expect(connectionManager.currentStatus.isPaused, false);
-      
+
       // Set up a mock connection
       connectionManager.pause();
       // Note: Without a real connection, state won't change to paused
       // This test mainly ensures no exceptions are thrown
-      
+
       connectionManager.resume();
       // Similarly, this should not throw
     });
@@ -82,13 +91,10 @@ void main() {
     test('should check recent data correctly', () {
       // No data received yet
       expect(connectionManager.hasRecentData(), false);
-      expect(connectionManager.hasRecentData(const Duration(seconds: 1)), false);
-    });
-
-    test('should get available serial ports', () {
-      final ports = ConnectionManager.getAvailableSerialPorts();
-      expect(ports, isA<List<String>>());
-      // Actual ports depend on the system, so we just verify it's a list
+      expect(
+        connectionManager.hasRecentData(const Duration(seconds: 1)),
+        false,
+      );
     });
 
     test('should handle dispose correctly', () {

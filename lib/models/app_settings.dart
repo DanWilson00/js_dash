@@ -1,6 +1,7 @@
 import 'package:json_annotation/json_annotation.dart';
 import 'package:flutter/material.dart';
 import 'plot_configuration.dart';
+import 'plot_tab.dart';
 
 part 'app_settings.g.dart';
 
@@ -12,7 +13,8 @@ class AppSettings {
   final NavigationSettings navigation;
   final PerformanceSettings performance;
   final MapSettings map;
-  
+  final AppearanceSettings appearance;
+
   const AppSettings({
     required this.window,
     required this.plots,
@@ -20,8 +22,9 @@ class AppSettings {
     required this.navigation,
     required this.performance,
     required this.map,
+    required this.appearance,
   });
-  
+
   factory AppSettings.defaults() {
     return AppSettings(
       window: WindowSettings.defaults(),
@@ -30,12 +33,14 @@ class AppSettings {
       navigation: NavigationSettings.defaults(),
       performance: PerformanceSettings.defaults(),
       map: MapSettings.defaults(),
+      appearance: AppearanceSettings.defaults(),
     );
   }
-  
-  factory AppSettings.fromJson(Map<String, dynamic> json) => _$AppSettingsFromJson(json);
+
+  factory AppSettings.fromJson(Map<String, dynamic> json) =>
+      _$AppSettingsFromJson(json);
   Map<String, dynamic> toJson() => _$AppSettingsToJson(this);
-  
+
   AppSettings copyWith({
     WindowSettings? window,
     PlotSettings? plots,
@@ -43,6 +48,7 @@ class AppSettings {
     NavigationSettings? navigation,
     PerformanceSettings? performance,
     MapSettings? map,
+    AppearanceSettings? appearance,
   }) {
     return AppSettings(
       window: window ?? this.window,
@@ -51,7 +57,27 @@ class AppSettings {
       navigation: navigation ?? this.navigation,
       performance: performance ?? this.performance,
       map: map ?? this.map,
+      appearance: appearance ?? this.appearance,
     );
+  }
+}
+
+@JsonSerializable()
+class AppearanceSettings {
+  final double uiScale;
+
+  const AppearanceSettings({required this.uiScale});
+
+  factory AppearanceSettings.defaults() {
+    return const AppearanceSettings(uiScale: 1.0);
+  }
+
+  factory AppearanceSettings.fromJson(Map<String, dynamic> json) =>
+      _$AppearanceSettingsFromJson(json);
+  Map<String, dynamic> toJson() => _$AppearanceSettingsToJson(this);
+
+  AppearanceSettings copyWith({double? uiScale}) {
+    return AppearanceSettings(uiScale: uiScale ?? this.uiScale);
   }
 }
 
@@ -62,7 +88,7 @@ class WindowSettings {
   final double? x;
   final double? y;
   final bool maximized;
-  
+
   const WindowSettings({
     required this.width,
     required this.height,
@@ -70,21 +96,18 @@ class WindowSettings {
     this.y,
     this.maximized = false,
   });
-  
+
   factory WindowSettings.defaults() {
-    return const WindowSettings(
-      width: 1200,
-      height: 800,
-      maximized: false,
-    );
+    return const WindowSettings(width: 1200, height: 800, maximized: false);
   }
-  
-  factory WindowSettings.fromJson(Map<String, dynamic> json) => _$WindowSettingsFromJson(json);
+
+  factory WindowSettings.fromJson(Map<String, dynamic> json) =>
+      _$WindowSettingsFromJson(json);
   Map<String, dynamic> toJson() => _$WindowSettingsToJson(this);
-  
+
   Size get size => Size(width, height);
   Offset? get position => x != null && y != null ? Offset(x!, y!) : null;
-  
+
   WindowSettings copyWith({
     double? width,
     double? height,
@@ -104,63 +127,67 @@ class WindowSettings {
 
 @JsonSerializable()
 class PlotSettings {
-  final int plotCount;
-  final String layout; // PlotLayout enum as string
-  final String timeWindow; // TimeWindowOption enum as string
-  final List<PlotConfiguration> configurations;
-  final String scalingMode; // ScalingMode enum as string
-  final int selectedPlotIndex;
+  final List<PlotTab> tabs;
+  final String selectedTabId;
+  final String timeWindow;
+  final double messagePanelWidth;
   final bool propertiesPanelVisible;
-  final bool selectorPanelVisible;
-  
+
   const PlotSettings({
-    required this.plotCount,
-    required this.layout,
-    required this.timeWindow,
-    required this.configurations,
-    required this.scalingMode,
-    required this.selectedPlotIndex,
-    required this.propertiesPanelVisible,
-    required this.selectorPanelVisible,
+    this.tabs = const [],
+    this.selectedTabId = 'main',
+    this.timeWindow = '1 Minute',
+    this.messagePanelWidth = 350.0,
+    this.propertiesPanelVisible = false,
   });
-  
+
   factory PlotSettings.defaults() {
-    return PlotSettings(
-      plotCount: 1,
-      layout: 'single',
-      timeWindow: '10s',
-      configurations: [PlotConfiguration(id: 'plot_0')],
-      scalingMode: 'autoScale',
-      selectedPlotIndex: 0,
+    return const PlotSettings(
+      tabs: [PlotTab(id: 'main', name: 'Main', plots: [])],
+      selectedTabId: 'main',
+      timeWindow: '1 Minute',
+      messagePanelWidth: 350.0,
       propertiesPanelVisible: false,
-      selectorPanelVisible: false,
     );
   }
-  
-  factory PlotSettings.fromJson(Map<String, dynamic> json) => _$PlotSettingsFromJson(json);
-  Map<String, dynamic> toJson() => _$PlotSettingsToJson(this);
-  
+
   PlotSettings copyWith({
-    int? plotCount,
-    String? layout,
+    List<PlotTab>? tabs,
+    String? selectedTabId,
     String? timeWindow,
-    List<PlotConfiguration>? configurations,
-    String? scalingMode,
-    int? selectedPlotIndex,
+    double? messagePanelWidth,
     bool? propertiesPanelVisible,
-    bool? selectorPanelVisible,
   }) {
     return PlotSettings(
-      plotCount: plotCount ?? this.plotCount,
-      layout: layout ?? this.layout,
+      tabs: tabs ?? this.tabs,
+      selectedTabId: selectedTabId ?? this.selectedTabId,
       timeWindow: timeWindow ?? this.timeWindow,
-      configurations: configurations ?? this.configurations,
-      scalingMode: scalingMode ?? this.scalingMode,
-      selectedPlotIndex: selectedPlotIndex ?? this.selectedPlotIndex,
-      propertiesPanelVisible: propertiesPanelVisible ?? this.propertiesPanelVisible,
-      selectorPanelVisible: selectorPanelVisible ?? this.selectorPanelVisible,
+      messagePanelWidth: messagePanelWidth ?? this.messagePanelWidth,
+      propertiesPanelVisible:
+          propertiesPanelVisible ?? this.propertiesPanelVisible,
     );
   }
+
+  factory PlotSettings.fromJson(Map<String, dynamic> json) {
+    // Migration logic for old format
+    if (json['configurations'] != null && json['tabs'] == null) {
+      final oldPlots = (json['configurations'] as List)
+          .map((e) => PlotConfiguration.fromJson(e as Map<String, dynamic>))
+          .toList();
+
+      return PlotSettings(
+        tabs: [PlotTab(id: 'main', name: 'Main', plots: oldPlots)],
+        selectedTabId: 'main',
+        timeWindow: json['timeWindow'] as String? ?? '1 Minute',
+        messagePanelWidth:
+            (json['messagePanelWidth'] as num?)?.toDouble() ?? 350.0,
+      );
+    }
+
+    return _$PlotSettingsFromJson(json);
+  }
+
+  Map<String, dynamic> toJson() => _$PlotSettingsToJson(this);
 }
 
 @JsonSerializable()
@@ -171,18 +198,18 @@ class ConnectionSettings {
   final int mavlinkPort;
   final String serialPort;
   final int serialBaudRate;
-  
+
   // Spoofing Settings
   final bool enableSpoofing;
   final String spoofMode; // 'timer', 'usb_serial'
   final int spoofBaudRate;
   final int spoofSystemId;
   final int spoofComponentId;
-  
+
   // General Settings
   final bool autoStartMonitor;
   final bool isPaused;
-  
+
   const ConnectionSettings({
     required this.connectionType,
     required this.mavlinkHost,
@@ -197,7 +224,7 @@ class ConnectionSettings {
     required this.autoStartMonitor,
     required this.isPaused,
   });
-  
+
   factory ConnectionSettings.defaults() {
     return const ConnectionSettings(
       // Receiving defaults
@@ -208,19 +235,21 @@ class ConnectionSettings {
       serialBaudRate: 57600,
       // Spoofing defaults
       enableSpoofing: true,
-      spoofMode: 'usb_serial',  // Only option now
+      spoofMode: 'usb_serial', // Only option now
       spoofBaudRate: 57600,
       spoofSystemId: 1,
       spoofComponentId: 1,
       // General defaults
       autoStartMonitor: true,
-      isPaused: true, // Start paused by default
+      isPaused:
+          false, // Start running by default (will be overridden by persistence)
     );
   }
-  
-  factory ConnectionSettings.fromJson(Map<String, dynamic> json) => _$ConnectionSettingsFromJson(json);
+
+  factory ConnectionSettings.fromJson(Map<String, dynamic> json) =>
+      _$ConnectionSettingsFromJson(json);
   Map<String, dynamic> toJson() => _$ConnectionSettingsToJson(this);
-  
+
   ConnectionSettings copyWith({
     String? connectionType,
     String? mavlinkHost,
@@ -250,7 +279,7 @@ class ConnectionSettings {
       isPaused: isPaused ?? this.isPaused,
     );
   }
-  
+
   // Legacy compatibility properties
   bool get useSpoofMode => enableSpoofing;
 }
@@ -259,22 +288,23 @@ class ConnectionSettings {
 class NavigationSettings {
   final int selectedViewIndex;
   final int selectedPlotIndex;
-  
+
   const NavigationSettings({
     required this.selectedViewIndex,
     required this.selectedPlotIndex,
   });
-  
+
   factory NavigationSettings.defaults() {
     return const NavigationSettings(
       selectedViewIndex: 0, // Start on telemetry view
       selectedPlotIndex: 0, // First plot selected
     );
   }
-  
-  factory NavigationSettings.fromJson(Map<String, dynamic> json) => _$NavigationSettingsFromJson(json);
+
+  factory NavigationSettings.fromJson(Map<String, dynamic> json) =>
+      _$NavigationSettingsFromJson(json);
   Map<String, dynamic> toJson() => _$NavigationSettingsToJson(this);
-  
+
   NavigationSettings copyWith({
     int? selectedViewIndex,
     int? selectedPlotIndex,
@@ -292,55 +322,48 @@ class PerformanceSettings {
   final int decimationThreshold;
   final bool enableUpdateThrottling;
   final int updateInterval; // milliseconds
-  final bool enableSmoothAnimations;
-  final int animationDuration; // milliseconds
   final int dataBufferSize;
   final int dataRetentionMinutes;
-  
+
   const PerformanceSettings({
     required this.enablePointDecimation,
     required this.decimationThreshold,
     required this.enableUpdateThrottling,
     required this.updateInterval,
-    required this.enableSmoothAnimations,
-    required this.animationDuration,
     required this.dataBufferSize,
     required this.dataRetentionMinutes,
   });
-  
+
   factory PerformanceSettings.defaults() {
     return const PerformanceSettings(
       enablePointDecimation: true,
       decimationThreshold: 1000,
       enableUpdateThrottling: true,
       updateInterval: 100, // 10 FPS
-      enableSmoothAnimations: true,
-      animationDuration: 150,
       dataBufferSize: 2000,
       dataRetentionMinutes: 10,
     );
   }
-  
-  factory PerformanceSettings.fromJson(Map<String, dynamic> json) => _$PerformanceSettingsFromJson(json);
+
+  factory PerformanceSettings.fromJson(Map<String, dynamic> json) =>
+      _$PerformanceSettingsFromJson(json);
   Map<String, dynamic> toJson() => _$PerformanceSettingsToJson(this);
-  
+
   PerformanceSettings copyWith({
     bool? enablePointDecimation,
     int? decimationThreshold,
     bool? enableUpdateThrottling,
     int? updateInterval,
-    bool? enableSmoothAnimations,
-    int? animationDuration,
     int? dataBufferSize,
     int? dataRetentionMinutes,
   }) {
     return PerformanceSettings(
-      enablePointDecimation: enablePointDecimation ?? this.enablePointDecimation,
+      enablePointDecimation:
+          enablePointDecimation ?? this.enablePointDecimation,
       decimationThreshold: decimationThreshold ?? this.decimationThreshold,
-      enableUpdateThrottling: enableUpdateThrottling ?? this.enableUpdateThrottling,
+      enableUpdateThrottling:
+          enableUpdateThrottling ?? this.enableUpdateThrottling,
       updateInterval: updateInterval ?? this.updateInterval,
-      enableSmoothAnimations: enableSmoothAnimations ?? this.enableSmoothAnimations,
-      animationDuration: animationDuration ?? this.animationDuration,
       dataBufferSize: dataBufferSize ?? this.dataBufferSize,
       dataRetentionMinutes: dataRetentionMinutes ?? this.dataRetentionMinutes,
     );
@@ -355,7 +378,7 @@ class MapSettings {
   final bool followVehicle;
   final bool showPath;
   final int maxPathPoints;
-  
+
   const MapSettings({
     required this.centerLatitude,
     required this.centerLongitude,
@@ -364,21 +387,24 @@ class MapSettings {
     required this.showPath,
     required this.maxPathPoints,
   });
-  
+
   factory MapSettings.defaults() {
     return const MapSettings(
-      centerLatitude: 34.0522, // Los Angeles area - matches spoofer starting point
+      centerLatitude:
+          34.0522, // Los Angeles area - matches spoofer starting point
       centerLongitude: -118.2437,
       zoomLevel: 15.0,
-      followVehicle: false, // Default to static map that remembers position/zoom
+      followVehicle:
+          false, // Default to static map that remembers position/zoom
       showPath: true,
       maxPathPoints: 200,
     );
   }
-  
-  factory MapSettings.fromJson(Map<String, dynamic> json) => _$MapSettingsFromJson(json);
+
+  factory MapSettings.fromJson(Map<String, dynamic> json) =>
+      _$MapSettingsFromJson(json);
   Map<String, dynamic> toJson() => _$MapSettingsToJson(this);
-  
+
   MapSettings copyWith({
     double? centerLatitude,
     double? centerLongitude,

@@ -4,193 +4,184 @@ import 'dart:typed_data';
 import 'package:dart_mavlink/mavlink.dart';
 import 'package:dart_mavlink/dialects/common.dart';
 import 'package:flutter_libserialport/flutter_libserialport.dart';
+import '../core/connection_config.dart';
 import 'mavlink_data_provider.dart';
 
 class MavlinkService extends MavlinkDataProvider {
-  // Singleton support for backward compatibility - will be deprecated
-  static MavlinkService? _instance;
-  factory MavlinkService() => _instance ??= MavlinkService._internal();
-  MavlinkService._internal() : _dialect = MavlinkDialectCommon();
-  
-  // New constructor for dependency injection
-  MavlinkService.injected() : _dialect = MavlinkDialectCommon();
-  
-  // For testing - allows creating fresh instances
-  MavlinkService.forTesting() : _dialect = MavlinkDialectCommon();
-
-  final MavlinkDialectCommon _dialect;
+  // Connection state
   MavlinkParser? _parser;
-  
   RawDatagramSocket? _socket;
-  StreamSubscription<RawSocketEvent>? _socketSubscription;
-  
+  StreamSubscription? _socketSubscription;
   SerialPort? _serialPort;
-  StreamSubscription<Uint8List>? _serialSubscription;
   Timer? _serialReader;
-  
-  final StreamController<MavlinkFrame> _frameController = StreamController<MavlinkFrame>.broadcast();
+
+  final StreamController<MavlinkFrame> _frameController =
+      StreamController<MavlinkFrame>.broadcast();
+  final StreamController<Uint8List> _rawDataController =
+      StreamController<Uint8List>.broadcast();
+
+  // Configuration
+  ConnectionConfig? _currentConfig;
+  final MavlinkDialect _dialect;
+
+  MavlinkService({required super.tracker}) : _dialect = MavlinkDialectCommon();
 
   Stream<MavlinkFrame> get frameStream => _frameController.stream;
-  
+  Stream<Uint8List> get rawDataStream => _rawDataController.stream;
+
   // Implement IDataSource.messageStream
   @override
-  Stream<dynamic> get messageStream => frameStream.map((frame) => frame.message);
+  Stream<dynamic> get messageStream =>
+      frameStream.map((frame) => frame.message);
 
-  bool _isConnected = false;
   @override
-  bool get isConnected => _isConnected;
-  
-  // Implement IDataSource.isPaused
-  bool _isPaused = false;
+  bool get isConnected =>
+      (_socket != null) || (_serialPort != null && _serialPort!.isOpen);
+
   @override
-  bool get isPaused => _isPaused;
-  
-  // Implement IDataSource.pause/resume
-  @override
-  void pause() {
-    _isPaused = true;
-  }
-  
-  @override
-  void resume() {
-    _isPaused = false;
-  }
-  
-  // Implement IDataSource.connect (delegates to specific connection methods)
-  @override
-  Future<void> connect() async {
-    // This is a placeholder - actual connection depends on configuration
-    // In a real implementation, this would be handled by ConnectionManager
-    throw UnimplementedError('Use connectUDP() or connectSerial() instead');
+  bool get isPaused => _socketSubscription?.isPaused ?? false;
+
+  /// Configure the service with connection settings
+  void configure(ConnectionConfig config) {
+    _currentConfig = config;
   }
 
-  bool _isInitialized = false;
-  
   @override
   Future<void> initialize() async {
-    if (_isInitialized) return;
-    
-    _parser ??= MavlinkParser(_dialect);
-    
-    _parser!.stream.listen((MavlinkFrame frame) {
-      _frameController.add(frame);
-      addMessage(frame.message);
-    });
-    
-    _isInitialized = true;
+    // No initialization needed for now
   }
 
-  Future<void> connectUDP({String host = '127.0.0.1', int port = 14550}) async {
+  @override
+  Future<void> connect() async {
+    if (_currentConfig == null) {
+      throw Exception('Connection configuration not set');
+    }
+
+    if (_currentConfig is UdpConnectionConfig) {
+      await _connectUdp(_currentConfig as UdpConnectionConfig);
+    } else if (_currentConfig is SerialConnectionConfig) {
+      await _connectSerial(_currentConfig as SerialConnectionConfig);
+    } else {
+      throw Exception('Unsupported connection type');
+    }
+  }
+
+  Future<void> _connectUdp(UdpConnectionConfig config) async {
+    await disconnect();
+
     try {
-      _socket = await RawDatagramSocket.bind(InternetAddress.anyIPv4, port);
-      _isConnected = true;
-      
+      _parser = MavlinkParser(_dialect);
+      _parser!.stream.listen((MavlinkFrame frame) {
+        _frameController.add(frame);
+        addMessage(frame.message);
+      });
+
+      _socket = await RawDatagramSocket.bind(InternetAddress.anyIPv4, 0);
+      _socket!.broadcastEnabled = true;
+
+      // Send a heartbeat to start the connection
+      // TODO: Implement heartbeat sending
+
       _socketSubscription = _socket!.listen((RawSocketEvent event) {
         if (event == RawSocketEvent.read) {
-          Datagram? datagram = _socket!.receive();
+          final datagram = _socket!.receive();
           if (datagram != null) {
-            _parser?.parse(datagram.data);
+            _rawDataController.add(datagram.data);
+            _parser!.parse(datagram.data);
           }
         }
       });
-      
-      // TODO: Replace with proper logging framework
-      // print('MAVLink service connected on UDP $host:$port');
     } catch (e) {
-      // TODO: Replace with proper logging framework
-      // print('Failed to connect MAVLink UDP: $e');
-      _isConnected = false;
-      rethrow;
-    }
-  }
-
-  Future<void> connectSerial({required String portName, int baudRate = 115200}) async {
-    try {
-      // Disconnect any existing connection first
       await disconnect();
-      
-      _serialPort = SerialPort(portName);
-      
-      // Configure serial port settings
-      final config = SerialPortConfig();
-      config.baudRate = baudRate;
-      config.bits = 8;
-      config.parity = SerialPortParity.none;
-      config.stopBits = 1;
-      config.setFlowControl(SerialPortFlowControl.none);
-      
-      _serialPort!.config = config;
-      
-      // Open the serial port
-      if (!_serialPort!.openReadWrite()) {
-        throw Exception('Failed to open serial port: ${SerialPort.lastError}');
-      }
-      
-      _isConnected = true;
-      
-      // Set up periodic reading from serial port
-      _serialReader = Timer.periodic(const Duration(milliseconds: 10), (_) {
-        try {
-          final buffer = _serialPort!.read(1024); // Read up to 1KB at a time
-          if (buffer.isNotEmpty) {
-            _parser?.parse(buffer);
-          }
-        } catch (e) {
-          // Handle read errors gracefully
-          // TODO: Replace with proper logging framework
-          // print('Serial read error: $e');
-        }
-      });
-      
-      // TODO: Replace with proper logging framework
-      // print('MAVLink service connected on Serial $portName at $baudRate baud');
-    } catch (e) {
-      // TODO: Replace with proper logging framework
-      // print('Failed to connect MAVLink Serial: $e');
-      _isConnected = false;
-      _serialPort?.close();
-      _serialPort = null;
       rethrow;
     }
   }
 
-  /// Get available serial ports
-  static List<String> getAvailableSerialPorts() {
+  Future<void> _connectSerial(SerialConnectionConfig config) async {
+    await disconnect();
+
     try {
-      return SerialPort.availablePorts;
+      _parser = MavlinkParser(_dialect);
+      _parser!.stream.listen((MavlinkFrame frame) {
+        _frameController.add(frame);
+        addMessage(frame.message);
+      });
+
+      _serialPort = SerialPort(config.port);
+      if (!_serialPort!.openReadWrite()) {
+        throw Exception('Failed to open serial port ${config.port}');
+      }
+
+      final serialConfig = _serialPort!.config;
+      serialConfig.baudRate = config.baudRate;
+      serialConfig.parity = SerialPortParity.none;
+      serialConfig.bits = 8;
+      serialConfig.stopBits = 1;
+      serialConfig.rts = SerialPortRts.off;
+      serialConfig.dtr = SerialPortDtr.off;
+      serialConfig.xonXoff = SerialPortXonXoff.disabled;
+      _serialPort!.config = serialConfig;
+
+      // Poll for data
+      _serialReader = Timer.periodic(const Duration(milliseconds: 10), (timer) {
+        if (_serialPort != null && _serialPort!.isOpen) {
+          try {
+            if (_serialPort!.bytesAvailable > 0) {
+              final data = _serialPort!.read(_serialPort!.bytesAvailable);
+              _rawDataController.add(data);
+              _parser!.parse(data);
+            }
+          } catch (e) {
+            // Ignore read errors
+          }
+        }
+      });
     } catch (e) {
-      // TODO: Replace with proper logging framework
-      // print('Failed to get available serial ports: $e');
-      return [];
+      await disconnect();
+      rethrow;
     }
   }
-
 
   @override
   Future<void> disconnect() async {
-    await _socketSubscription?.cancel();
-    _socket?.close();
-    
     _serialReader?.cancel();
-    _serialPort?.close();
-    _serialPort = null;
-    
-    _isConnected = false;
-    // TODO: Replace with proper logging framework
-    // print('MAVLink service disconnected');
+    _serialReader = null;
+
+    if (_serialPort != null) {
+      if (_serialPort!.isOpen) _serialPort!.close();
+      _serialPort!.dispose();
+      _serialPort = null;
+    }
+
+    _socketSubscription?.cancel();
+    _socketSubscription = null;
+
+    _socket?.close();
+    _socket = null;
+
+    _parser = null;
+  }
+
+  @override
+  void pause() {
+    _socketSubscription?.pause();
+  }
+
+  @override
+  void resume() {
+    _socketSubscription?.resume();
   }
 
   @override
   void dispose() {
     disconnect();
     _frameController.close();
+    _rawDataController.close();
     super.dispose();
-    _isInitialized = false;
   }
 
-  // For testing - reset singleton instance
-  static void resetInstanceForTesting() {
-    _instance?.dispose();
-    _instance = null;
+  /// Get available serial ports
+  static List<String> getAvailableSerialPorts() {
+    return SerialPort.availablePorts;
   }
 }

@@ -19,6 +19,9 @@ AppSettings _$AppSettingsFromJson(Map<String, dynamic> json) => AppSettings(
     json['performance'] as Map<String, dynamic>,
   ),
   map: MapSettings.fromJson(json['map'] as Map<String, dynamic>),
+  appearance: AppearanceSettings.fromJson(
+    json['appearance'] as Map<String, dynamic>,
+  ),
 );
 
 Map<String, dynamic> _$AppSettingsToJson(AppSettings instance) =>
@@ -29,7 +32,14 @@ Map<String, dynamic> _$AppSettingsToJson(AppSettings instance) =>
       'navigation': instance.navigation,
       'performance': instance.performance,
       'map': instance.map,
+      'appearance': instance.appearance,
     };
+
+AppearanceSettings _$AppearanceSettingsFromJson(Map<String, dynamic> json) =>
+    AppearanceSettings(uiScale: (json['uiScale'] as num).toDouble());
+
+Map<String, dynamic> _$AppearanceSettingsToJson(AppearanceSettings instance) =>
+    <String, dynamic>{'uiScale': instance.uiScale};
 
 WindowSettings _$WindowSettingsFromJson(Map<String, dynamic> json) =>
     WindowSettings(
@@ -50,28 +60,22 @@ Map<String, dynamic> _$WindowSettingsToJson(WindowSettings instance) =>
     };
 
 PlotSettings _$PlotSettingsFromJson(Map<String, dynamic> json) => PlotSettings(
-  plotCount: (json['plotCount'] as num).toInt(),
-  layout: json['layout'] as String,
-  timeWindow: json['timeWindow'] as String,
-  configurations: (json['configurations'] as List<dynamic>)
-      .map((e) => PlotConfiguration.fromJson(e as Map<String, dynamic>))
-      .toList(),
-  scalingMode: json['scalingMode'] as String,
-  selectedPlotIndex: (json['selectedPlotIndex'] as num).toInt(),
-  propertiesPanelVisible: json['propertiesPanelVisible'] as bool,
-  selectorPanelVisible: json['selectorPanelVisible'] as bool,
+  tabs:
+      (json['tabs'] as List<dynamic>?)
+          ?.map((e) => PlotTab.fromJson(e as Map<String, dynamic>))
+          .toList() ??
+      const [],
+  selectedTabId: json['selectedTabId'] as String? ?? 'main',
+  timeWindow: json['timeWindow'] as String? ?? '1 Minute',
+  messagePanelWidth: (json['messagePanelWidth'] as num?)?.toDouble() ?? 350.0,
 );
 
 Map<String, dynamic> _$PlotSettingsToJson(PlotSettings instance) =>
     <String, dynamic>{
-      'plotCount': instance.plotCount,
-      'layout': instance.layout,
+      'tabs': instance.tabs,
+      'selectedTabId': instance.selectedTabId,
       'timeWindow': instance.timeWindow,
-      'configurations': instance.configurations,
-      'scalingMode': instance.scalingMode,
-      'selectedPlotIndex': instance.selectedPlotIndex,
-      'propertiesPanelVisible': instance.propertiesPanelVisible,
-      'selectorPanelVisible': instance.selectorPanelVisible,
+      'messagePanelWidth': instance.messagePanelWidth,
     };
 
 ConnectionSettings _$ConnectionSettingsFromJson(Map<String, dynamic> json) =>
@@ -124,8 +128,6 @@ PerformanceSettings _$PerformanceSettingsFromJson(Map<String, dynamic> json) =>
       decimationThreshold: (json['decimationThreshold'] as num).toInt(),
       enableUpdateThrottling: json['enableUpdateThrottling'] as bool,
       updateInterval: (json['updateInterval'] as num).toInt(),
-      enableSmoothAnimations: json['enableSmoothAnimations'] as bool,
-      animationDuration: (json['animationDuration'] as num).toInt(),
       dataBufferSize: (json['dataBufferSize'] as num).toInt(),
       dataRetentionMinutes: (json['dataRetentionMinutes'] as num).toInt(),
     );
@@ -137,8 +139,6 @@ Map<String, dynamic> _$PerformanceSettingsToJson(
   'decimationThreshold': instance.decimationThreshold,
   'enableUpdateThrottling': instance.enableUpdateThrottling,
   'updateInterval': instance.updateInterval,
-  'enableSmoothAnimations': instance.enableSmoothAnimations,
-  'animationDuration': instance.animationDuration,
   'dataBufferSize': instance.dataBufferSize,
   'dataRetentionMinutes': instance.dataRetentionMinutes,
 };

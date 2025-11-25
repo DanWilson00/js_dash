@@ -1,9 +1,11 @@
 import 'dart:async';
 import 'package:dart_mavlink/mavlink_message.dart';
 import 'package:dart_mavlink/dialects/common.dart';
-import '../models/plot_configuration.dart';
+import '../core/circular_buffer.dart';
+import '../core/timeseries_point.dart';
+import '../interfaces/disposable.dart';
 import '../interfaces/i_data_repository.dart';
-import '../core/service_locator.dart';
+
 import 'mavlink_message_tracker.dart';
 import 'settings_manager.dart';
 
@@ -14,7 +16,18 @@ class TimeSeriesDataManager implements IDataRepository, Disposable {
   TimeSeriesDataManager._internal();
   
   // New constructor for dependency injection
-  TimeSeriesDataManager.injected();
+  // New constructor for dependency injection
+  TimeSeriesDataManager.injected(this._tracker, this._settingsManager) {
+    if (_tracker != null) {
+      _messageSubscription = _tracker!.statsStream.listen((messageStats) {
+        _processMessageUpdates(messageStats);
+      });
+    }
+    if (_settingsManager != null) {
+      _updateFromSettings();
+      _settingsManager!.addListener(_updateFromSettings);
+    }
+  }
 
   final Map<String, CircularBuffer> _dataBuffers = {};
   final StreamController<Map<String, CircularBuffer>> _dataController = 

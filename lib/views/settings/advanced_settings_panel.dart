@@ -1,13 +1,11 @@
+// ignore_for_file: use_build_context_synchronously
 import 'package:flutter/material.dart';
 import '../../services/settings_manager.dart';
 
 class AdvancedSettingsPanel extends StatefulWidget {
   final SettingsManager settingsManager;
 
-  const AdvancedSettingsPanel({
-    super.key,
-    required this.settingsManager,
-  });
+  const AdvancedSettingsPanel({super.key, required this.settingsManager});
 
   @override
   State<AdvancedSettingsPanel> createState() => _AdvancedSettingsPanelState();
@@ -47,11 +45,13 @@ class _AdvancedSettingsPanelState extends State<AdvancedSettingsPanel> {
                     color: Theme.of(context).colorScheme.error,
                   ),
                   title: const Text('Reset to defaults'),
-                  subtitle: const Text('This will reset all settings to their default values'),
+                  subtitle: const Text(
+                    'This will reset all settings to their default values',
+                  ),
                   onTap: () {
                     showDialog(
                       context: context,
-                      builder: (context) => AlertDialog(
+                      builder: (dialogContext) => AlertDialog(
                         title: const Text('Reset Settings?'),
                         content: const Text(
                           'This will reset all settings to their default values. '
@@ -59,21 +59,21 @@ class _AdvancedSettingsPanelState extends State<AdvancedSettingsPanel> {
                         ),
                         actions: [
                           TextButton(
-                            onPressed: () => Navigator.of(context).pop(),
+                            onPressed: () => Navigator.of(dialogContext).pop(),
                             child: const Text('Cancel'),
                           ),
                           TextButton(
                             onPressed: () async {
                               await widget.settingsManager.resetToDefaults();
-                              if (mounted) {
-                                Navigator.of(context).pop();
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    content: Text('Settings reset to defaults'),
-                                    duration: Duration(seconds: 2),
-                                  ),
-                                );
-                              }
+                              if (!mounted) return;
+
+                              Navigator.of(dialogContext).pop();
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('Settings reset to defaults'),
+                                  duration: Duration(seconds: 2),
+                                ),
+                              );
                             },
                             child: Text(
                               'Reset',
@@ -108,10 +108,11 @@ class _AdvancedSettingsPanelState extends State<AdvancedSettingsPanel> {
                       const SizedBox(width: 12),
                       Text(
                         'About',
-                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                          fontWeight: FontWeight.bold,
-                          color: Theme.of(context).colorScheme.primary,
-                        ),
+                        style: Theme.of(context).textTheme.titleMedium
+                            ?.copyWith(
+                              fontWeight: FontWeight.bold,
+                              color: Theme.of(context).colorScheme.primary,
+                            ),
                       ),
                     ],
                   ),

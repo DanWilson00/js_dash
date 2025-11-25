@@ -1,18 +1,21 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:dashboard/dashboard.dart';
 import '../../models/plot_configuration.dart';
 import '../../services/settings_manager.dart';
 import 'interactive_plot.dart';
 import 'signal_properties_panel.dart';
-import 'signal_selector_panel.dart';
 
 class PlotGridManager extends StatefulWidget {
   final SettingsManager settingsManager;
   final VoidCallback? onFieldAssignment;
+  final String tabId;
 
   const PlotGridManager({
     super.key,
     required this.settingsManager,
     this.onFieldAssignment,
+    required this.tabId,
   });
 
   @override
@@ -21,533 +24,303 @@ class PlotGridManager extends StatefulWidget {
 
 class PlotGridManagerState extends State<PlotGridManager> {
   late List<PlotConfiguration> _plots;
-  late PlotLayout _currentLayout;
   String? _selectedPlotId;
-  late TimeWindowOption _currentTimeWindow;
   late bool _showPropertiesPanel;
-  late bool _showSelectorPanel;
+
+  late DashboardItemController _itemController;
 
   @override
   void initState() {
     super.initState();
-    
-    // Load from settings
     _loadFromSettings();
-    
-    // Auto-select the first plot when there's only one
-    if (_plots.length == 1) {
-      _selectedPlotId = _plots.first.id;
-    }
+    _initializeController();
   }
-  
+
   void _loadFromSettings() {
     final plotSettings = widget.settingsManager.plots;
-    
-    // Load plots (ensure we have at least one)
-    _plots = plotSettings.configurations.isNotEmpty 
-        ? plotSettings.configurations 
-        : [PlotConfiguration(id: 'plot_0')];
-    
-    // Load layout
-    _currentLayout = _getLayoutFromString(plotSettings.layout);
-    
-    // Load time window
-    _currentTimeWindow = _getTimeWindowFromString(plotSettings.timeWindow);
-    
-    // Load panel visibility
+
+    // Find the tab by ID
+    final tab = plotSettings.tabs.firstWhere(
+      (t) => t.id == widget.tabId,
+      orElse: () => plotSettings.tabs.first, // Fallback
+    );
+
+    // Load plots from the specific tab
+    _plots = List<PlotConfiguration>.from(tab.plots);
     _showPropertiesPanel = plotSettings.propertiesPanelVisible;
-    _showSelectorPanel = plotSettings.selectorPanelVisible;
-    
-    // Load selected plot
-    final selectedIndex = plotSettings.selectedPlotIndex;
-    if (selectedIndex < _plots.length) {
-      _selectedPlotId = _plots[selectedIndex].id;
+
+    // Restore selected plot index (global setting, might need per-tab later)
+    // For now, just select the first plot if available
+    if (_plots.isNotEmpty) {
+      _selectedPlotId = _plots.first.id;
+    } else {
+      _selectedPlotId = null;
     }
   }
-  
-  PlotLayout _getLayoutFromString(String layout) {
-    switch (layout) {
-      case 'single': return PlotLayout.single;
-      case 'horizontal': return PlotLayout.horizontal;
-      case 'vertical': return PlotLayout.vertical;
-      case 'grid2x2': return PlotLayout.grid2x2;
-      case 'grid3x2': return PlotLayout.grid3x2;
-      default: return PlotLayout.single;
-    }
+
+  void _initializeController() {
+    // Removed forced default plot creation to allow empty state persistence
+    // if (_plots.isEmpty) {
+    //   _addDefaultPlot(save: false);
+    // }
+
+    _itemController = DashboardItemController.withDelegate(
+      itemStorageDelegate: _PlotGridStorageDelegate(
+        plots: _plots,
+        onItemsUpdatedCallback: _updateLayoutFromDelegate,
+        onItemsAddedCallback: (items) {
+          // Handle items added via controller if needed
+        },
+        onItemsDeletedCallback: (items) {
+          // Handle items deleted via controller if needed
+        },
+      ),
+    );
   }
-  
-  TimeWindowOption _getTimeWindowFromString(String timeWindow) {
-    return TimeWindowOption.availableWindows.firstWhere(
-      (option) => option.label == timeWindow,
+
+  void _addDefaultPlot({bool save = true}) {
+    final newId = 'plot_${DateTime.now().millisecondsSinceEpoch}';
+
+    // Get current time window from settings
+    final timeWindowLabel = widget.settingsManager.plots.timeWindow;
+    final timeWindowOption = TimeWindowOption.availableWindows.firstWhere(
+      (w) => w.label == timeWindowLabel,
       orElse: () => TimeWindowOption.getDefault(),
     );
-  }
-  
-  void _saveToSettings() {
-    final selectedIndex = _selectedPlotId != null 
-        ? _plots.indexWhere((plot) => plot.id == _selectedPlotId)
-        : 0;
-    
-    widget.settingsManager.updatePlots(
-      widget.settingsManager.plots.copyWith(
-        plotCount: _plots.length,
-        layout: _currentLayout.type.name,
-        timeWindow: _currentTimeWindow.label,
-        configurations: _plots,
-        selectedPlotIndex: selectedIndex.clamp(0, _plots.length - 1),
-        propertiesPanelVisible: _showPropertiesPanel,
-        selectorPanelVisible: _showSelectorPanel,
-      ),
-    );
-  }
 
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: [
-        _buildControls(),
-        const SizedBox(height: 8),
-        if (_selectedPlotId != null && _showPropertiesPanel) ...[
-          _buildSignalPropertiesPanel(),
-          const SizedBox(height: 8),
-        ],
-        if (_selectedPlotId != null && _showSelectorPanel) ...[
-          _buildSignalSelectorPanel(),
-          const SizedBox(height: 8),
-        ],
-        Expanded(
-          child: _buildPlotGrid(),
+    final newPlot = PlotConfiguration(
+      id: newId,
+      timeWindow: timeWindowOption.duration,
+      layoutData: const PlotLayoutData(x: 0, y: 0, width: 8, height: 6),
+    );
+
+    _plots.add(newPlot);
+    if (save) {
+      _saveToSettings();
+      _itemController.add(
+        DashboardItem(
+          width: newPlot.layoutData.width,
+          height: newPlot.layoutData.height,
+          identifier: newPlot.id,
+          startX: newPlot.layoutData.x,
+          startY: newPlot.layoutData.y,
         ),
-      ],
-    );
-  }
-
-  Widget _buildControls() {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(12.0),
-        child: Wrap(
-          spacing: 8,
-          runSpacing: 4,
-          alignment: WrapAlignment.start,
-          crossAxisAlignment: WrapCrossAlignment.center,
-          children: [
-            Text(
-              'Plots:',
-              style: Theme.of(context).textTheme.titleSmall,
-            ),
-            DropdownButton<int>(
-              value: _plots.length,
-              items: List.generate(6, (index) => index + 1)
-                  .map((count) => DropdownMenuItem(
-                        value: count,
-                        child: Text('$count'),
-                      ))
-                  .toList(),
-              onChanged: (count) => _updatePlotCount(count ?? 1),
-              isDense: true,
-            ),
-            Text(
-              'Layout:',
-              style: Theme.of(context).textTheme.titleSmall,
-            ),
-            DropdownButton<PlotLayout>(
-              value: _currentLayout,
-              items: PlotLayout.getAvailableLayouts(_plots.length)
-                  .map((layout) => DropdownMenuItem(
-                        value: layout,
-                        child: Text(layout.toString()),
-                      ))
-                  .toList(),
-              onChanged: (layout) {
-                if (layout != null) {
-                  setState(() {
-                    _currentLayout = layout;
-                  });
-                  _saveToSettings();
-                }
-              },
-              isDense: true,
-            ),
-            Text(
-              'Time:',
-              style: Theme.of(context).textTheme.titleSmall,
-            ),
-            DropdownButton<TimeWindowOption>(
-              value: _currentTimeWindow,
-              items: TimeWindowOption.availableWindows
-                  .map((window) => DropdownMenuItem(
-                        value: window,
-                        child: Text(window.label),
-                      ))
-                  .toList(),
-              onChanged: (window) {
-                if (window != null) {
-                  _updateTimeWindow(window);
-                }
-              },
-              isDense: true,
-            ),
-            if (_selectedPlotId != null)
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(4),
-                ),
-                child: Text(
-                  'Plot ${_getPlotIndex(_selectedPlotId!) + 1}',
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: Theme.of(context).colorScheme.primary,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildPlotGrid() {
-    // Adjust aspect ratio based on layout to ensure x-axis visibility
-    double aspectRatio;
-    switch (_currentLayout.type) {
-      case PlotLayoutType.single:
-        aspectRatio = 2.5; // Single plot can be wider
-        break;
-      case PlotLayoutType.horizontal:
-        aspectRatio = 2.0; // Side by side plots
-        break;
-      case PlotLayoutType.vertical:
-        aspectRatio = 2.2; // Stacked plots
-        break;
-      case PlotLayoutType.grid2x2:
-      case PlotLayoutType.grid3x2:
-        aspectRatio = 1.8; // Grid layouts need to be more compact
-        break;
+      );
     }
-
-    return GridView.builder(
-      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: _currentLayout.columns,
-        childAspectRatio: aspectRatio,
-        crossAxisSpacing: 8,
-        mainAxisSpacing: 8,
-      ),
-      itemCount: _plots.length,
-      itemBuilder: (context, index) {
-        final plot = _plots[index];
-        return InteractivePlot(
-          configuration: plot,
-          settingsManager: widget.settingsManager,
-          isAxisSelected: _selectedPlotId == plot.id,
-          onAxisTap: () => _selectPlot(plot.id),
-          onClearAxis: () => _clearPlotAxis(plot.id),
-          onLegendTap: () => _toggleSignalPanel(plot.id),
-        );
-      },
-    );
   }
 
-  void _updatePlotCount(int count) {
-    setState(() {
-      if (count > _plots.length) {
-        // Add new plots
-        for (int i = _plots.length; i < count; i++) {
-          _plots.add(PlotConfiguration(
-            id: 'plot_$i',
-            timeWindow: _currentTimeWindow.duration,
-          ));
-        }
-      } else if (count < _plots.length) {
-        // Remove excess plots
-        _plots = _plots.take(count).toList();
-        
-        // Clear selection if selected plot was removed
-        if (_selectedPlotId != null && 
-            !_plots.any((p) => p.id == _selectedPlotId)) {
-          _selectedPlotId = null;
-        }
-      }
-
-      // Update layout to match plot count
-      _currentLayout = PlotLayout.getDefaultLayout(count);
-      
-      // Auto-select the first plot when there's only one
-      if (count == 1 && _selectedPlotId == null) {
-        _selectedPlotId = _plots.first.id;
-      }
-    });
-    
-    _saveToSettings();
+  void _saveToSettings() {
+    widget.settingsManager.updatePlotsInTab(widget.tabId, _plots);
   }
 
-  void _updateTimeWindow(TimeWindowOption window) {
+  void _updateLayoutFromDelegate(List<DashboardItem> items) {
     setState(() {
-      _currentTimeWindow = window;
-      
-      // Update all plots with new time window
-      _plots = _plots.map((plot) => plot.copyWith(
-        timeWindow: window.duration,
-      )).toList();
+      for (final item in items) {
+        final index = _plots.indexWhere((p) => p.id == item.identifier);
+        if (index != -1) {
+          _plots[index] = _plots[index].copyWith(
+            layoutData: PlotLayoutData(
+              x: item.layoutData.startX,
+              y: item.layoutData.startY,
+              width: item.layoutData.width,
+              height: item.layoutData.height,
+            ),
+          );
+        }
+      }
     });
-    
     _saveToSettings();
   }
 
   void _selectPlot(String plotId) {
     setState(() {
-      _selectedPlotId = _selectedPlotId == plotId ? null : plotId;
+      _selectedPlotId = plotId;
     });
-    
-    _saveToSettings();
-    
-    if (widget.onFieldAssignment != null) {
-      widget.onFieldAssignment!();
-    }
-  }
-
-  Widget _buildSignalPropertiesPanel() {
-    final selectedPlot = _plots.firstWhere((p) => p.id == _selectedPlotId);
-    
-    return SignalPropertiesPanel(
-      signals: selectedPlot.yAxis.signals,
-      scalingMode: selectedPlot.yAxis.scalingMode,
-      onSignalUpdated: (updatedSignal) {
-        _updateSignalInSelectedPlot(updatedSignal);
-      },
-      onSignalRemoved: (signalId) {
-        _removeSignalFromSelectedPlot(signalId);
-      },
-      onAddSignals: () {
-        _showSignalSelector();
-      },
-      onScalingModeChanged: (newMode) {
-        _updateSelectedPlotScalingMode(newMode);
-      },
-    );
-  }
-
-  Widget _buildSignalSelectorPanel() {
-    final selectedPlot = _plots.firstWhere((p) => p.id == _selectedPlotId);
-    
-    return SignalSelectorPanel(
-      activeSignals: selectedPlot.yAxis.signals,
-      scalingMode: selectedPlot.yAxis.scalingMode,
-      onSignalToggle: (messageType, fieldName) {
-        _toggleSignalInSelectedPlot(messageType, fieldName);
-      },
-      onScalingModeChanged: (newMode) {
-        _updateSelectedPlotScalingMode(newMode);
-      },
-    );
-  }
-
-
-  void _updateSelectedPlotScalingMode(ScalingMode newMode) {
-    if (_selectedPlotId == null) return;
-    
-    final plotIndex = _plots.indexWhere((p) => p.id == _selectedPlotId);
-    if (plotIndex == -1) return;
-
-    setState(() {
-      _plots[plotIndex] = _plots[plotIndex].copyWith(
-        yAxis: _plots[plotIndex].yAxis.copyWith(
-          scalingMode: newMode,
-        ),
-      );
-    });
-    
-    _saveToSettings();
-  }
-
-  void _toggleSignalPanel(String plotId) {
-    setState(() {
-      if (_selectedPlotId == plotId && _showPropertiesPanel) {
-        // If same plot is selected and properties panel is shown, hide panel
-        _showPropertiesPanel = false;
-      } else {
-        // Select plot and show properties panel
-        _selectedPlotId = plotId;
-        _showPropertiesPanel = true;
-        _showSelectorPanel = false; // Hide selector panel if open
-      }
-    });
-    
-    _saveToSettings();
-    
-    if (widget.onFieldAssignment != null) {
-      widget.onFieldAssignment!();
-    }
-  }
-
-  void _showSignalSelector() {
-    setState(() {
-      _showSelectorPanel = !_showSelectorPanel;
-      if (_showSelectorPanel) {
-        _showPropertiesPanel = false; // Hide properties panel if open
-      }
-    });
-    
-    _saveToSettings();
-  }
-
-  void _updateSignalInSelectedPlot(PlotSignalConfiguration updatedSignal) {
-    if (_selectedPlotId == null) return;
-    
-    final plotIndex = _plots.indexWhere((p) => p.id == _selectedPlotId);
-    if (plotIndex == -1) return;
-
-    setState(() {
-      _plots[plotIndex] = _plots[plotIndex].updateSignal(updatedSignal);
-    });
-    
-    _saveToSettings();
-  }
-
-  void _removeSignalFromSelectedPlot(String signalId) {
-    if (_selectedPlotId == null) return;
-    
-    final plotIndex = _plots.indexWhere((p) => p.id == _selectedPlotId);
-    if (plotIndex == -1) return;
-
-    setState(() {
-      _plots[plotIndex] = _plots[plotIndex].removeSignal(signalId);
-    });
-    
-    _saveToSettings();
-  }
-
-  void _toggleSignalInSelectedPlot(String messageType, String fieldName) {
-    if (_selectedPlotId == null) return;
-    
-    final plotIndex = _plots.indexWhere((p) => p.id == _selectedPlotId);
-    if (plotIndex == -1) return;
-
-    final fieldKey = '$messageType.$fieldName';
-    final currentPlot = _plots[plotIndex];
-    final existingSignalIndex = currentPlot.yAxis.signals
-        .indexWhere((s) => s.fieldKey == fieldKey);
-
-    setState(() {
-      if (existingSignalIndex != -1) {
-        // Signal exists, remove it
-        final updatedSignals = List<PlotSignalConfiguration>.from(
-          currentPlot.yAxis.signals
-        );
-        updatedSignals.removeAt(existingSignalIndex);
-        
-        _plots[plotIndex] = currentPlot.copyWith(
-          yAxis: currentPlot.yAxis.copyWith(signals: updatedSignals),
-        );
-      } else {
-        // Signal doesn't exist, add it
-        // Get colors already in use in this plot
-        final usedColors = currentPlot.yAxis.signals.map((s) => s.color).toList();
-        final newSignal = PlotSignalConfiguration(
-          id: '${messageType}_${fieldName}_${DateTime.now().millisecondsSinceEpoch}',
-          messageType: messageType,
-          fieldName: fieldName,
-          color: SignalColorPalette.getNextAvailableColor(usedColors),
-        );
-        
-        _plots[plotIndex] = currentPlot.addSignal(newSignal);
-      }
-    });
-    
     _saveToSettings();
   }
 
   void _clearPlotAxis(String plotId) {
-    final plotIndex = _plots.indexWhere((p) => p.id == plotId);
-    if (plotIndex != -1) {
-      setState(() {
-        _plots[plotIndex] = _plots[plotIndex].copyWith(
-          yAxis: _plots[plotIndex].yAxis.clear(),
+    setState(() {
+      final index = _plots.indexWhere((p) => p.id == plotId);
+      if (index != -1) {
+        _plots[index] = _plots[index].copyWith(
+          yAxis: _plots[index].yAxis.copyWith(signals: []),
         );
-      });
-      
-      _saveToSettings();
-    }
+      }
+    });
+    _saveToSettings();
+  }
+
+  void _handleLegendTap(String plotId, PlotSignalConfiguration signal) {
+    _showColorPicker(plotId, signal);
+  }
+
+  void _showColorPicker(String plotId, PlotSignalConfiguration signal) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Select Color for ${signal.fieldName}'),
+        content: SingleChildScrollView(
+          child: Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: SignalColorPalette.availableColors.map((color) {
+              return GestureDetector(
+                onTap: () {
+                  _updateSignalColor(plotId, signal.id, color);
+                  Navigator.of(context).pop();
+                },
+                child: Container(
+                  width: 40,
+                  height: 40,
+                  decoration: BoxDecoration(
+                    color: color,
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: signal.color == color
+                          ? Theme.of(context).colorScheme.primary
+                          : Theme.of(
+                              context,
+                            ).colorScheme.outline.withValues(alpha: 0.2),
+                      width: signal.color == color ? 3 : 1,
+                    ),
+                  ),
+                ),
+              );
+            }).toList(),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancel'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _updateSignalColor(String plotId, String signalId, Color newColor) {
+    setState(() {
+      final plotIndex = _plots.indexWhere((p) => p.id == plotId);
+      if (plotIndex != -1) {
+        final signalIndex = _plots[plotIndex].yAxis.signals.indexWhere(
+          (s) => s.id == signalId,
+        );
+        if (signalIndex != -1) {
+          final updatedSignals = List<PlotSignalConfiguration>.from(
+            _plots[plotIndex].yAxis.signals,
+          );
+          updatedSignals[signalIndex] = updatedSignals[signalIndex].copyWith(
+            color: newColor,
+          );
+          _plots[plotIndex] = _plots[plotIndex].copyWith(
+            yAxis: _plots[plotIndex].yAxis.copyWith(signals: updatedSignals),
+          );
+        }
+      }
+    });
+    _saveToSettings();
+  }
+
+  void _removePlot(String plotId) {
+    setState(() {
+      _plots.removeWhere((p) => p.id == plotId);
+      if (_selectedPlotId == plotId) {
+        _selectedPlotId = _plots.isNotEmpty ? _plots.last.id : null;
+      }
+      _itemController.delete(plotId);
+    });
+    _saveToSettings();
   }
 
   int _getPlotIndex(String plotId) {
     return _plots.indexWhere((p) => p.id == plotId);
   }
 
-  // Public method to toggle field in selected plot
-  void assignFieldToSelectedPlot(String messageType, String fieldName) {
-    if (_selectedPlotId == null) return;
+  // --- Public Methods for RealtimeDataDisplay ---
 
-    final plotIndex = _plots.indexWhere((p) => p.id == _selectedPlotId);
-    if (plotIndex == -1) return;
+  void addNewPlot() {
+    _addDefaultPlot(save: true);
+  }
 
-    final fieldKey = '$messageType.$fieldName';
-    final currentPlot = _plots[plotIndex];
-    final existingSignalIndex = currentPlot.yAxis.signals
-        .indexWhere((s) => s.fieldKey == fieldKey);
-
+  void clearAllPlots() {
     setState(() {
-      if (existingSignalIndex != -1) {
-        // Signal exists, remove it
-        final updatedSignals = List<PlotSignalConfiguration>.from(
-          currentPlot.yAxis.signals
+      _plots.clear();
+      _selectedPlotId = null;
+      _itemController.clear();
+    });
+    _saveToSettings();
+  }
+
+  void setEditMode(bool enabled) {
+    _itemController.isEditing = enabled;
+  }
+
+  void updateTimeWindow(TimeWindowOption window) {
+    setState(() {
+      for (var i = 0; i < _plots.length; i++) {
+        _plots[i] = _plots[i].copyWith(
+          timeWindow: Duration(seconds: window.duration.inSeconds),
         );
-        updatedSignals.removeAt(existingSignalIndex);
-        
-        _plots[plotIndex] = currentPlot.copyWith(
-          yAxis: currentPlot.yAxis.copyWith(signals: updatedSignals),
-        );
-      } else {
-        // Signal doesn't exist, add it
-        // Get colors already in use in this plot
-        final usedColors = _plots[plotIndex].yAxis.signals.map((s) => s.color).toList();
-        final signal = PlotSignalConfiguration(
-          id: '${messageType}_${fieldName}_${DateTime.now().millisecondsSinceEpoch}',
-          messageType: messageType,
-          fieldName: fieldName,
-          color: SignalColorPalette.getNextAvailableColor(usedColors),
-        );
-        
-        _plots[plotIndex] = _plots[plotIndex].addSignal(signal);
       }
     });
-    
     _saveToSettings();
-    
-    // Notify parent to refresh field highlighting
-    if (widget.onFieldAssignment != null) {
-      widget.onFieldAssignment!();
+  }
+
+  void assignFieldToSelectedPlot(String messageType, String fieldName) {
+    if (_selectedPlotId == null && _plots.isNotEmpty) {
+      _selectedPlotId = _plots.first.id;
+    }
+
+    if (_selectedPlotId != null) {
+      final index = _plots.indexWhere((p) => p.id == _selectedPlotId);
+      if (index != -1) {
+        final plot = _plots[index];
+        final fieldKey = '$messageType.$fieldName';
+
+        // Check if signal already exists
+        final existingSignalIndex = plot.yAxis.signals.indexWhere(
+          (s) => s.fieldKey == fieldKey,
+        );
+
+        List<PlotSignalConfiguration> updatedSignals;
+        if (existingSignalIndex != -1) {
+          // Remove if exists (toggle)
+          updatedSignals = List.from(plot.yAxis.signals)
+            ..removeAt(existingSignalIndex);
+        } else {
+          // Add new signal
+          updatedSignals = List.from(plot.yAxis.signals)
+            ..add(
+              PlotSignalConfiguration(
+                id: fieldKey,
+                messageType: messageType,
+                fieldName: fieldName,
+                displayName: fieldName,
+                color: SignalColorPalette.getNextColor(
+                  plot.yAxis.signals.length,
+                ),
+              ),
+            );
+        }
+
+        setState(() {
+          _plots[index] = plot.copyWith(
+            yAxis: plot.yAxis.copyWith(signals: updatedSignals),
+          );
+        });
+        _saveToSettings();
+        widget.onFieldAssignment?.call();
+      }
+    } else {
+      // No plot selected and no plots exist, create one
+      addNewPlot();
+      // Then assign (recursive call)
+      Future.microtask(() => assignFieldToSelectedPlot(messageType, fieldName));
     }
   }
 
-  // Public method to add signal to selected plot
-  void addSignalToSelectedPlot(PlotSignalConfiguration signal) {
-    if (_selectedPlotId == null) return;
-
-    final plotIndex = _plots.indexWhere((p) => p.id == _selectedPlotId);
-    if (plotIndex == -1) return;
-
-    setState(() {
-      _plots[plotIndex] = _plots[plotIndex].addSignal(signal);
-    });
-    
-    _saveToSettings();
-  }
-
-
-  // Public method to check if a plot is selected
-  bool get hasSelectedPlot => _selectedPlotId != null;
-
-  // Public method to get selected plot info
-  String? get selectedPlotInfo {
-    if (_selectedPlotId == null) return null;
-    final index = _getPlotIndex(_selectedPlotId!);
-    return 'Plot ${index + 1}';
-  }
-
-  // Get all plotted fields across all plots
   Set<String> get allPlottedFields {
     final fields = <String>{};
     for (final plot in _plots) {
@@ -558,33 +331,313 @@ class PlotGridManagerState extends State<PlotGridManager> {
     return fields;
   }
 
-  // Get fields and colors for the selected plot
   Map<String, Color> get selectedPlotFields {
     if (_selectedPlotId == null) return {};
-    
-    final plot = _plots.firstWhere((p) => p.id == _selectedPlotId);
-    final fields = <String, Color>{};
-    
-    for (final signal in plot.yAxis.signals) {
-      fields[signal.fieldKey] = signal.color;
-    }
-    
-    return fields;
+    final plot = _plots.firstWhere(
+      (p) => p.id == _selectedPlotId,
+      orElse: () => _plots.first,
+    );
+    return {
+      for (final signal in plot.yAxis.signals) signal.fieldKey: signal.color,
+    };
   }
-  
-  // Clear all signals from all plots
-  void clearAllPlots() {
-    setState(() {
-      _plots = _plots.map((plot) => plot.copyWith(
-        yAxis: plot.yAxis.clear(),
-      )).toList();
-    });
-    
-    _saveToSettings();
-    
-    // Notify parent to refresh field highlighting
-    if (widget.onFieldAssignment != null) {
-      widget.onFieldAssignment!();
-    }
+
+  // --- Panel Builders ---
+
+  Widget _buildSignalPropertiesPanel() {
+    final plot = _plots.firstWhere((p) => p.id == _selectedPlotId);
+    return SignalPropertiesPanel(
+      signals: plot.yAxis.signals,
+      onSignalUpdated: (updatedSignal) {
+        setState(() {
+          final plotIndex = _plots.indexWhere((p) => p.id == plot.id);
+          if (plotIndex != -1) {
+            final signalIndex = _plots[plotIndex].yAxis.signals.indexWhere(
+              (s) => s.id == updatedSignal.id,
+            );
+            if (signalIndex != -1) {
+              final updatedSignals = List<PlotSignalConfiguration>.from(
+                _plots[plotIndex].yAxis.signals,
+              );
+              updatedSignals[signalIndex] = updatedSignal;
+              _plots[plotIndex] = _plots[plotIndex].copyWith(
+                yAxis: _plots[plotIndex].yAxis.copyWith(
+                  signals: updatedSignals,
+                ),
+              );
+            }
+          }
+        });
+        _saveToSettings();
+      },
+      onSignalRemoved: (signalId) {
+        setState(() {
+          final plotIndex = _plots.indexWhere((p) => p.id == plot.id);
+          if (plotIndex != -1) {
+            final updatedSignals = List<PlotSignalConfiguration>.from(
+              _plots[plotIndex].yAxis.signals,
+            )..removeWhere((s) => s.id == signalId);
+
+            _plots[plotIndex] = _plots[plotIndex].copyWith(
+              yAxis: _plots[plotIndex].yAxis.copyWith(signals: updatedSignals),
+            );
+          }
+        });
+        _saveToSettings();
+      },
+      onAddSignals: () {
+        // TODO: Show color picker or handle add signal
+      },
+      scalingMode: plot.yAxis.scalingMode,
+      onScalingModeChanged: (mode) {
+        setState(() {
+          final index = _plots.indexWhere((p) => p.id == plot.id);
+          if (index != -1) {
+            _plots[index] = _plots[index].copyWith(
+              yAxis: _plots[index].yAxis.copyWith(scalingMode: mode),
+            );
+          }
+        });
+        _saveToSettings();
+      },
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        if (_selectedPlotId != null && _showPropertiesPanel) ...[
+          _buildSignalPropertiesPanel(),
+          const SizedBox(height: 8),
+        ],
+
+        Expanded(
+          child: Dashboard(
+            dashboardItemController: _itemController,
+            slotCount: 24,
+            editModeSettings: EditModeSettings(
+              paintBackgroundLines: false,
+              fillEditingBackground: false,
+              resizeCursorSide: 15,
+              curve: Curves.easeOut,
+              duration: const Duration(milliseconds: 300),
+            ),
+            itemBuilder: (DashboardItem item) {
+              // Find the plot config.
+              final plot = _plots.firstWhere(
+                (p) => p.id == item.identifier,
+                orElse: () => _plots.first, // Fallback
+              );
+
+              final isSelected = _selectedPlotId == plot.id;
+
+              return Container(
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.surface,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: isSelected
+                        ? Theme.of(context).colorScheme.primary
+                        : Theme.of(
+                            context,
+                          ).colorScheme.outline.withValues(alpha: 0.2),
+                    width: isSelected ? 2 : 1,
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.1),
+                      blurRadius: 4,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: Column(
+                  children: [
+                    // Header / Drag Handle
+                    Container(
+                      height: 24,
+                      decoration: BoxDecoration(
+                        color: isSelected
+                            ? Theme.of(
+                                context,
+                              ).colorScheme.primary.withValues(alpha: 0.1)
+                            : Theme.of(
+                                context,
+                              ).colorScheme.surfaceContainerHighest,
+                        borderRadius: const BorderRadius.vertical(
+                          top: Radius.circular(7),
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          // Draggable area with move cursor
+                          Expanded(
+                            child: MouseRegion(
+                              cursor: SystemMouseCursors.move,
+                              child: Row(
+                                children: [
+                                  const SizedBox(width: 8),
+                                  Icon(
+                                    Icons.drag_indicator,
+                                    size: 16,
+                                    color: Theme.of(
+                                      context,
+                                    ).colorScheme.primary,
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Expanded(
+                                    child: GestureDetector(
+                                      onTap: () => _selectPlot(plot.id),
+                                      child: Text(
+                                        plot.yAxis.hasData
+                                            ? plot.yAxis.displayName
+                                            : 'Plot ${_getPlotIndex(plot.id) + 1}',
+                                        style: Theme.of(
+                                          context,
+                                        ).textTheme.labelSmall,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                          // Close Button - now clickable with default cursor!
+                          MouseRegion(
+                            cursor: SystemMouseCursors.click,
+                            child: Material(
+                              color: Colors.transparent,
+                              child: InkWell(
+                                onTap: () => _removePlot(plot.id),
+                                borderRadius: BorderRadius.circular(4),
+                                child: Padding(
+                                  padding: const EdgeInsets.all(4.0),
+                                  child: Icon(
+                                    Icons.close,
+                                    size: 16,
+                                    color: Theme.of(context).colorScheme.error,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 4),
+                        ],
+                      ),
+                    ),
+                    // Plot Area - force basic cursor to override dashboard's move cursor
+                    Expanded(
+                      child: MouseRegion(
+                        cursor: SystemMouseCursors.basic,
+                        child: InteractivePlot(
+                          configuration: plot,
+                          settingsManager: widget.settingsManager,
+                          isAxisSelected: isSelected,
+                          onAxisTap: () => _selectPlot(plot.id),
+                          onClearAxis: () => _clearPlotAxis(plot.id),
+                          onLegendTap: () {
+                            if (plot.yAxis.signals.isNotEmpty) {
+                              if (plot.yAxis.signals.length == 1) {
+                                _handleLegendTap(
+                                  plot.id,
+                                  plot.yAxis.signals.first,
+                                );
+                              } else {
+                                // Show a simple dialog to pick a signal
+                                showDialog(
+                                  context: context,
+                                  builder: (context) => SimpleDialog(
+                                    title: const Text(
+                                      'Select Signal to Edit Color',
+                                    ),
+                                    children: plot.yAxis.signals.map((signal) {
+                                      return SimpleDialogOption(
+                                        onPressed: () {
+                                          Navigator.pop(context);
+                                          _handleLegendTap(plot.id, signal);
+                                        },
+                                        child: Row(
+                                          children: [
+                                            Container(
+                                              width: 16,
+                                              height: 16,
+                                              decoration: BoxDecoration(
+                                                color: signal.color,
+                                                shape: BoxShape.circle,
+                                              ),
+                                            ),
+                                            const SizedBox(width: 8),
+                                            Text(signal.fieldName),
+                                          ],
+                                        ),
+                                      );
+                                    }).toList(),
+                                  ),
+                                );
+                              }
+                            }
+                          },
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _PlotGridStorageDelegate
+    extends DashboardItemStorageDelegate<DashboardItem> {
+  final List<PlotConfiguration> plots;
+  final Function(List<DashboardItem>) onItemsUpdatedCallback;
+  final Function(List<DashboardItem>) onItemsAddedCallback;
+  final Function(List<DashboardItem>) onItemsDeletedCallback;
+
+  _PlotGridStorageDelegate({
+    required this.plots,
+    required this.onItemsUpdatedCallback,
+    required this.onItemsAddedCallback,
+    required this.onItemsDeletedCallback,
+  });
+
+  @override
+  bool get cacheItems => true;
+
+  @override
+  bool get layoutsBySlotCount => false;
+
+  @override
+  FutureOr<List<DashboardItem>> getAllItems(int slotCount) {
+    return plots.map((plot) {
+      return DashboardItem(
+        width: plot.layoutData.width,
+        height: plot.layoutData.height,
+        identifier: plot.id,
+        startX: plot.layoutData.x,
+        startY: plot.layoutData.y,
+      );
+    }).toList();
+  }
+
+  @override
+  FutureOr<void> onItemsUpdated(List<DashboardItem> items, int slotCount) {
+    onItemsUpdatedCallback(items);
+  }
+
+  @override
+  FutureOr<void> onItemsAdded(List<DashboardItem> items, int slotCount) {
+    onItemsAddedCallback(items);
+  }
+
+  @override
+  FutureOr<void> onItemsDeleted(List<DashboardItem> items, int slotCount) {
+    onItemsDeletedCallback(items);
   }
 }

@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import '../models/app_settings.dart';
 import '../models/plot_configuration.dart';
+import '../models/plot_tab.dart';
 import 'settings_service.dart';
 
 /// Central settings manager with automatic persistence and change notification
@@ -9,8 +10,6 @@ class SettingsManager extends ChangeNotifier {
   final SettingsService _settingsService = SettingsService();
   AppSettings _settings = AppSettings.defaults();
   Timer? _saveTimer;
-  
-  // Debounce settings saves to avoid excessive disk writes
   static const Duration _saveDelay = Duration(seconds: 2);
 
   AppSettings get settings => _settings;
@@ -20,6 +19,7 @@ class SettingsManager extends ChangeNotifier {
   NavigationSettings get navigation => _settings.navigation;
   PerformanceSettings get performance => _settings.performance;
   MapSettings get map => _settings.map;
+  AppearanceSettings get appearance => _settings.appearance;
 
   /// Initialize settings by loading from storage
   Future<void> initialize() async {
@@ -27,37 +27,46 @@ class SettingsManager extends ChangeNotifier {
       _settings = await _settingsService.loadSettings();
       notifyListeners();
     } catch (e) {
-      // debugPrint('Error initializing settings: $e');
+      debugPrint('Error initializing settings: $e');
       // Continue with defaults
     }
+  }
+
+  /// Update appearance settings
+  void updateAppearance(AppearanceSettings newAppearance) {
+    if (_settings.appearance == newAppearance) return;
+
+    _settings = _settings.copyWith(appearance: newAppearance);
+    notifyListeners();
+    _debouncedSave();
+  }
+
+  /// Update UI scale
+  void updateUiScale(double scale) {
+    updateAppearance(_settings.appearance.copyWith(uiScale: scale));
   }
 
   /// Update window settings
   void updateWindow(WindowSettings newWindow) {
     if (_settings.window == newWindow) return;
-    
+
     _settings = _settings.copyWith(window: newWindow);
     notifyListeners();
-    
-    // Save window state immediately (for window close events)
-    _settingsService.saveWindowState(newWindow);
+
+    // Save window state
     _debouncedSave();
   }
 
   /// Update window size
   void updateWindowSize(Size size) {
-    updateWindow(_settings.window.copyWith(
-      width: size.width,
-      height: size.height,
-    ));
+    updateWindow(
+      _settings.window.copyWith(width: size.width, height: size.height),
+    );
   }
 
   /// Update window position
   void updateWindowPosition(Offset position) {
-    updateWindow(_settings.window.copyWith(
-      x: position.dx,
-      y: position.dy,
-    ));
+    updateWindow(_settings.window.copyWith(x: position.dx, y: position.dy));
   }
 
   /// Update window maximized state
@@ -67,89 +76,127 @@ class SettingsManager extends ChangeNotifier {
 
   /// Update window state (convenience method for all window properties)
   void updateWindowState({Size? size, Offset? position, bool? maximized}) {
-    updateWindow(_settings.window.copyWith(
-      width: size?.width,
-      height: size?.height,
-      x: position?.dx,
-      y: position?.dy,
-      maximized: maximized,
-    ));
+    updateWindow(
+      _settings.window.copyWith(
+        width: size?.width,
+        height: size?.height,
+        x: position?.dx,
+        y: position?.dy,
+        maximized: maximized,
+      ),
+    );
   }
 
   /// Update plot settings
   void updatePlots(PlotSettings newPlots) {
     if (_settings.plots == newPlots) return;
-    
+
     _settings = _settings.copyWith(plots: newPlots);
     notifyListeners();
     _debouncedSave();
   }
 
-  /// Update plot count and regenerate configurations if needed
-  void updatePlotCount(int count) {
-    final currentCount = _settings.plots.plotCount;
-    if (currentCount == count) return;
-
-    final configurations = <PlotConfiguration>[];
-    
-    // Keep existing configurations
-    for (int i = 0; i < count && i < _settings.plots.configurations.length; i++) {
-      configurations.add(_settings.plots.configurations[i]);
-    }
-    
-    // Add new empty configurations if needed
-    for (int i = _settings.plots.configurations.length; i < count; i++) {
-      configurations.add(PlotConfiguration(id: 'plot_$i'));
-    }
-
-    updatePlots(_settings.plots.copyWith(
-      plotCount: count,
-      configurations: configurations,
-    ));
-  }
-
-  /// Update plot layout
-  void updatePlotLayout(String layout) {
-    updatePlots(_settings.plots.copyWith(layout: layout));
-  }
-
-  /// Update time window
+  // Plot Settings
   void updateTimeWindow(String timeWindow) {
-    updatePlots(_settings.plots.copyWith(timeWindow: timeWindow));
+    _settings = _settings.copyWith(
+      plots: _settings.plots.copyWith(timeWindow: timeWindow),
+    );
+    _debouncedSave();
   }
 
-  /// Update scaling mode
-  void updateScalingMode(String scalingMode) {
-    updatePlots(_settings.plots.copyWith(scalingMode: scalingMode));
+  void updateMessagePanelWidth(double width) {
+    _settings = _settings.copyWith(
+      plots: _settings.plots.copyWith(messagePanelWidth: width),
+    );
+    _debouncedSave();
   }
 
-  /// Update selected plot index
-  void updateSelectedPlotIndex(int index) {
-    updatePlots(_settings.plots.copyWith(selectedPlotIndex: index));
+  // Tab Management
+  void addPlotTab(String name) {
+    final newTab = PlotTab(
+      id: 'tab_${DateTime.now().millisecondsSinceEpoch}',
+      name: name,
+      plots: [],
+    );
+    final updatedTabs = List<PlotTab>.from(_settings.plots.tabs)..add(newTab);
+
+    _settings = _settings.copyWith(
+      plots: _settings.plots.copyWith(
+        tabs: updatedTabs,
+        selectedTabId: newTab.id,
+      ),
+    );
+    _debouncedSave();
   }
 
-  /// Update panel visibility
-  void updatePanelVisibility({bool? properties, bool? selector}) {
-    updatePlots(_settings.plots.copyWith(
-      propertiesPanelVisible: properties ?? _settings.plots.propertiesPanelVisible,
-      selectorPanelVisible: selector ?? _settings.plots.selectorPanelVisible,
-    ));
+  void removePlotTab(String tabId) {
+    if (_settings.plots.tabs.length <= 1) return; // Prevent removing last tab
+
+    final updatedTabs = List<PlotTab>.from(_settings.plots.tabs)
+      ..removeWhere((t) => t.id == tabId);
+
+    // If we removed the selected tab, select the last one
+    String newSelectedId = _settings.plots.selectedTabId;
+    if (tabId == _settings.plots.selectedTabId) {
+      newSelectedId = updatedTabs.last.id;
+    }
+
+    _settings = _settings.copyWith(
+      plots: _settings.plots.copyWith(
+        tabs: updatedTabs,
+        selectedTabId: newSelectedId,
+      ),
+    );
+    _debouncedSave();
   }
 
-  /// Update plot configuration at specific index
-  void updatePlotConfiguration(int index, PlotConfiguration configuration) {
-    if (index < 0 || index >= _settings.plots.configurations.length) return;
-    
-    final configurations = List<PlotConfiguration>.from(_settings.plots.configurations);
-    configurations[index] = configuration;
-    
-    updatePlots(_settings.plots.copyWith(configurations: configurations));
+  void renamePlotTab(String tabId, String newName) {
+    final updatedTabs = _settings.plots.tabs.map((tab) {
+      return tab.id == tabId ? tab.copyWith(name: newName) : tab;
+    }).toList();
+
+    _settings = _settings.copyWith(
+      plots: _settings.plots.copyWith(tabs: updatedTabs),
+    );
+    _debouncedSave();
+  }
+
+  void selectPlotTab(String tabId) {
+    if (_settings.plots.selectedTabId == tabId) return;
+
+    _settings = _settings.copyWith(
+      plots: _settings.plots.copyWith(selectedTabId: tabId),
+    );
+    _debouncedSave();
+  }
+
+  void updatePlotsInTab(String tabId, List<PlotConfiguration> plots) {
+    final updatedTabs = _settings.plots.tabs.map((tab) {
+      return tab.id == tabId ? tab.copyWith(plots: plots) : tab;
+    }).toList();
+
+    _settings = _settings.copyWith(
+      plots: _settings.plots.copyWith(tabs: updatedTabs),
+    );
+    _debouncedSave();
+  }
+
+  PlotTab? getCurrentTab() {
+    try {
+      return _settings.plots.tabs.firstWhere(
+        (t) => t.id == _settings.plots.selectedTabId,
+      );
+    } catch (_) {
+      return _settings.plots.tabs.isNotEmpty
+          ? _settings.plots.tabs.first
+          : null;
+    }
   }
 
   /// Update connection settings
   void updateConnection(ConnectionSettings newConnection) {
     if (_settings.connection == newConnection) return;
-    
+
     _settings = _settings.copyWith(connection: newConnection);
     notifyListeners();
     _debouncedSave();
@@ -157,25 +204,28 @@ class SettingsManager extends ChangeNotifier {
 
   /// Update connection mode (spoof vs real)
   void updateConnectionMode(bool enableSpoofing, {String? spoofMode}) {
-    updateConnection(_settings.connection.copyWith(
-      enableSpoofing: enableSpoofing,
-      spoofMode: spoofMode ?? _settings.connection.spoofMode,
-    ));
+    updateConnection(
+      _settings.connection.copyWith(
+        enableSpoofing: enableSpoofing,
+        spoofMode: spoofMode ?? _settings.connection.spoofMode,
+      ),
+    );
   }
-  
+
   /// Update receiving connection type
   void updateConnectionType(String connectionType) {
-    updateConnection(_settings.connection.copyWith(connectionType: connectionType));
+    updateConnection(
+      _settings.connection.copyWith(connectionType: connectionType),
+    );
   }
-  
+
   /// Update serial connection settings
   void updateSerialConnection(String port, int baudRate) {
-    updateConnection(_settings.connection.copyWith(
-      serialPort: port,
-      serialBaudRate: baudRate,
-    ));
+    updateConnection(
+      _settings.connection.copyWith(serialPort: port, serialBaudRate: baudRate),
+    );
   }
-  
+
   /// Update spoofing configuration
   void updateSpoofingConfig({
     String? spoofMode,
@@ -183,25 +233,28 @@ class SettingsManager extends ChangeNotifier {
     int? spoofSystemId,
     int? spoofComponentId,
   }) {
-    updateConnection(_settings.connection.copyWith(
-      spoofMode: spoofMode,
-      spoofBaudRate: spoofBaudRate,
-      spoofSystemId: spoofSystemId,
-      spoofComponentId: spoofComponentId,
-    ));
+    updateConnection(
+      _settings.connection.copyWith(
+        spoofMode: spoofMode,
+        spoofBaudRate: spoofBaudRate,
+        spoofSystemId: spoofSystemId,
+        spoofComponentId: spoofComponentId,
+      ),
+    );
   }
 
   /// Update MAVLink connection details
   void updateMavlinkConnection(String host, int port) {
-    updateConnection(_settings.connection.copyWith(
-      mavlinkHost: host,
-      mavlinkPort: port,
-    ));
+    updateConnection(
+      _settings.connection.copyWith(mavlinkHost: host, mavlinkPort: port),
+    );
   }
 
   /// Update auto-start monitor setting
   void updateAutoStartMonitor(bool autoStart) {
-    updateConnection(_settings.connection.copyWith(autoStartMonitor: autoStart));
+    updateConnection(
+      _settings.connection.copyWith(autoStartMonitor: autoStart),
+    );
   }
 
   /// Update pause state
@@ -212,7 +265,7 @@ class SettingsManager extends ChangeNotifier {
   /// Update navigation settings
   void updateNavigation(NavigationSettings newNavigation) {
     if (_settings.navigation == newNavigation) return;
-    
+
     _settings = _settings.copyWith(navigation: newNavigation);
     notifyListeners();
     _debouncedSave();
@@ -231,7 +284,7 @@ class SettingsManager extends ChangeNotifier {
   /// Update performance settings
   void updatePerformance(PerformanceSettings newPerformance) {
     if (_settings.performance == newPerformance) return;
-    
+
     _settings = _settings.copyWith(performance: newPerformance);
     notifyListeners();
     _debouncedSave();
@@ -239,40 +292,41 @@ class SettingsManager extends ChangeNotifier {
 
   /// Update point decimation settings
   void updatePointDecimation({bool? enabled, int? threshold}) {
-    updatePerformance(_settings.performance.copyWith(
-      enablePointDecimation: enabled,
-      decimationThreshold: threshold,
-    ));
+    updatePerformance(
+      _settings.performance.copyWith(
+        enablePointDecimation: enabled,
+        decimationThreshold: threshold,
+      ),
+    );
   }
 
   /// Update throttling settings
   void updateThrottling({bool? enabled, int? interval}) {
-    updatePerformance(_settings.performance.copyWith(
-      enableUpdateThrottling: enabled,
-      updateInterval: interval,
-    ));
+    updatePerformance(
+      _settings.performance.copyWith(
+        enableUpdateThrottling: enabled,
+        updateInterval: interval,
+      ),
+    );
   }
 
-  /// Update animation settings
-  void updateAnimations({bool? enabled, int? duration}) {
-    updatePerformance(_settings.performance.copyWith(
-      enableSmoothAnimations: enabled,
-      animationDuration: duration,
-    ));
-  }
+  // Deprecated: Animations are now always disabled
+  // void updateAnimations({bool? enabled, int? duration}) { ... }
 
   /// Update data management settings
   void updateDataManagement({int? bufferSize, int? retentionMinutes}) {
-    updatePerformance(_settings.performance.copyWith(
-      dataBufferSize: bufferSize,
-      dataRetentionMinutes: retentionMinutes,
-    ));
+    updatePerformance(
+      _settings.performance.copyWith(
+        dataBufferSize: bufferSize,
+        dataRetentionMinutes: retentionMinutes,
+      ),
+    );
   }
 
   /// Update map settings
   void updateMap(MapSettings newMap) {
     if (_settings.map == newMap) return;
-    
+
     _settings = _settings.copyWith(map: newMap);
     notifyListeners();
     _debouncedSave();
@@ -280,10 +334,12 @@ class SettingsManager extends ChangeNotifier {
 
   /// Update map center position
   void updateMapCenter(double latitude, double longitude) {
-    updateMap(_settings.map.copyWith(
-      centerLatitude: latitude,
-      centerLongitude: longitude,
-    ));
+    updateMap(
+      _settings.map.copyWith(
+        centerLatitude: latitude,
+        centerLongitude: longitude,
+      ),
+    );
   }
 
   /// Update map zoom level
@@ -292,12 +348,18 @@ class SettingsManager extends ChangeNotifier {
   }
 
   /// Update map center and zoom together (common operation)
-  void updateMapCenterAndZoom(double latitude, double longitude, double zoomLevel) {
-    updateMap(_settings.map.copyWith(
-      centerLatitude: latitude,
-      centerLongitude: longitude,
-      zoomLevel: zoomLevel,
-    ));
+  void updateMapCenterAndZoom(
+    double latitude,
+    double longitude,
+    double zoomLevel,
+  ) {
+    updateMap(
+      _settings.map.copyWith(
+        centerLatitude: latitude,
+        centerLongitude: longitude,
+        zoomLevel: zoomLevel,
+      ),
+    );
   }
 
   /// Update vehicle following setting
@@ -305,23 +367,16 @@ class SettingsManager extends ChangeNotifier {
     updateMap(_settings.map.copyWith(followVehicle: followVehicle));
   }
 
-  /// Update path visibility
+  /// Update map path visibility
   void updateMapShowPath(bool showPath) {
     updateMap(_settings.map.copyWith(showPath: showPath));
   }
 
-  /// Update maximum path points
-  void updateMapMaxPathPoints(int maxPathPoints) {
-    updateMap(_settings.map.copyWith(maxPathPoints: maxPathPoints));
+  /// Update map max path points
+  void updateMapMaxPathPoints(int maxPoints) {
+    updateMap(_settings.map.copyWith(maxPathPoints: maxPoints));
   }
 
-  /// Force immediate save (for app shutdown)
-  Future<void> saveImmediately() async {
-    _saveTimer?.cancel();
-    await _settingsService.saveSettings(_settings);
-  }
-
-  /// Reset all settings to defaults
   Future<void> resetToDefaults() async {
     await _settingsService.clearAllSettings();
     _settings = AppSettings.defaults();
@@ -340,6 +395,12 @@ class SettingsManager extends ChangeNotifier {
       await initialize(); // Reload settings
     }
     return success;
+  }
+
+  /// Force immediate save
+  Future<void> saveNow() async {
+    _saveTimer?.cancel();
+    await _settingsService.saveSettings(_settings);
   }
 
   /// Debounced save to avoid excessive disk writes

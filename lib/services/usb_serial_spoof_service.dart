@@ -1,36 +1,26 @@
 import 'dart:async';
 import 'dart:math' as math;
 import 'dart:typed_data';
-import 'package:flutter/foundation.dart';
 import 'package:dart_mavlink/mavlink.dart';
 import 'package:dart_mavlink/dialects/common.dart';
-import '../core/service_locator.dart';
 import 'mavlink_data_provider.dart';
+import 'mavlink_message_tracker.dart';
 
-/// USB Serial Spoof Service that simulates realistic MAVLink communication
-/// over a virtual serial port with configurable timing and characteristics
-class UsbSerialSpoofService extends MavlinkDataProvider implements Disposable {
-  // Singleton support for backward compatibility - will be deprecated
-  static UsbSerialSpoofService? _instance;
-  factory UsbSerialSpoofService() => _instance ??= UsbSerialSpoofService._internal();
-  UsbSerialSpoofService._internal() : _dialect = MavlinkDialectCommon();
-  
-  // New constructor for dependency injection
-  UsbSerialSpoofService.injected() : _dialect = MavlinkDialectCommon();
-  
-  // For testing - allows creating fresh instances
-  UsbSerialSpoofService.forTesting() : _dialect = MavlinkDialectCommon();
-
-  final MavlinkDialectCommon _dialect;
+class UsbSerialSpoofService extends MavlinkDataProvider {
+  // Connection state
   MavlinkParser? _parser;
-  
-  Timer? _fastTelemetryTimer;  // 10 Hz for attitude, position, HUD
-  Timer? _slowTelemetryTimer;  // 1 Hz for SYS_STATUS
-  Timer? _heartbeatTimer;      // 1 Hz for HEARTBEAT
-  
-  final StreamController<MavlinkFrame> _frameController = StreamController<MavlinkFrame>.broadcast();
-  final StreamController<Uint8List> _rawDataController = StreamController<Uint8List>.broadcast();
-  
+  Timer? _fastTelemetryTimer;
+  Timer? _slowTelemetryTimer;
+  Timer? _heartbeatTimer;
+
+  final StreamController<MavlinkFrame> _frameController =
+      StreamController<MavlinkFrame>.broadcast();
+  final StreamController<Uint8List> _rawDataController =
+      StreamController<Uint8List>.broadcast();
+
+  // Configuration
+  final MavlinkDialect _dialect;
+
   // Serial simulation parameters
   int _baudRate = 57600; // Common MAVLink baud rate
   int _systemId = 1;
@@ -38,10 +28,10 @@ class UsbSerialSpoofService extends MavlinkDataProvider implements Disposable {
   bool _isConnected = false;
   bool _isPaused = false;
   bool _isInitialized = false;
-  
+
   // Buffer for transmission statistics (kept for backwards compatibility)
   final List<int> _transmissionBuffer = [];
-  
+
   // Telemetry simulation state
   double _altitude = 0.0;
   double _groundSpeed = 0.0;
@@ -51,50 +41,76 @@ class UsbSerialSpoofService extends MavlinkDataProvider implements Disposable {
   double _yaw = 0.0;
   double _batteryVoltage = 12.6;
   int _sequenceNumber = 0;
-  
+
   // GPS simulation state for realistic movement
   double _latitude = 34.0522; // Los Angeles area starting point
   double _longitude = -118.2437;
-  double _course = 90.0; // Initial course in degrees (East)
   int _simulationTime = 0; // Time counter for movement patterns
-  
+
   // Dashboard simulation state
   double _rpm = 1000.0;
   double _rpmDirection = 1.0; // 1 for increasing, -1 for decreasing
   double _portWingPosition = 0.0; // -100 to +100 (degrees or percentage)
   double _starboardWingPosition = 0.0; // -100 to +100 (degrees or percentage)
 
+  // Singleton instance for backward compatibility (deprecated)
+  static UsbSerialSpoofService? _instance;
+
+  UsbSerialSpoofService({required super.tracker}) : _dialect = MavlinkDialectCommon();
+
+  // Factory constructor for singleton access (deprecated)
+  factory UsbSerialSpoofService.injected() {
+    // This is a temporary hack to support existing code that expects a singleton-like behavior
+    // In a pure DI world, we wouldn't do this.
+    // Ideally, we should pass the tracker here, but we can't easily get it from the container in a factory.
+    // So we'll assume it's being created properly elsewhere or throw if not.
+    if (_instance == null) {
+      throw Exception(
+        'UsbSerialSpoofService must be initialized with a tracker first',
+      );
+    }
+    return _instance!;
+  }
+
+  // For testing
+  factory UsbSerialSpoofService.forTesting({
+    required MavlinkMessageTracker tracker,
+  }) {
+    return UsbSerialSpoofService(tracker: tracker);
+  }
+
   Stream<MavlinkFrame> get frameStream => _frameController.stream;
   Stream<Uint8List> get rawDataStream => _rawDataController.stream;
-  
+
   // Implement IDataSource.messageStream
   @override
-  Stream<dynamic> get messageStream => frameStream.map((frame) => frame.message);
-  
+  Stream<dynamic> get messageStream =>
+      frameStream.map((frame) => frame.message);
+
   @override
   bool get isConnected => _isConnected;
   @override
   bool get isPaused => _isPaused;
-  
+
   // Dashboard data getters (for compatibility with dashboard)
   bool get isRunning => _isConnected;
   double get currentRPM => _rpm;
   double get currentSpeed => _groundSpeed;
   double get portWingPosition => _portWingPosition;
   double get starboardWingPosition => _starboardWingPosition;
-  
+
   /// Initialize the spoof service
   @override
   Future<void> initialize() async {
     if (_isInitialized) return;
-    
+
     _parser ??= MavlinkParser(_dialect);
-    
+
     _parser!.stream.listen((MavlinkFrame frame) {
       _frameController.add(frame);
       addMessage(frame.message);
     });
-    
+
     _isInitialized = true;
   }
 
@@ -107,33 +123,33 @@ class UsbSerialSpoofService extends MavlinkDataProvider implements Disposable {
     if (_isConnected) {
       await stopSpoofing();
     }
-    
+
     _baudRate = baudRate;
     _systemId = systemId;
     _componentId = componentId;
     _isConnected = true;
     _isPaused = false;
-    
+
     // Data is transmitted immediately when generated to prevent stepped signals
-    
+
     // Start fast telemetry at 10 Hz (attitude, position, HUD)
     _fastTelemetryTimer = Timer.periodic(
-      const Duration(milliseconds: 100),  // 10 Hz
+      const Duration(milliseconds: 100), // 10 Hz
       (_) => _generateFastTelemetryMessages(),
     );
-    
+
     // Start slow telemetry at 1 Hz (SYS_STATUS)
     _slowTelemetryTimer = Timer.periodic(
-      const Duration(seconds: 1),  // 1 Hz
+      const Duration(seconds: 1), // 1 Hz
       (_) => _generateSlowTelemetryMessages(),
     );
-    
+
     // Start heartbeat generation at 1 Hz
     _heartbeatTimer = Timer.periodic(
-      const Duration(seconds: 1),  // 1 Hz
+      const Duration(seconds: 1), // 1 Hz
       (_) => _generateHeartbeatMessage(),
     );
-    
+
     // No longer using buffered transmission - data is transmitted immediately
     // when generated to prevent stepped signals
   }
@@ -143,7 +159,7 @@ class UsbSerialSpoofService extends MavlinkDataProvider implements Disposable {
     _fastTelemetryTimer?.cancel();
     _slowTelemetryTimer?.cancel();
     _heartbeatTimer?.cancel();
-    
+
     _transmissionBuffer.clear();
     _isConnected = false;
     _isPaused = false;
@@ -154,24 +170,24 @@ class UsbSerialSpoofService extends MavlinkDataProvider implements Disposable {
   Future<void> connect() async {
     await startSpoofing();
   }
-  
+
   // Implement IDataSource.disconnect (delegates to stopSpoofing)
   @override
   Future<void> disconnect() async {
     await stopSpoofing();
   }
-  
+
   // Implement IDataSource.pause/resume
   @override
   void pause() {
     _isPaused = true;
   }
-  
+
   @override
   void resume() {
     _isPaused = false;
   }
-  
+
   /// Pause/resume data generation (kept for backward compatibility)
   void setPaused(bool paused) {
     _isPaused = paused;
@@ -180,59 +196,63 @@ class UsbSerialSpoofService extends MavlinkDataProvider implements Disposable {
   /// Generate fast telemetry messages at 10 Hz (attitude, position, HUD)
   void _generateFastTelemetryMessages() {
     if (_isPaused || !_isConnected) return;
-    
+
     final now = DateTime.now().millisecondsSinceEpoch;
     _simulationTime += 100; // Increment by 100ms each call (10 Hz)
-    
+
     // Simulate realistic vehicle movement
     _altitude += (DateTime.now().millisecond % 100 - 50) / 1000.0;
     _altitude = _altitude.clamp(0.0, 100.0);
-    
+
     _groundSpeed += (DateTime.now().millisecond % 60 - 30) / 100.0;
     _groundSpeed = _groundSpeed.clamp(5.0, 25.0); // Keep vehicle moving
-    
+
     // Simulate course changes - gentle turns and occasional direction changes
     final timeInSeconds = _simulationTime / 1000.0;
-    
+
     // Create a figure-8 pattern with some randomness
-    final baseHeading = (timeInSeconds * 15) % 360; // 15 degrees per second rotation
-    final headingVariation = 30 * math.sin(timeInSeconds * 0.5); // ±30 degree swing
+    final baseHeading =
+        (timeInSeconds * 15) % 360; // 15 degrees per second rotation
+    final headingVariation =
+        30 * math.sin(timeInSeconds * 0.5); // ±30 degree swing
     _heading = (baseHeading + headingVariation) % 360.0;
     if (_heading < 0) _heading += 360.0;
-    
-    _course = _heading; // Course follows heading
-    
+
     // Update GPS position based on movement
     // Convert speed from m/s to degrees per second (approximate)
-    final metersPerDegreeLatitude = 111320.0; // Approximate meters per degree latitude
-    final metersPerDegreeLongitude = 111320.0 * math.cos(_latitude * math.pi / 180.0);
-    
+    final metersPerDegreeLatitude =
+        111320.0; // Approximate meters per degree latitude
+    final metersPerDegreeLongitude =
+        111320.0 * math.cos(_latitude * math.pi / 180.0);
+
     final speedMs = _groundSpeed; // Ground speed in m/s
     final deltaTimeSeconds = 0.1; // 100ms = 0.1 seconds
-    
+
     // Calculate movement in meters
     final distanceMeters = speedMs * deltaTimeSeconds;
     final headingRadians = _heading * math.pi / 180.0;
-    
+
     // Update position
-    final deltaLatDegrees = (distanceMeters * math.cos(headingRadians)) / metersPerDegreeLatitude;
-    final deltaLonDegrees = (distanceMeters * math.sin(headingRadians)) / metersPerDegreeLongitude;
-    
+    final deltaLatDegrees =
+        (distanceMeters * math.cos(headingRadians)) / metersPerDegreeLatitude;
+    final deltaLonDegrees =
+        (distanceMeters * math.sin(headingRadians)) / metersPerDegreeLongitude;
+
     _latitude += deltaLatDegrees;
     _longitude += deltaLonDegrees;
-    
+
     // Keep vehicle in reasonable bounds (around LA area)
     _latitude = _latitude.clamp(33.9, 34.2);
     _longitude = _longitude.clamp(-118.5, -118.0);
-    
+
     _pitch += (DateTime.now().millisecond % 10 - 5) / 100.0;
     _pitch = _pitch.clamp(-15.0, 15.0);
-    
+
     _roll += (DateTime.now().millisecond % 10 - 5) / 100.0;
     _roll = _roll.clamp(-20.0, 20.0);
-    
+
     _yaw = _heading * 3.14159 / 180.0; // Convert to radians
-    
+
     // Simulate RPM changes (realistic jetski RPM: 1000-8000)
     _rpm += _rpmDirection * (10 + (DateTime.now().millisecond % 30));
     if (_rpm >= 7500) {
@@ -241,17 +261,20 @@ class UsbSerialSpoofService extends MavlinkDataProvider implements Disposable {
       _rpmDirection = 1.0; // Start increasing
     }
     _rpm = _rpm.clamp(1000.0, 8000.0);
-    
+
     // Simulate wing positions (hydrofoils adjusting based on speed and turns)
-    final wingAdjustment = _groundSpeed * 2.0; // More speed = more wing adjustment
+    final wingAdjustment =
+        _groundSpeed * 2.0; // More speed = more wing adjustment
     final turnAdjustment = (_heading % 360 - 180).abs() / 10.0; // Turn effects
-    
-    _portWingPosition = (wingAdjustment + turnAdjustment) * math.sin(timeInSeconds * 0.5);
-    _starboardWingPosition = (wingAdjustment - turnAdjustment) * math.cos(timeInSeconds * 0.3);
-    
+
+    _portWingPosition =
+        (wingAdjustment + turnAdjustment) * math.sin(timeInSeconds * 0.5);
+    _starboardWingPosition =
+        (wingAdjustment - turnAdjustment) * math.cos(timeInSeconds * 0.3);
+
     _portWingPosition = _portWingPosition.clamp(-100.0, 100.0);
     _starboardWingPosition = _starboardWingPosition.clamp(-100.0, 100.0);
-    
+
     // Generate GLOBAL_POSITION_INT message with moving coordinates
     final globalPosMsg = GlobalPositionInt(
       timeBootMs: now,
@@ -259,12 +282,14 @@ class UsbSerialSpoofService extends MavlinkDataProvider implements Disposable {
       lon: (_longitude * 1e7).round(), // Convert to 1E7 format
       alt: (_altitude * 1000).round(),
       relativeAlt: (_altitude * 1000).round(),
-      vx: (_groundSpeed * math.cos(headingRadians) * 100).round(), // North velocity in cm/s
-      vy: (_groundSpeed * math.sin(headingRadians) * 100).round(), // East velocity in cm/s
+      vx: (_groundSpeed * math.cos(headingRadians) * 100)
+          .round(), // North velocity in cm/s
+      vy: (_groundSpeed * math.sin(headingRadians) * 100)
+          .round(), // East velocity in cm/s
       vz: 0, // No vertical velocity
       hdg: (_heading * 100).round(),
     );
-    
+
     // Generate ATTITUDE message
     final attitudeMsg = Attitude(
       timeBootMs: now,
@@ -275,7 +300,7 @@ class UsbSerialSpoofService extends MavlinkDataProvider implements Disposable {
       pitchspeed: 0.0,
       yawspeed: 0.0,
     );
-    
+
     // Generate VFR_HUD message for dash display
     final vfrHudMsg = VfrHud(
       airspeed: _groundSpeed,
@@ -283,23 +308,24 @@ class UsbSerialSpoofService extends MavlinkDataProvider implements Disposable {
       heading: _heading.round(),
       throttle: 50 + (DateTime.now().millisecond % 40 - 20), // 30-70% throttle
       alt: _altitude,
-      climb: (DateTime.now().millisecond % 100 - 50) / 50.0, // ±1 m/s climb rate
+      climb:
+          (DateTime.now().millisecond % 100 - 50) / 50.0, // ±1 m/s climb rate
     );
-    
+
     // Queue messages for transmission
     _queueMessageForTransmission(globalPosMsg);
     _queueMessageForTransmission(attitudeMsg);
     _queueMessageForTransmission(vfrHudMsg);
   }
-  
+
   /// Generate slow telemetry messages at 1 Hz (SYS_STATUS)
   void _generateSlowTelemetryMessages() {
     if (_isPaused || !_isConnected) return;
-    
+
     // Update battery voltage slowly
     _batteryVoltage = 12.6 + (DateTime.now().millisecond % 100 - 50) / 1000.0;
     _batteryVoltage = _batteryVoltage.clamp(10.0, 13.0);
-    
+
     // Generate SYS_STATUS message
     final sysStatusMsg = SysStatus(
       onboardControlSensorsPresent: 0x7FF,
@@ -319,7 +345,7 @@ class UsbSerialSpoofService extends MavlinkDataProvider implements Disposable {
       onboardControlSensorsEnabledExtended: 0,
       onboardControlSensorsHealthExtended: 0,
     );
-    
+
     // Queue message for transmission
     _queueMessageForTransmission(sysStatusMsg);
   }
@@ -327,7 +353,7 @@ class UsbSerialSpoofService extends MavlinkDataProvider implements Disposable {
   /// Generate heartbeat message
   void _generateHeartbeatMessage() {
     if (_isPaused || !_isConnected) return;
-    
+
     final heartbeatMsg = Heartbeat(
       type: mavTypeGroundRover,
       autopilot: mavAutopilotGeneric,
@@ -336,7 +362,7 @@ class UsbSerialSpoofService extends MavlinkDataProvider implements Disposable {
       systemStatus: 0,
       mavlinkVersion: 3,
     );
-    
+
     _queueMessageForTransmission(heartbeatMsg);
   }
 
@@ -348,15 +374,14 @@ class UsbSerialSpoofService extends MavlinkDataProvider implements Disposable {
       _componentId,
       message,
     );
-    
+
     final bytes = frame.serialize();
-    
+
     // For spoofing, transmit immediately instead of buffering
     // This prevents stepped signals caused by retransmitting old data
     _parser?.parse(Uint8List.fromList(bytes));
     _rawDataController.add(Uint8List.fromList(bytes));
   }
-
 
   /// Get transmission statistics
   Map<String, dynamic> getTransmissionStats() {
@@ -378,7 +403,7 @@ class UsbSerialSpoofService extends MavlinkDataProvider implements Disposable {
     super.dispose();
     _isInitialized = false;
   }
-  
+
   /// Reset service state without disposing (for settings changes)
   void reset() {
     stopSpoofing();

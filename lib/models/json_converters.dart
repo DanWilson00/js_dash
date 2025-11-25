@@ -9,6 +9,7 @@ class ColorConverter implements JsonConverter<Color, int> {
   Color fromJson(int json) => Color(json);
 
   @override
+  // ignore: deprecated_member_use
   int toJson(Color object) => object.value;
 }
 

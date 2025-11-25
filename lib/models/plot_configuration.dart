@@ -1,50 +1,13 @@
-import 'dart:collection';
 import 'package:flutter/material.dart';
 import 'package:json_annotation/json_annotation.dart';
 import 'json_converters.dart';
 
 part 'plot_configuration.g.dart';
 
-class TimeSeriesPoint {
-  final DateTime timestamp;
-  final double value;
-
-  TimeSeriesPoint(this.timestamp, this.value);
-}
-
-class CircularBuffer {
-  final Queue<TimeSeriesPoint> _buffer = Queue<TimeSeriesPoint>();
-  final int maxSize;
-
-  CircularBuffer(this.maxSize);
-
-  void add(TimeSeriesPoint point) {
-    if (_buffer.length >= maxSize) {
-      _buffer.removeFirst();
-    }
-    _buffer.addLast(point);
-  }
-
-  List<TimeSeriesPoint> get points => _buffer.toList();
-  
-  void clear() {
-    _buffer.clear();
-  }
-
-  void removeOldData(DateTime cutoff) {
-    while (_buffer.isNotEmpty && _buffer.first.timestamp.isBefore(cutoff)) {
-      _buffer.removeFirst();
-    }
-  }
-
-  bool get isEmpty => _buffer.isEmpty;
-  int get length => _buffer.length;
-}
-
 enum ScalingMode {
-  unified,     // All signals share same Y-axis bounds
+  unified, // All signals share same Y-axis bounds
   independent, // Each signal normalized to 0-100%
-  autoScale,   // Calculate bounds from all signals combined
+  autoScale, // Calculate bounds from all signals combined
 }
 
 @JsonSerializable()
@@ -72,11 +35,11 @@ class PlotSignalConfiguration {
     this.showDots = false,
   });
 
-  factory PlotSignalConfiguration.fromJson(Map<String, dynamic> json) => _$PlotSignalConfigurationFromJson(json);
+  factory PlotSignalConfiguration.fromJson(Map<String, dynamic> json) =>
+      _$PlotSignalConfigurationFromJson(json);
   Map<String, dynamic> toJson() => _$PlotSignalConfigurationToJson(this);
 
-  String get effectiveDisplayName => 
-    displayName ?? '$messageType.$fieldName';
+  String get effectiveDisplayName => displayName ?? '$messageType.$fieldName';
 
   String get fieldKey => '$messageType.$fieldName';
 
@@ -129,14 +92,15 @@ class PlotAxisConfiguration {
     this.scalingMode = ScalingMode.autoScale,
   }) : signals = signals ?? [];
 
-  factory PlotAxisConfiguration.fromJson(Map<String, dynamic> json) => _$PlotAxisConfigurationFromJson(json);
+  factory PlotAxisConfiguration.fromJson(Map<String, dynamic> json) =>
+      _$PlotAxisConfigurationFromJson(json);
   Map<String, dynamic> toJson() => _$PlotAxisConfigurationToJson(this);
 
   bool get hasData => signals.isNotEmpty;
   bool get hasVisibleSignals => signals.any((s) => s.visible);
-  
-  List<PlotSignalConfiguration> get visibleSignals => 
-    signals.where((s) => s.visible).toList();
+
+  List<PlotSignalConfiguration> get visibleSignals =>
+      signals.where((s) => s.visible).toList();
 
   String get displayName {
     if (!hasData) return 'No Data';
@@ -145,7 +109,8 @@ class PlotAxisConfiguration {
   }
 
   // Legacy compatibility - returns first signal's data or null
-  String? get messageType => signals.isNotEmpty ? signals.first.messageType : null;
+  String? get messageType =>
+      signals.isNotEmpty ? signals.first.messageType : null;
   String? get fieldName => signals.isNotEmpty ? signals.first.fieldName : null;
   String? get units => signals.isNotEmpty ? signals.first.units : null;
   bool get autoScale => scalingMode == ScalingMode.autoScale;
@@ -162,7 +127,7 @@ class PlotAxisConfiguration {
     bool? autoScale,
   }) {
     List<PlotSignalConfiguration> newSignals = signals ?? this.signals;
-    
+
     // Handle legacy single-signal assignment
     if (messageType != null && fieldName != null) {
       final color = SignalColorPalette.getNextColor(newSignals.length);
@@ -194,16 +159,14 @@ class PlotAxisConfiguration {
   }
 
   PlotAxisConfiguration removeSignal(String signalId) {
-    return copyWith(
-      signals: signals.where((s) => s.id != signalId).toList(),
-    );
+    return copyWith(signals: signals.where((s) => s.id != signalId).toList());
   }
 
   PlotAxisConfiguration updateSignal(PlotSignalConfiguration updatedSignal) {
     return copyWith(
-      signals: signals.map((s) => 
-        s.id == updatedSignal.id ? updatedSignal : s
-      ).toList(),
+      signals: signals
+          .map((s) => s.id == updatedSignal.id ? updatedSignal : s)
+          .toList(),
     );
   }
 
@@ -217,21 +180,53 @@ class PlotAxisConfiguration {
 }
 
 @JsonSerializable()
+class PlotLayoutData {
+  final int x;
+  final int y;
+  final int width;
+  final int height;
+
+  const PlotLayoutData({
+    this.x = 0,
+    this.y = 0,
+    this.width = 6,
+    this.height = 4,
+  });
+
+  factory PlotLayoutData.fromJson(Map<String, dynamic> json) =>
+      _$PlotLayoutDataFromJson(json);
+  Map<String, dynamic> toJson() => _$PlotLayoutDataToJson(this);
+
+  PlotLayoutData copyWith({int? x, int? y, int? width, int? height}) {
+    return PlotLayoutData(
+      x: x ?? this.x,
+      y: y ?? this.y,
+      width: width ?? this.width,
+      height: height ?? this.height,
+    );
+  }
+}
+
+@JsonSerializable()
 class PlotConfiguration {
   final String id;
   final String title;
   final PlotAxisConfiguration yAxis;
   @DurationConverter()
   final Duration timeWindow;
+  final PlotLayoutData layoutData;
 
   PlotConfiguration({
     required this.id,
     this.title = 'Time Series Plot',
     PlotAxisConfiguration? yAxis,
     this.timeWindow = const Duration(minutes: 5),
-  }) : yAxis = yAxis ?? PlotAxisConfiguration();
+    PlotLayoutData? layoutData,
+  }) : yAxis = yAxis ?? PlotAxisConfiguration(),
+       layoutData = layoutData ?? const PlotLayoutData();
 
-  factory PlotConfiguration.fromJson(Map<String, dynamic> json) => _$PlotConfigurationFromJson(json);
+  factory PlotConfiguration.fromJson(Map<String, dynamic> json) =>
+      _$PlotConfigurationFromJson(json);
   Map<String, dynamic> toJson() => _$PlotConfigurationToJson(this);
 
   PlotConfiguration copyWith({
@@ -239,12 +234,14 @@ class PlotConfiguration {
     String? title,
     PlotAxisConfiguration? yAxis,
     Duration? timeWindow,
+    PlotLayoutData? layoutData,
   }) {
     return PlotConfiguration(
       id: id ?? this.id,
       title: title ?? this.title,
       yAxis: yAxis ?? this.yAxis,
       timeWindow: timeWindow ?? this.timeWindow,
+      layoutData: layoutData ?? this.layoutData,
     );
   }
 
@@ -260,14 +257,6 @@ class PlotConfiguration {
   PlotConfiguration updateSignal(PlotSignalConfiguration updatedSignal) {
     return copyWith(yAxis: yAxis.updateSignal(updatedSignal));
   }
-}
-
-enum PlotLayoutType {
-  single,   // 1x1
-  horizontal, // 1x2
-  vertical,   // 2x1
-  grid2x2,    // 2x2
-  grid3x2,    // 3x2
 }
 
 class TimeWindowOption {
@@ -315,7 +304,7 @@ class SignalColorPalette {
   static Color getNextColor(int index) {
     return _colors[index % _colors.length];
   }
-  
+
   static Color getNextAvailableColor(List<Color> usedColors) {
     // Try to find a color that's not in use
     for (final color in _colors) {
@@ -353,57 +342,4 @@ class SignalColorPalette {
   }
 
   static List<Color> get availableColors => List.unmodifiable(_colors);
-}
-
-class PlotLayout {
-  final PlotLayoutType type;
-  final int rows;
-  final int columns;
-
-  const PlotLayout._(this.type, this.rows, this.columns);
-
-  static const PlotLayout single = PlotLayout._(PlotLayoutType.single, 1, 1);
-  static const PlotLayout horizontal = PlotLayout._(PlotLayoutType.horizontal, 1, 2);
-  static const PlotLayout vertical = PlotLayout._(PlotLayoutType.vertical, 2, 1);
-  static const PlotLayout grid2x2 = PlotLayout._(PlotLayoutType.grid2x2, 2, 2);
-  static const PlotLayout grid3x2 = PlotLayout._(PlotLayoutType.grid3x2, 2, 3);
-
-  int get maxPlots => rows * columns;
-
-  static List<PlotLayout> getAvailableLayouts(int plotCount) {
-    final layouts = <PlotLayout>[];
-    
-    if (plotCount >= 1) layouts.add(single);
-    if (plotCount >= 2) {
-      layouts.add(horizontal);
-      layouts.add(vertical);
-    }
-    if (plotCount >= 3) layouts.add(grid2x2);
-    if (plotCount >= 5) layouts.add(grid3x2);
-    
-    return layouts;
-  }
-
-  static PlotLayout getDefaultLayout(int plotCount) {
-    switch (plotCount) {
-      case 1: return single;
-      case 2: return horizontal;
-      case 3:
-      case 4: return grid2x2;
-      case 5:
-      case 6: return grid3x2;
-      default: return single;
-    }
-  }
-
-  @override
-  String toString() {
-    switch (type) {
-      case PlotLayoutType.single: return '1×1';
-      case PlotLayoutType.horizontal: return '1×2';
-      case PlotLayoutType.vertical: return '2×1';
-      case PlotLayoutType.grid2x2: return '2×2';
-      case PlotLayoutType.grid3x2: return '2×3';
-    }
-  }
 }

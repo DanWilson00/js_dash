@@ -1,18 +1,30 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart';
+import 'package:dart_mavlink/mavlink.dart';
 import 'package:dart_mavlink/dialects/common.dart';
 import '../interfaces/i_data_source.dart';
-import '../core/service_locator.dart';
+import '../interfaces/disposable.dart';
 import 'mavlink_message_tracker.dart';
 
 abstract class MavlinkDataProvider implements IDataSource, Disposable {
-  final MavlinkMessageTracker _tracker = MavlinkMessageTracker();
-  
-  final StreamController<Heartbeat> _heartbeatController = StreamController<Heartbeat>.broadcast();
-  final StreamController<SysStatus> _sysStatusController = StreamController<SysStatus>.broadcast();
-  final StreamController<Attitude> _attitudeController = StreamController<Attitude>.broadcast();
-  final StreamController<GlobalPositionInt> _gpsController = StreamController<GlobalPositionInt>.broadcast();
-  final StreamController<VfrHud> _vfrHudController = StreamController<VfrHud>.broadcast();
+  final MavlinkMessageTracker _tracker;
 
+  // Stream controllers for specific message types
+  final StreamController<Heartbeat> _heartbeatController =
+      StreamController<Heartbeat>.broadcast();
+  final StreamController<SysStatus> _sysStatusController =
+      StreamController<SysStatus>.broadcast();
+  final StreamController<Attitude> _attitudeController =
+      StreamController<Attitude>.broadcast();
+  final StreamController<GlobalPositionInt> _globalPositionController =
+      StreamController<GlobalPositionInt>.broadcast();
+  final StreamController<VfrHud> _vfrHudController =
+      StreamController<VfrHud>.broadcast();
+
+  MavlinkDataProvider({required MavlinkMessageTracker tracker})
+    : _tracker = tracker;
+
+  // Expose specific message streams
   @override
   Stream<Heartbeat> get heartbeatStream => _heartbeatController.stream;
   @override
@@ -20,54 +32,42 @@ abstract class MavlinkDataProvider implements IDataSource, Disposable {
   @override
   Stream<Attitude> get attitudeStream => _attitudeController.stream;
   @override
-  Stream<GlobalPositionInt> get gpsStream => _gpsController.stream;
+  Stream<GlobalPositionInt> get globalPositionStream =>
+      _globalPositionController.stream;
   @override
   Stream<VfrHud> get vfrHudStream => _vfrHudController.stream;
-  
-  // Abstract methods that must be implemented by concrete classes
-  @override
-  Stream<dynamic> get messageStream;
-  @override
-  bool get isConnected;
-  @override
-  bool get isPaused;
-  @override
-  Future<void> initialize();
-  @override
-  Future<void> connect();
-  @override
-  Future<void> disconnect();
-  @override
-  void pause();
-  @override
-  void resume();
 
+  Stream<Map<String, MessageStats>> get messageStatsStream =>
+      _tracker.statsStream;
+
+  @protected
   void addMessage(dynamic message) {
-    _tracker.trackMessage(message);
-    
-    if (message is Heartbeat && !_heartbeatController.isClosed) {
+    // Track message statistics
+    if (message is MavlinkMessage) {
+      _tracker.trackMessage(message);
+    }
+
+    // Dispatch to specific streams
+    if (message is Heartbeat) {
       _heartbeatController.add(message);
-    } else if (message is SysStatus && !_sysStatusController.isClosed) {
+    } else if (message is SysStatus) {
       _sysStatusController.add(message);
-    } else if (message is Attitude && !_attitudeController.isClosed) {
+    } else if (message is Attitude) {
       _attitudeController.add(message);
-    } else if (message is GlobalPositionInt && !_gpsController.isClosed) {
-      _gpsController.add(message);
-    } else if (message is VfrHud && !_vfrHudController.isClosed) {
+    } else if (message is GlobalPositionInt) {
+      _globalPositionController.add(message);
+    } else if (message is VfrHud) {
       _vfrHudController.add(message);
     }
   }
 
   @override
+  @mustCallSuper
   void dispose() {
     _heartbeatController.close();
     _sysStatusController.close();
     _attitudeController.close();
-    _gpsController.close();
+    _globalPositionController.close();
     _vfrHudController.close();
   }
-  
-  // Deprecated method - use dispose() instead
-  @Deprecated('Use dispose() instead')
-  void disposeStreams() => dispose();
 }

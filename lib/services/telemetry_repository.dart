@@ -1,89 +1,63 @@
 import 'dart:async';
-import '../core/service_locator.dart';
 import '../interfaces/i_data_source.dart';
 import '../interfaces/i_data_repository.dart';
-import '../models/plot_configuration.dart';
+import '../core/circular_buffer.dart';
+import '../core/timeseries_point.dart';
 import '../services/connection_manager.dart';
 import '../services/timeseries_data_manager.dart';
 import '../services/mavlink_message_tracker.dart';
+import '../interfaces/disposable.dart';
 
 /// Centralized telemetry repository that unifies data access from various sources
 /// This service provides a single pipeline for telemetry data processing,
 /// eliminating duplication between TimeSeriesDataManager and direct data source access
 class TelemetryRepository implements IDataRepository, Disposable {
-  // Singleton support for backward compatibility - will be deprecated
-  static TelemetryRepository? _instance;
-  factory TelemetryRepository() => _instance ??= TelemetryRepository._internal();
-  TelemetryRepository._internal();
-  
+  // Removed Singleton - use Dependency Injection
+
   // New constructor for dependency injection
-  TelemetryRepository.injected({
-    ConnectionManager? connectionManager,
-    TimeSeriesDataManager? timeSeriesManager,
-  }) : _connectionManager = connectionManager,
-       _timeSeriesManager = timeSeriesManager;
-  
-  // For testing - allows creating fresh instances
-  TelemetryRepository.forTesting({
-    ConnectionManager? connectionManager,
-    TimeSeriesDataManager? timeSeriesManager,
+  TelemetryRepository({
+    required ConnectionManager connectionManager,
+    required TimeSeriesDataManager timeSeriesManager,
   }) : _connectionManager = connectionManager,
        _timeSeriesManager = timeSeriesManager;
 
-  ConnectionManager? _connectionManager;
-  TimeSeriesDataManager? _timeSeriesManager;
+  // For testing - allows creating fresh instances
+  TelemetryRepository.forTesting({
+    required ConnectionManager connectionManager,
+    required TimeSeriesDataManager timeSeriesManager,
+  }) : _connectionManager = connectionManager,
+       _timeSeriesManager = timeSeriesManager;
+
+  final ConnectionManager _connectionManager;
+  final TimeSeriesDataManager _timeSeriesManager;
   StreamSubscription? _dataSourceSubscription;
   bool _isInitialized = false;
   bool _isPaused = false;
 
-  /// Get connection manager instance (DI or singleton fallback)
-  ConnectionManager get _connManager {
-    if (_connectionManager != null) return _connectionManager!;
-    
-    try {
-      return GetIt.get<ConnectionManager>();
-    } catch (e) {
-      return ConnectionManager();
-    }
-  }
-
-  /// Get time series manager instance (DI or singleton fallback)
-  TimeSeriesDataManager get _tsManager {
-    if (_timeSeriesManager != null) return _timeSeriesManager!;
-    
-    try {
-      return GetIt.get<TimeSeriesDataManager>();
-    } catch (e) {
-      return TimeSeriesDataManager();
-    }
-  }
-
   /// Initialize the repository and set up data flow
   Future<void> initialize() async {
     if (_isInitialized) return;
-    
+
     // Ensure time series manager is initialized
-    final tsManager = _tsManager;
-    tsManager.startTracking();
-    
+    _timeSeriesManager.startTracking();
+
     _isInitialized = true;
   }
 
   /// Start listening to the current data source via connection manager
   Future<void> startListening() async {
     await initialize();
-    
-    final connectionManager = _connManager;
-    final currentDataSource = connectionManager.currentDataSource;
-    
+
+    final currentDataSource = _connectionManager.currentDataSource;
+
     if (currentDataSource != null) {
       await _subscribeToDataSource(currentDataSource);
     }
-    
+
     // Listen for connection changes to update data source subscription
-    connectionManager.statusStream.listen((status) {
+    _connectionManager.statusStream.listen((status) {
       if (status.isConnected) {
-        final newDataSource = connectionManager.currentDataSource;
+        final newDataSource = _connectionManager.currentDataSource;
         if (newDataSource != null) {
           _subscribeToDataSource(newDataSource);
         }
@@ -96,20 +70,19 @@ class TelemetryRepository implements IDataRepository, Disposable {
   /// Stop listening to data sources
   Future<void> stopListening() async {
     _unsubscribeFromDataSource();
-    _tsManager.stopTracking();
+    _timeSeriesManager.stopTracking();
   }
 
   /// Subscribe to a specific data source
   Future<void> _subscribeToDataSource(IDataSource dataSource) async {
     // Unsubscribe from previous source first
     _unsubscribeFromDataSource();
-    
+
     // Subscribe to the message stream and forward to time series manager
     _dataSourceSubscription = dataSource.messageStream.listen((message) {
       if (!_isPaused) {
         // Forward the message to the time series manager for storage
-        final tsManager = _tsManager;
-        tsManager.trackMessage(message);
+        _timeSeriesManager.trackMessage(message);
       }
     });
   }
@@ -121,43 +94,45 @@ class TelemetryRepository implements IDataRepository, Disposable {
   }
 
   // Delegate IDataRepository methods to TimeSeriesDataManager
-  
-  @override
-  Stream<Map<String, CircularBuffer>> get dataStream => _tsManager.dataStream;
-  
-  /// Stream of message statistics from the time series manager
-  Stream<Map<String, MessageStats>> get messageStatsStream => _tsManager.messageStatsStream;
 
   @override
-  void startTracking([settingsManager]) {
-    _tsManager.startTracking(settingsManager);
+  Stream<Map<String, CircularBuffer>> get dataStream =>
+      _timeSeriesManager.dataStream;
+
+  /// Stream of message statistics from the time series manager
+  Stream<Map<String, MessageStats>> get messageStatsStream =>
+      _timeSeriesManager.messageStatsStream;
+
+  @override
+  void startTracking([dynamic settingsManager]) {
+    _timeSeriesManager.startTracking(settingsManager);
   }
 
   @override
   void stopTracking() {
-    _tsManager.stopTracking();
+    _timeSeriesManager.stopTracking();
   }
 
   @override
   List<TimeSeriesPoint> getFieldData(String messageType, String fieldName) {
-    return _tsManager.getFieldData(messageType, fieldName);
+    return _timeSeriesManager.getFieldData(messageType, fieldName);
   }
 
   @override
   List<String> getAvailableFields() {
-    return _tsManager.getAvailableFields();
+    return _timeSeriesManager.getAvailableFields();
   }
 
   @override
   void pause() {
     _isPaused = true;
-    _tsManager.pause();
+    _timeSeriesManager.pause();
   }
 
   @override
   void resume() {
     _isPaused = false;
-    _tsManager.resume();
+    _timeSeriesManager.resume();
   }
 
   @override
@@ -165,43 +140,43 @@ class TelemetryRepository implements IDataRepository, Disposable {
 
   @override
   void clearAllData() {
-    _tsManager.clearAllData();
+    _timeSeriesManager.clearAllData();
   }
 
   @override
   List<String> getFieldsForMessage(String messageType) {
-    return _tsManager.getFieldsForMessage(messageType);
+    return _timeSeriesManager.getFieldsForMessage(messageType);
   }
 
   @override
   Map<String, int> getDataSummary() {
-    return _tsManager.getDataSummary();
+    return _timeSeriesManager.getDataSummary();
   }
 
   /// Get current connection status
-  bool get isConnected => _connManager.isConnected;
+  bool get isConnected => _connectionManager.currentStatus.isConnected;
 
   /// Get current data source
-  IDataSource? get currentDataSource => _connManager.currentDataSource;
+  IDataSource? get currentDataSource => _connectionManager.currentDataSource;
 
   /// Connect using configuration (convenience method)
   Future<bool> connectWith(dynamic config) async {
-    return await _connManager.connect(config);
+    return await _connectionManager.connect(config);
   }
 
   /// Disconnect (convenience method)
   Future<void> disconnect() async {
-    await _connManager.disconnect();
+    await _connectionManager.disconnect();
   }
 
   /// Pause connection (convenience method)
   void pauseConnection() {
-    _connManager.pause();
+    _connectionManager.pause();
   }
 
-  /// Resume connection (convenience method)  
+  /// Resume connection (convenience method)
   void resumeConnection() {
-    _connManager.resume();
+    _connectionManager.resume();
   }
 
   @override
@@ -212,7 +187,6 @@ class TelemetryRepository implements IDataRepository, Disposable {
 
   // For testing - reset singleton instance
   static void resetInstanceForTesting() {
-    _instance?.dispose();
-    _instance = null;
+    // No singleton to reset
   }
 }

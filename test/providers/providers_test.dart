@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart' hide ConnectionState;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:js_dash/core/service_locator.dart';
+import 'package:js_dash/core/connection_status.dart';
 import 'package:js_dash/interfaces/i_connection_manager.dart';
 import 'package:js_dash/interfaces/i_data_repository.dart';
 import 'package:js_dash/providers/service_providers.dart';
@@ -16,14 +16,11 @@ void main() {
     late ProviderContainer container;
 
     setUp(() {
-      // Reset service locator before each test
-      GetIt.reset();
       container = ProviderContainer();
     });
 
     tearDown(() {
       container.dispose();
-      GetIt.reset();
     });
 
     test('should provide connection manager', () {
@@ -66,11 +63,6 @@ void main() {
     test('should provide available fields', () {
       final fields = container.read(availableFieldsProvider);
       expect(fields, isA<List<String>>());
-    });
-
-    test('should provide data summary', () {
-      final summary = container.read(dataSummaryProvider);
-      expect(summary, isA<Map<String, int>>());
     });
   });
 
@@ -116,7 +108,7 @@ void main() {
 
     test('should update connection form state', () {
       final notifier = container.read(connectionFormProvider.notifier);
-      
+
       notifier.updateUdpHost('192.168.1.100');
       notifier.updateUdpPort(14551);
       notifier.updateConnectionType('serial');
@@ -131,7 +123,7 @@ void main() {
 
     test('should validate connection form', () {
       final notifier = container.read(connectionFormProvider.notifier);
-      
+
       // Valid UDP configuration
       notifier.updateUdpHost('127.0.0.1');
       notifier.updateUdpPort(14550);
@@ -164,7 +156,10 @@ void main() {
       expect(fields, isEmpty);
 
       // Test adding fields
-      container.read(selectedFieldsProvider.notifier).state = {'field1', 'field2'};
+      container.read(selectedFieldsProvider.notifier).state = {
+        'field1',
+        'field2',
+      };
       final updatedFields = container.read(selectedFieldsProvider);
       expect(updatedFields, {'field1', 'field2'});
     });
@@ -189,13 +184,11 @@ void main() {
     late ProviderContainer container;
 
     setUp(() {
-      GetIt.reset();
       container = ProviderContainer();
     });
 
     tearDown(() {
       container.dispose();
-      GetIt.reset();
     });
 
     test('should provide connection actions', () {
@@ -215,7 +208,7 @@ void main() {
 
     test('should handle navigation actions', () {
       final actions = container.read(navigationActionsProvider);
-      
+
       // Test navigation
       actions.navigateToView(2);
       expect(container.read(selectedViewIndexProvider), 2);

@@ -11,21 +11,30 @@ import 'service_providers.dart';
 
 /// Navigation State Provider
 /// Manages which page/view is currently selected
-final selectedViewIndexProvider = StateProvider<int>((ref) => 0);
+final selectedViewIndexProvider = StateProvider<int>((ref) {
+  final settingsManager = ref.read(settingsManagerProvider);
+  return settingsManager.settings.navigation.selectedViewIndex;
+});
 
 /// Plot Selection Provider
 /// Manages which plot is currently selected
-final selectedPlotIndexProvider = StateProvider<int>((ref) => 0);
+final selectedPlotIndexProvider = StateProvider<int>((ref) {
+  final settingsManager = ref.read(settingsManagerProvider);
+  return settingsManager.settings.navigation.selectedPlotIndex;
+});
 
 /// Connection Configuration Provider
 /// Manages the current connection configuration being edited
-final currentConnectionConfigProvider = StateProvider<ConnectionConfig?>((ref) => null);
+final currentConnectionConfigProvider = StateProvider<ConnectionConfig?>(
+  (ref) => null,
+);
 
 /// Connection Form State Provider
 /// Manages the state of connection form fields
-final connectionFormProvider = StateNotifierProvider<ConnectionFormNotifier, ConnectionFormState>((ref) {
-  return ConnectionFormNotifier();
-});
+final connectionFormProvider =
+    StateNotifierProvider<ConnectionFormNotifier, ConnectionFormState>((ref) {
+      return ConnectionFormNotifier();
+    });
 
 /// Connection form state
 class ConnectionFormState {
@@ -91,7 +100,10 @@ class ConnectionFormState {
 
     return switch (connectionType) {
       'udp' => ConnectionConfigFactory.udp(host: udpHost, port: udpPort),
-      'serial' => ConnectionConfigFactory.serial(port: serialPort, baudRate: serialBaudRate),
+      'serial' => ConnectionConfigFactory.serial(
+        port: serialPort,
+        baudRate: serialBaudRate,
+      ),
       _ => ConnectionConfigFactory.udp(host: udpHost, port: udpPort),
     };
   }
@@ -151,15 +163,17 @@ class ConnectionFormNotifier extends StateNotifier<ConnectionFormState> {
 
     if (state.enableSpoofing) {
       // Spoof validation
-      isValid = state.spoofSystemId > 0 && 
-                state.spoofComponentId > 0 && 
-                state.spoofBaudRate > 0;
+      isValid =
+          state.spoofSystemId > 0 &&
+          state.spoofComponentId > 0 &&
+          state.spoofBaudRate > 0;
     } else {
       // Real connection validation
       if (state.connectionType == 'udp') {
-        isValid = state.udpHost.isNotEmpty && 
-                  state.udpPort > 0 && 
-                  state.udpPort <= 65535;
+        isValid =
+            state.udpHost.isNotEmpty &&
+            state.udpPort > 0 &&
+            state.udpPort <= 65535;
       } else if (state.connectionType == 'serial') {
         isValid = state.serialPort.isNotEmpty && state.serialBaudRate > 0;
       }
@@ -190,19 +204,19 @@ class ConnectionFormNotifier extends StateNotifier<ConnectionFormState> {
 final appSettingsProvider = StreamProvider<AppSettings>((ref) async* {
   final settingsManager = ref.watch(settingsManagerProvider);
   await settingsManager.initialize();
-  
+
   // Create a stream that emits current settings and updates
   yield settingsManager.settings;
-  
+
   // Listen for changes using a listener and controller
   final controller = StreamController<AppSettings>();
-  
+
   void onSettingsChanged() {
     controller.add(settingsManager.settings);
   }
-  
+
   settingsManager.addListener(onSettingsChanged);
-  
+
   yield* controller.stream;
 });
 
@@ -213,7 +227,7 @@ final windowSettingsProvider = Provider<WindowSettings>((ref) {
   return settings.when(
     data: (settings) => settings.window,
     loading: () => WindowSettings.defaults(),
-    error: (_, __) => WindowSettings.defaults(),
+    error: (e, s) => WindowSettings.defaults(),
   );
 });
 
@@ -224,7 +238,7 @@ final plotSettingsProvider = Provider<PlotSettings>((ref) {
   return settings.when(
     data: (settings) => settings.plots,
     loading: () => PlotSettings.defaults(),
-    error: (_, __) => PlotSettings.defaults(),
+    error: (e, s) => PlotSettings.defaults(),
   );
 });
 
@@ -235,7 +249,7 @@ final performanceSettingsProvider = Provider<PerformanceSettings>((ref) {
   return settings.when(
     data: (settings) => settings.performance,
     loading: () => PerformanceSettings.defaults(),
-    error: (_, __) => PerformanceSettings.defaults(),
+    error: (e, s) => PerformanceSettings.defaults(),
   );
 });
 
@@ -246,7 +260,7 @@ final mapSettingsProvider = Provider<MapSettings>((ref) {
   return settings.when(
     data: (settings) => settings.map,
     loading: () => MapSettings.defaults(),
-    error: (_, __) => MapSettings.defaults(),
+    error: (e, s) => MapSettings.defaults(),
   );
 });
 
@@ -268,13 +282,21 @@ final themeProvider = Provider<ThemeData>((ref) {
 final selectedFieldsProvider = StateProvider<Set<String>>((ref) => <String>{});
 
 /// Plot Configuration Provider for specific plot index
-final plotConfigurationProvider = StateProvider.family<PlotConfiguration?, int>((ref, plotIndex) {
-  final plotSettings = ref.watch(plotSettingsProvider);
-  if (plotIndex >= 0 && plotIndex < plotSettings.configurations.length) {
-    return plotSettings.configurations[plotIndex];
-  }
-  return null;
-});
+final plotConfigurationProvider = StateProvider.family<PlotConfiguration?, int>(
+  (ref, plotIndex) {
+    final plotSettings = ref.watch(plotSettingsProvider);
+    // Find current tab
+    final tab = plotSettings.tabs.firstWhere(
+      (t) => t.id == plotSettings.selectedTabId,
+      orElse: () => plotSettings.tabs.first,
+    );
+
+    if (plotIndex >= 0 && plotIndex < tab.plots.length) {
+      return tab.plots[plotIndex];
+    }
+    return null;
+  },
+);
 
 /// Pause State Provider
 /// Manages global pause state for data collection
