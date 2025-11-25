@@ -85,9 +85,16 @@ class _MavlinkMessageMonitorState extends ConsumerState<MavlinkMessageMonitor> {
           ),
         ),
       ),
-      child: _messageStats.isEmpty
-          ? _buildEmptyState()
-          : _buildMessageList(sortedMessages),
+      child: Column(
+        children: [
+          if (widget.header != null) widget.header!,
+          Expanded(
+            child: _messageStats.isEmpty
+                ? _buildEmptyState()
+                : _buildMessageList(sortedMessages),
+          ),
+        ],
+      ),
     );
   }
 

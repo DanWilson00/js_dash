@@ -2,25 +2,20 @@ import 'dart:async';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:dart_mavlink/dialects/common.dart';
 import 'package:js_dash/services/mavlink_service.dart';
+import 'package:js_dash/services/mavlink_message_tracker.dart';
 
 void main() {
   group('MavlinkService', () {
     late MavlinkService service;
+    late MavlinkMessageTracker tracker;
 
     setUp(() {
-      MavlinkService.resetInstanceForTesting();
-      service = MavlinkService.forTesting();
+      tracker = MavlinkMessageTracker();
+      service = MavlinkService(tracker: tracker);
     });
 
     tearDown(() {
       service.dispose();
-      MavlinkService.resetInstanceForTesting();
-    });
-
-    test('should be a singleton', () {
-      final service1 = MavlinkService();
-      final service2 = MavlinkService();
-      expect(service1, equals(service2));
     });
 
     test('should initialize successfully', () async {
@@ -36,7 +31,7 @@ void main() {
       expect(service.heartbeatStream, isA<Stream<Heartbeat>>());
       expect(service.sysStatusStream, isA<Stream<SysStatus>>());
       expect(service.attitudeStream, isA<Stream<Attitude>>());
-      expect(service.gpsStream, isA<Stream<GlobalPositionInt>>());
+      expect(service.globalPositionStream, isA<Stream<GlobalPositionInt>>());
       expect(service.vfrHudStream, isA<Stream<VfrHud>>());
     });
 

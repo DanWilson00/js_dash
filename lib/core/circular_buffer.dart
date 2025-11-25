@@ -20,4 +20,10 @@ class CircularBuffer {
   List<TimeSeriesPoint> get points => List.unmodifiable(_points);
 
   int get length => _points.length;
+
+  bool get isEmpty => _points.isEmpty;
+
+  void clear() {
+    _points.clear();
+  }
 }

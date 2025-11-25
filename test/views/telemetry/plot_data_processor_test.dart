@@ -1,8 +1,9 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:fl_chart/fl_chart.dart';
+
 import 'package:js_dash/views/telemetry/plot_data_processor.dart';
 import 'package:js_dash/models/app_settings.dart';
 import 'package:js_dash/models/plot_configuration.dart';
+import 'package:js_dash/core/timeseries_point.dart';
 
 void main() {
   group('PlotDataProcessor', () {

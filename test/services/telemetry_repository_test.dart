@@ -1,16 +1,17 @@
 import 'dart:async';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:js_dash/interfaces/i_data_source.dart';
+import 'package:js_dash/interfaces/disposable.dart';
 import 'package:js_dash/services/telemetry_repository.dart';
 import 'package:js_dash/services/connection_manager.dart';
 import 'package:js_dash/services/timeseries_data_manager.dart';
+import 'package:js_dash/services/mavlink_message_tracker.dart';
 import 'package:dart_mavlink/dialects/common.dart';
-
-import 'package:js_dash/core/service_locator.dart';
 
 // Mock data source for testing
 class MockDataSource implements IDataSource, Disposable {
-  final StreamController<dynamic> _messageController = StreamController<dynamic>.broadcast();
+  final StreamController<dynamic> _messageController =
+      StreamController<dynamic>.broadcast();
   bool _isConnected = false;
   bool _isPaused = false;
 
@@ -27,7 +28,7 @@ class MockDataSource implements IDataSource, Disposable {
   Stream<Attitude> get attitudeStream => Stream.empty();
 
   @override
-  Stream<GlobalPositionInt> get gpsStream => Stream.empty();
+  Stream<GlobalPositionInt> get globalPositionStream => Stream.empty();
 
   @override
   Stream<VfrHud> get vfrHudStream => Stream.empty();
@@ -76,12 +77,16 @@ void main() {
     late TelemetryRepository repository;
     late ConnectionManager connectionManager;
     late TimeSeriesDataManager timeSeriesManager;
+    late MavlinkMessageTracker tracker;
 
     setUp(() {
-      connectionManager = ConnectionManager.forTesting();
+      tracker = MavlinkMessageTracker();
+      connectionManager = ConnectionManager.injected(tracker);
+
       TimeSeriesDataManager.resetInstanceForTesting();
       timeSeriesManager = TimeSeriesDataManager();
-      repository = TelemetryRepository.forTesting(
+
+      repository = TelemetryRepository(
         connectionManager: connectionManager,
         timeSeriesManager: timeSeriesManager,
       );
@@ -108,25 +113,25 @@ void main() {
     test('should delegate field operations to TimeSeriesDataManager', () {
       // Add some test data to the time series manager
       timeSeriesManager.injectTestData('TEST_MESSAGE', 'testField', 42.0);
-      
+
       final fields = repository.getAvailableFields();
       expect(fields, contains('TEST_MESSAGE.testField'));
-      
+
       final fieldData = repository.getFieldData('TEST_MESSAGE', 'testField');
       expect(fieldData.length, 1);
       expect(fieldData.first.value, 42.0);
-      
+
       final messageFields = repository.getFieldsForMessage('TEST_MESSAGE');
       expect(messageFields, contains('testField'));
     });
 
     test('should handle pause and resume correctly', () {
       expect(repository.isPaused, false);
-      
+
       repository.pause();
       expect(repository.isPaused, true);
       expect(timeSeriesManager.isPaused, true);
-      
+
       repository.resume();
       expect(repository.isPaused, false);
       expect(timeSeriesManager.isPaused, false);
@@ -136,7 +141,7 @@ void main() {
       // Add some test data
       timeSeriesManager.injectTestData('TEST_MESSAGE', 'testField', 42.0);
       expect(repository.getAvailableFields().isNotEmpty, true);
-      
+
       repository.clearAllData();
       expect(repository.getAvailableFields().isEmpty, true);
     });
@@ -144,7 +149,7 @@ void main() {
     test('should provide connection convenience methods', () async {
       expect(repository.isConnected, false);
       expect(repository.currentDataSource, isNull);
-      
+
       // These methods delegate to connection manager
       // Since we don't have a real connection setup, they may not succeed
       // but should not throw exceptions
@@ -157,7 +162,7 @@ void main() {
       // Add some test data
       timeSeriesManager.injectTestData('TEST_MESSAGE', 'field1', 1.0);
       timeSeriesManager.injectTestData('TEST_MESSAGE', 'field2', 2.0);
-      
+
       final summary = repository.getDataSummary();
       expect(summary, isA<Map<String, int>>());
       expect(summary.keys, contains('TEST_MESSAGE.field1'));
@@ -167,7 +172,7 @@ void main() {
     test('should start and stop listening correctly', () async {
       await repository.startListening();
       // Should complete without error
-      
+
       await repository.stopListening();
       // Should complete without error
     });

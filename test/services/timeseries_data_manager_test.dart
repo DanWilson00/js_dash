@@ -1,35 +1,28 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:js_dash/services/timeseries_data_manager.dart';
-import 'package:js_dash/services/mavlink_message_tracker.dart';
 
 void main() {
   group('TimeSeriesDataManager', () {
     late TimeSeriesDataManager dataManager;
 
     setUp(() {
+      // Use the default constructor which is now safe or the injected one if needed
+      // For this test, we can use the default one but we should ensure we don't rely on shared state
       TimeSeriesDataManager.resetInstanceForTesting();
-      MavlinkMessageTracker.resetInstanceForTesting();
       dataManager = TimeSeriesDataManager();
     });
 
     tearDown(() {
       dataManager.dispose();
       TimeSeriesDataManager.resetInstanceForTesting();
-      MavlinkMessageTracker.resetInstanceForTesting();
-    });
-
-    test('should be a singleton', () {
-      final dataManager1 = TimeSeriesDataManager();
-      final dataManager2 = TimeSeriesDataManager();
-      expect(dataManager1, equals(dataManager2));
     });
 
     test('should start and stop tracking', () {
       expect(dataManager.getAvailableFields(), isEmpty);
-      
+
       dataManager.startTracking();
       expect(dataManager.getAvailableFields(), isEmpty); // No data yet
-      
+
       dataManager.stopTracking();
       expect(dataManager.getAvailableFields(), isEmpty);
     });

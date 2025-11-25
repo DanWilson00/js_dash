@@ -163,12 +163,19 @@ class MavlinkMessageTracker {
   // For testing - allows creating fresh instances
   MavlinkMessageTracker.forTesting();
 
+  static void resetInstanceForTesting() {
+    // No-op as singleton was removed
+  }
+
   final Map<String, MessageStats> _messageStats = {};
   final StreamController<Map<String, MessageStats>> _statsController =
       StreamController<Map<String, MessageStats>>.broadcast();
 
   Stream<Map<String, MessageStats>> get statsStream => _statsController.stream;
   Map<String, MessageStats> get currentStats => Map.from(_messageStats);
+
+  int get totalMessages =>
+      _messageStats.values.fold(0, (sum, stats) => sum + stats.count);
 
   Timer? _updateTimer;
   bool _isTracking = false;

@@ -19,8 +19,7 @@ void main() {
       expect(settings, isA<AppSettings>());
       expect(settings.window.width, equals(1200.0));
       expect(settings.window.height, equals(800.0));
-      expect(settings.window.height, equals(800.0));
-      expect(settings.connection.useSpoofMode, equals(true));
+      expect(settings.connection.enableSpoofing, equals(true));
     });
 
     test('should save and load settings', () async {
@@ -41,12 +40,8 @@ void main() {
         equals(originalSettings.window.height),
       );
       expect(
-        loadedSettings.window.height,
-        equals(originalSettings.window.height),
-      );
-      expect(
-        loadedSettings.connection.useSpoofMode,
-        equals(originalSettings.connection.useSpoofMode),
+        loadedSettings.connection.enableSpoofing,
+        equals(originalSettings.connection.enableSpoofing),
       );
     });
   });
