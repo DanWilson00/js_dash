@@ -227,7 +227,7 @@ final windowSettingsProvider = Provider<WindowSettings>((ref) {
   return settings.when(
     data: (settings) => settings.window,
     loading: () => WindowSettings.defaults(),
-    error: (_, __) => WindowSettings.defaults(),
+    error: (e, s) => WindowSettings.defaults(),
   );
 });
 
@@ -238,7 +238,7 @@ final plotSettingsProvider = Provider<PlotSettings>((ref) {
   return settings.when(
     data: (settings) => settings.plots,
     loading: () => PlotSettings.defaults(),
-    error: (_, __) => PlotSettings.defaults(),
+    error: (e, s) => PlotSettings.defaults(),
   );
 });
 
@@ -249,7 +249,7 @@ final performanceSettingsProvider = Provider<PerformanceSettings>((ref) {
   return settings.when(
     data: (settings) => settings.performance,
     loading: () => PerformanceSettings.defaults(),
-    error: (_, __) => PerformanceSettings.defaults(),
+    error: (e, s) => PerformanceSettings.defaults(),
   );
 });
 
@@ -260,7 +260,7 @@ final mapSettingsProvider = Provider<MapSettings>((ref) {
   return settings.when(
     data: (settings) => settings.map,
     loading: () => MapSettings.defaults(),
-    error: (_, __) => MapSettings.defaults(),
+    error: (e, s) => MapSettings.defaults(),
   );
 });
 

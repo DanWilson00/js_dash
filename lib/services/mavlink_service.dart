@@ -128,13 +128,11 @@ class MavlinkService extends MavlinkDataProvider {
           try {
             if (_serialPort!.bytesAvailable > 0) {
               final data = _serialPort!.read(_serialPort!.bytesAvailable);
-              if (data.isNotEmpty) {
-                _rawDataController.add(data);
-                _parser!.parse(data);
-              }
+              _rawDataController.add(data);
+              _parser!.parse(data);
             }
           } catch (e) {
-            print('Error reading serial port: $e');
+            // Ignore read errors
           }
         }
       });

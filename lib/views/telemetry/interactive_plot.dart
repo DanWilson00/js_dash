@@ -195,23 +195,9 @@ class _InteractivePlotState extends ConsumerState<InteractivePlot> {
   }
 
   void _scheduleUpdate() {
+    _pendingUpdate = true;
     final performance = widget.settingsManager.performance;
 
-    if (!performance.enableUpdateThrottling) {
-      // Update immediately if throttling is disabled
-      if (mounted) {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) {
-            _updatePlotData();
-          }
-        });
-      }
-      return;
-    }
-
-    _pendingUpdate = true;
-
-    // If no timer is active, start one with configurable interval
     if (_updateTimer == null || !_updateTimer!.isActive) {
       final updateInterval = Duration(milliseconds: performance.updateInterval);
       _updateTimer = Timer(updateInterval, () {
@@ -507,6 +493,7 @@ class _InteractivePlotState extends ConsumerState<InteractivePlot> {
       children: [
         LineChart(
           LineChartData(
+            clipData: FlClipData.all(),
             lineTouchData: LineTouchData(
               enabled:
                   _dataManager.isPaused &&
@@ -760,8 +747,9 @@ class _InteractivePlotState extends ConsumerState<InteractivePlot> {
   }
 
   void _showContextMenu() {
-    if (widget.onClearAxis == null || !widget.configuration.yAxis.hasData)
+    if (widget.onClearAxis == null || !widget.configuration.yAxis.hasData) {
       return;
+    }
 
     showMenu(
       context: context,

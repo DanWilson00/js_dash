@@ -36,7 +36,7 @@ dependencies:
   dart_mavlink: ^0.1.0 # Use the latest version from pub.dev
 
   # Charting libraries for time-series plots
-  fl_chart: ^1.0.0
+  fl_chart: 1.0.0
   
   # Date formatting utilities
   intl: ^0.20.2

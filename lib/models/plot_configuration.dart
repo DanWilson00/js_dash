@@ -1,7 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:json_annotation/json_annotation.dart';
-import '../core/timeseries_point.dart';
-import '../core/circular_buffer.dart';
 import 'json_converters.dart';
 
 part 'plot_configuration.g.dart';

@@ -76,6 +76,7 @@ class _SubmersibleJetskiAppState extends ConsumerState<SubmersibleJetskiApp>
     // Add window listener for desktop platforms
     try {
       windowManager.addListener(this);
+      windowManager.setPreventClose(true);
     } catch (e) {
       // Window management not available on this platform
       debugPrint('Window listener not available: $e');
@@ -103,6 +104,21 @@ class _SubmersibleJetskiAppState extends ConsumerState<SubmersibleJetskiApp>
   }
 
   @override
+  void onWindowClose() async {
+    // Hide window immediately to prevent perceived hang
+    await windowManager.hide();
+
+    try {
+      await _saveWindowState();
+      await widget.settingsManager.saveNow();
+    } catch (e) {
+      debugPrint('Error saving state on close: $e');
+    } finally {
+      await windowManager.destroy();
+    }
+  }
+
+  @override
   void onWindowMaximize() {
     _saveWindowState();
   }
@@ -112,7 +128,7 @@ class _SubmersibleJetskiAppState extends ConsumerState<SubmersibleJetskiApp>
     _saveWindowState();
   }
 
-  void _saveWindowState() async {
+  Future<void> _saveWindowState() async {
     try {
       final size = await windowManager.getSize();
       final position = await windowManager.getPosition();

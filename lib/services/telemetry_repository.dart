@@ -104,7 +104,7 @@ class TelemetryRepository implements IDataRepository, Disposable {
       _timeSeriesManager.messageStatsStream;
 
   @override
-  void startTracking([settingsManager]) {
+  void startTracking([dynamic settingsManager]) {
     _timeSeriesManager.startTracking(settingsManager);
   }
 

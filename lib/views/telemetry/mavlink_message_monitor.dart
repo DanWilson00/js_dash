@@ -2,7 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../services/mavlink_message_tracker.dart';
-import '../../services/telemetry_repository.dart';
+
 import '../../providers/service_providers.dart';
 
 class MavlinkMessageMonitor extends ConsumerStatefulWidget {
@@ -50,15 +50,13 @@ class _MavlinkMessageMonitorState extends ConsumerState<MavlinkMessageMonitor> {
   void _initializeTracker() {
     // Use centralized message stats stream from TelemetryRepository
     final repository = ref.read(telemetryRepositoryProvider);
-    if (repository is TelemetryRepository) {
-      _statsSubscription = repository.messageStatsStream.listen((stats) {
-        if (mounted) {
-          setState(() {
-            _messageStats = stats;
-          });
-        }
-      });
-    }
+    _statsSubscription = repository.messageStatsStream.listen((stats) {
+      if (mounted) {
+        setState(() {
+          _messageStats = stats;
+        });
+      }
+    });
   }
 
   void _toggleExpanded(String messageName) {
@@ -87,16 +85,9 @@ class _MavlinkMessageMonitorState extends ConsumerState<MavlinkMessageMonitor> {
           ),
         ),
       ),
-      child: Column(
-        children: [
-          if (widget.header != null) widget.header!,
-          Expanded(
-            child: _messageStats.isEmpty
-                ? _buildEmptyState()
-                : _buildMessageList(sortedMessages),
-          ),
-        ],
-      ),
+      child: _messageStats.isEmpty
+          ? _buildEmptyState()
+          : _buildMessageList(sortedMessages),
     );
   }
 

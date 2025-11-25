@@ -7,15 +7,14 @@ import '../../providers/service_providers.dart';
 import '../../providers/ui_providers.dart';
 import '../../providers/action_providers.dart';
 import '../../services/settings_manager.dart';
-import '../../services/telemetry_repository.dart';
 import '../../core/connection_config.dart';
 
 class MainNavigation extends ConsumerStatefulWidget {
   final SettingsManager settingsManager;
   final bool autoStartMonitor;
-  
+
   const MainNavigation({
-    super.key, 
+    super.key,
     required this.settingsManager,
     this.autoStartMonitor = true,
   });
@@ -34,23 +33,23 @@ class _MainNavigationState extends ConsumerState<MainNavigation> {
   }
 
   Future<void> _initializeServices() async {
-    if (_isInitialized) return;
-    
+    if (_isInitialized) {
+      return;
+    }
+
     // Initialize telemetry repository
     final repository = ref.read(telemetryRepositoryProvider);
     repository.startTracking();
-    
+
     // Start listening to connection manager data streams
-    if (repository is TelemetryRepository) {
-      await repository.startListening();
-    }
-    
+    await repository.startListening();
+  
     _isInitialized = true;
-    
+
     // Load settings after widget tree is built
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadSettings();
-      
+
       // Auto-start spoofing if enabled
       _autoStartSpoofingIfEnabled();
     });
@@ -59,23 +58,27 @@ class _MainNavigationState extends ConsumerState<MainNavigation> {
   void _loadSettings() {
     final connectionActions = ref.read(connectionActionsProvider);
     connectionActions.loadConnectionSettings();
-    
+
     final settings = widget.settingsManager.settings;
-    ref.read(selectedViewIndexProvider.notifier).state = settings.navigation.selectedViewIndex;
-    ref.read(selectedPlotIndexProvider.notifier).state = settings.navigation.selectedPlotIndex;
+    ref.read(selectedViewIndexProvider.notifier).state =
+        settings.navigation.selectedViewIndex;
+    ref.read(selectedPlotIndexProvider.notifier).state =
+        settings.navigation.selectedPlotIndex;
   }
 
   void _autoStartSpoofingIfEnabled() {
     final settings = widget.settingsManager.settings;
-    
+
     if (settings.connection.enableSpoofing) {
       // Auto-start spoofing if enabled in settings
       final connectionActions = ref.read(connectionActionsProvider);
-      connectionActions.connectWith(SpoofConnectionConfig(
-        systemId: settings.connection.spoofSystemId,
-        componentId: settings.connection.spoofComponentId,
-        baudRate: settings.connection.spoofBaudRate,
-      ));
+      connectionActions.connectWith(
+        SpoofConnectionConfig(
+          systemId: settings.connection.spoofSystemId,
+          componentId: settings.connection.spoofComponentId,
+          baudRate: settings.connection.spoofBaudRate,
+        ),
+      );
     }
   }
 
@@ -118,10 +121,7 @@ class _MainNavigationState extends ConsumerState<MainNavigation> {
           icon: Icon(Icons.show_chart),
           label: 'Telemetry',
         ),
-        BottomNavigationBarItem(
-          icon: Icon(Icons.map),
-          label: 'Map',
-        ),
+        BottomNavigationBarItem(icon: Icon(Icons.map), label: 'Map'),
       ],
       currentIndex: selectedIndex,
       onTap: _onItemTapped,
@@ -130,7 +130,6 @@ class _MainNavigationState extends ConsumerState<MainNavigation> {
       unselectedItemColor: Colors.grey,
     );
   }
-
 
   @override
   void dispose() {

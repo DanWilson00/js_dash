@@ -1,20 +1,19 @@
+import 'dart:async';
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:latlong2/latlong.dart';
-import 'dart:async';
-import 'dart:math' as math;
+import '../../services/bing_maps_service.dart';
+import '../../core/circular_buffer.dart';
 import '../../providers/service_providers.dart';
 import '../../providers/ui_providers.dart';
 import '../../services/settings_manager.dart';
-import '../../services/bing_maps_service.dart';
-import '../../models/plot_configuration.dart';
-import '../../core/circular_buffer.dart';
 
 class MapView extends ConsumerStatefulWidget {
-  const MapView({super.key, required this.settingsManager});
-
   final SettingsManager settingsManager;
+
+  const MapView({super.key, required this.settingsManager});
 
   @override
   ConsumerState<MapView> createState() => _MapViewState();

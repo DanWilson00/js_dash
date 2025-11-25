@@ -397,6 +397,12 @@ class SettingsManager extends ChangeNotifier {
     return success;
   }
 
+  /// Force immediate save
+  Future<void> saveNow() async {
+    _saveTimer?.cancel();
+    await _settingsService.saveSettings(_settings);
+  }
+
   /// Debounced save to avoid excessive disk writes
   void _debouncedSave() {
     _saveTimer?.cancel();
