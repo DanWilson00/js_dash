@@ -245,14 +245,12 @@ class _InteractivePlotState extends ConsumerState<InteractivePlot> {
       // Update timestamps for new data detection
       _lastDataTimestamps.addAll(result.latestTimestamps);
 
-      final yAxisBounds = _calculateYAxisBounds(result.allValues);
-
       setState(() {
         _signalSpots = result.signalSpots;
         _originalValues = result.originalValues;
-        _minY = yAxisBounds.minY;
-        _maxY = yAxisBounds.maxY;
       });
+
+      _recalculateYBounds();
     } finally {
       if (mounted) {
         _isComputing = false;
@@ -335,6 +333,15 @@ class _InteractivePlotState extends ConsumerState<InteractivePlot> {
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: widget.onAxisTap,
+      onSecondaryTap: () {
+        if (_dataManager.isPaused && _zoomLevel > 1.0) {
+          setState(() {
+            _zoomLevel = 1.0;
+            _timeOffset = 0.0;
+          });
+          _recalculateYBounds();
+        }
+      },
       onSecondaryTapUp: widget.onClearAxis != null
           ? (_) => _showContextMenu()
           : null,
@@ -363,40 +370,7 @@ class _InteractivePlotState extends ConsumerState<InteractivePlot> {
               children: [
                 _buildHeader(),
                 const SizedBox(height: 4),
-                Expanded(
-                  child: GestureDetector(
-                    onPanStart: _dataManager.isPaused
-                        ? (details) {
-                            setState(() {
-                              _dragStart = details.localPosition;
-                              _dragEnd = details.localPosition;
-                              _isDragging = true;
-                            });
-                          }
-                        : null,
-                    onPanUpdate: _dataManager.isPaused && _isDragging
-                        ? (details) {
-                            setState(() {
-                              _dragEnd = details.localPosition;
-                            });
-                          }
-                        : null,
-                    onPanEnd: _dataManager.isPaused && _isDragging
-                        ? (details) {
-                            _handleDragZoom();
-                          }
-                        : null,
-                    onDoubleTap: _dataManager.isPaused && _zoomLevel > 1.0
-                        ? () {
-                            setState(() {
-                              _zoomLevel = 1.0;
-                              _timeOffset = 0.0;
-                            });
-                          }
-                        : null,
-                    child: _buildChart(),
-                  ),
-                ),
+                Expanded(child: _buildChart()),
               ],
             ),
           ),
@@ -503,7 +477,43 @@ class _InteractivePlotState extends ConsumerState<InteractivePlot> {
               touchCallback: (FlTouchEvent event, LineTouchResponse? response) {
                 if (!mounted) return;
 
-                if (event is FlPointerHoverEvent || event is FlPanUpdateEvent) {
+                if (event is FlPanStartEvent) {
+                  if (_dataManager.isPaused) {
+                    setState(() {
+                      _dragStart = event.localPosition;
+                      _dragEnd = event.localPosition;
+                      _isDragging = true;
+                    });
+                  }
+                } else if (event is FlPanUpdateEvent) {
+                  if (_isDragging) {
+                    setState(() {
+                      _dragEnd = event.localPosition;
+                    });
+                  } else if (response?.lineBarSpots != null &&
+                      response!.lineBarSpots!.isNotEmpty) {
+                    setState(() {
+                      _hoveredValues.clear();
+
+                      // Collect values from all signals at this X position
+                      for (final spot in response.lineBarSpots!) {
+                        final barIndex = spot.barIndex;
+                        if (barIndex <
+                            widget.configuration.yAxis.visibleSignals.length) {
+                          final signal = widget
+                              .configuration
+                              .yAxis
+                              .visibleSignals[barIndex];
+                          _hoveredValues[signal.fieldKey] = spot.y;
+                        }
+                      }
+                    });
+                  }
+                } else if (event is FlPanEndEvent) {
+                  if (_isDragging) {
+                    _handleDragZoom();
+                  }
+                } else if (event is FlPointerHoverEvent) {
                   if (response?.lineBarSpots != null &&
                       response!.lineBarSpots!.isNotEmpty) {
                     setState(() {
@@ -564,12 +574,17 @@ class _InteractivePlotState extends ConsumerState<InteractivePlot> {
                         originalValue?.toStringAsFixed(2) ??
                         spot.y.toStringAsFixed(2);
 
+                    final fontSize =
+                        14.0 * widget.settingsManager.appearance.uiScale;
+
                     return LineTooltipItem(
                       '${signal.effectiveDisplayName}: $displayValue',
                       TextStyle(
                         color: signal.color,
                         fontWeight: FontWeight.bold,
-                        fontSize: 16,
+                        fontSize: fontSize,
+                        fontFamily:
+                            'RobotoMono', // Use monospaced font for numbers
                       ),
                     );
                   }).toList();
@@ -582,20 +597,18 @@ class _InteractivePlotState extends ConsumerState<InteractivePlot> {
                         FlLine(
                           color: Theme.of(
                             context,
-                          ).colorScheme.primary.withValues(alpha: 0.5),
-                          strokeWidth: 2,
-                          dashArray: [5, 5],
+                          ).colorScheme.onSurface.withValues(alpha: 0.5),
+                          strokeWidth: 1,
+                          dashArray: [4, 4],
                         ),
                         FlDotData(
                           show: true,
                           getDotPainter: (spot, percent, barData, index) {
                             return FlDotCirclePainter(
-                              radius: 6,
-                              color: barData.color!,
+                              radius: 4,
+                              color: Theme.of(context).colorScheme.surface,
                               strokeWidth: 2,
-                              strokeColor: Theme.of(
-                                context,
-                              ).colorScheme.surface,
+                              strokeColor: barData.color!,
                             );
                           },
                         ),
@@ -855,6 +868,33 @@ class _InteractivePlotState extends ConsumerState<InteractivePlot> {
       _dragStart = null;
       _dragEnd = null;
     });
+
+    _recalculateYBounds();
+  }
+
+  void _recalculateYBounds() {
+    if (_signalSpots.isEmpty) return;
+
+    final minX = _calculateMinX();
+    final maxX = _calculateMaxX();
+    final visibleValues = <double>[];
+
+    for (final spots in _signalSpots.values) {
+      for (final spot in spots) {
+        if (spot.x >= minX && spot.x <= maxX) {
+          visibleValues.add(spot.y);
+        }
+      }
+    }
+
+    // If no points visible (e.g. zoomed into empty space), use all values or keep current
+    if (visibleValues.isEmpty) return;
+
+    final yAxisBounds = _calculateYAxisBounds(visibleValues);
+    setState(() {
+      _minY = yAxisBounds.minY;
+      _maxY = yAxisBounds.maxY;
+    });
   }
 }
 
@@ -871,62 +911,45 @@ class SelectionRectanglePainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    final rect = Rect.fromPoints(start, end);
+    final rect = Rect.fromPoints(
+      Offset(start.dx, 0),
+      Offset(end.dx, size.height),
+    );
 
-    // Draw fill
+    // Draw premium gradient fill
+    final gradient = LinearGradient(
+      begin: Alignment.topCenter,
+      end: Alignment.bottomCenter,
+      colors: [
+        color.withValues(alpha: 0.05),
+        color.withValues(alpha: 0.15),
+        color.withValues(alpha: 0.05),
+      ],
+    );
+
     final fillPaint = Paint()
-      ..color = color
+      ..shader = gradient.createShader(rect)
       ..style = PaintingStyle.fill;
     canvas.drawRect(rect, fillPaint);
 
-    // Draw border
+    // Draw vertical border lines with gradient fade
+    final borderGradient = LinearGradient(
+      begin: Alignment.topCenter,
+      end: Alignment.bottomCenter,
+      colors: [
+        color.withValues(alpha: 0.0),
+        color.withValues(alpha: 0.8),
+        color.withValues(alpha: 0.0),
+      ],
+    );
+
     final borderPaint = Paint()
-      ..color = color.withValues(alpha: math.min(1.0, color.a * 3))
+      ..shader = borderGradient.createShader(rect)
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 3.0;
-    canvas.drawRect(rect, borderPaint);
+      ..strokeWidth = 1.5;
 
-    // Draw dashed lines for better visibility
-    final dashPaint = Paint()
-      ..color = color.withValues(alpha: 0.8)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.0;
-
-    // Draw dashed horizontal lines
-    final dashWidth = 5.0;
-    final dashSpace = 3.0;
-    double currentX = rect.left;
-    while (currentX < rect.right) {
-      final endX = math.min(currentX + dashWidth, rect.right);
-      canvas.drawLine(
-        Offset(currentX, rect.top),
-        Offset(endX, rect.top),
-        dashPaint,
-      );
-      canvas.drawLine(
-        Offset(currentX, rect.bottom),
-        Offset(endX, rect.bottom),
-        dashPaint,
-      );
-      currentX += dashWidth + dashSpace;
-    }
-
-    // Draw dashed vertical lines
-    double currentY = rect.top;
-    while (currentY < rect.bottom) {
-      final endY = math.min(currentY + dashWidth, rect.bottom);
-      canvas.drawLine(
-        Offset(rect.left, currentY),
-        Offset(rect.left, endY),
-        dashPaint,
-      );
-      canvas.drawLine(
-        Offset(rect.right, currentY),
-        Offset(rect.right, endY),
-        dashPaint,
-      );
-      currentY += dashWidth + dashSpace;
-    }
+    canvas.drawLine(rect.topLeft, rect.bottomLeft, borderPaint);
+    canvas.drawLine(rect.topRight, rect.bottomRight, borderPaint);
   }
 
   @override
