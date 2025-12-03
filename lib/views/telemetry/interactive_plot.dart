@@ -61,7 +61,7 @@ class _InteractivePlotState extends ConsumerState<InteractivePlot> {
   static final DateTime _absoluteEpoch = DateTime(2020, 1, 1);
 
   // Layout constants
-  static const double _leftTitleWidth = 60.0;
+  static const double _leftTitleWidth = 70.0;
   static const double _bottomTitleHeight = 30.0;
 
   // Pause state tracking - store actual timestamps, not coordinates
@@ -74,6 +74,7 @@ class _InteractivePlotState extends ConsumerState<InteractivePlot> {
 
   // Hover state
   final Map<String, double> _hoveredValues = {};
+  List<ShowingTooltipIndicators> _showingTooltipIndicators = [];
 
   @override
   void initState() {
@@ -475,243 +476,247 @@ class _InteractivePlotState extends ConsumerState<InteractivePlot> {
 
         return Stack(
           children: [
-            LineChart(
-              LineChartData(
-                clipData: FlClipData.all(),
-                lineTouchData: LineTouchData(
-                  enabled:
-                      _dataManager.isPaused &&
-                      !_isDragging, // Disable when dragging
-                  handleBuiltInTouches:
-                      !_isDragging, // Don't handle built-in touches when dragging
-                  touchCallback: (FlTouchEvent event, LineTouchResponse? response) {
-                    if (!mounted) return;
+            Listener(
+              onPointerDown: (event) {
+                if (_dataManager.isPaused) {
+                  final localX = event.localPosition.dx;
+                  // Clamp to chart area
+                  final clampedX = localX.clamp(_leftTitleWidth, maxWidth);
 
-                    if (event is FlPanStartEvent) {
-                      if (_dataManager.isPaused) {
-                        final localX = event.localPosition.dx;
-                        // Clamp to chart area
-                        final clampedX = localX.clamp(
-                          _leftTitleWidth,
-                          maxWidth,
-                        );
+                  setState(() {
+                    _dragStart = Offset(clampedX, event.localPosition.dy);
+                    _dragEnd = Offset(clampedX, event.localPosition.dy);
+                    _isDragging = true;
+                  });
+                }
+              },
+              onPointerMove: (event) {
+                if (_isDragging) {
+                  final localX = event.localPosition.dx;
+                  final clampedX = localX.clamp(_leftTitleWidth, maxWidth);
 
-                        setState(() {
-                          _dragStart = Offset(clampedX, event.localPosition.dy);
-                          _dragEnd = Offset(clampedX, event.localPosition.dy);
-                          _isDragging = true;
-                        });
-                      }
-                    } else if (event is FlPanUpdateEvent) {
-                      if (_isDragging) {
-                        final localX = event.localPosition.dx;
-                        final clampedX = localX.clamp(
-                          _leftTitleWidth,
-                          maxWidth,
-                        );
+                  setState(() {
+                    _dragEnd = Offset(clampedX, event.localPosition.dy);
+                  });
+                }
+              },
+              onPointerUp: (event) {
+                if (_isDragging) {
+                  _handleDragZoom(maxWidth);
+                }
+              },
+              child: LineChart(
+                LineChartData(
+                  clipData: FlClipData.all(),
+                  lineTouchData: LineTouchData(
+                    enabled:
+                        _dataManager.isPaused &&
+                        !_isDragging, // Disable when dragging
+                    handleBuiltInTouches:
+                        !_isDragging, // Don't handle built-in touches when dragging
+                    touchSpotThreshold:
+                        50, // Increase threshold for sticky feel
+                    touchCallback: (FlTouchEvent event, LineTouchResponse? response) {
+                      if (!mounted) return;
 
-                        setState(() {
-                          _dragEnd = Offset(clampedX, event.localPosition.dy);
-                        });
-                      } else if (response?.lineBarSpots != null &&
-                          response!.lineBarSpots!.isNotEmpty) {
-                        setState(() {
-                          _hoveredValues.clear();
+                      if (event is FlPointerHoverEvent) {
+                        if (response?.lineBarSpots != null &&
+                            response!.lineBarSpots!.isNotEmpty) {
+                          setState(() {
+                            _hoveredValues.clear();
 
-                          // Collect values from all signals at this X position
-                          for (final spot in response.lineBarSpots!) {
-                            final barIndex = spot.barIndex;
-                            if (barIndex <
-                                widget
+                            // Collect values from all signals at this X position
+                            for (final spot in response.lineBarSpots!) {
+                              final barIndex = spot.barIndex;
+                              if (barIndex <
+                                  widget
+                                      .configuration
+                                      .yAxis
+                                      .visibleSignals
+                                      .length) {
+                                final signal = widget
                                     .configuration
                                     .yAxis
-                                    .visibleSignals
-                                    .length) {
-                              final signal = widget
-                                  .configuration
-                                  .yAxis
-                                  .visibleSignals[barIndex];
-                              _hoveredValues[signal.fieldKey] = spot.y;
+                                    .visibleSignals[barIndex];
+                                _hoveredValues[signal.fieldKey] = spot.y;
+                              }
                             }
-                          }
-                        });
-                      }
-                    } else if (event is FlPanEndEvent) {
-                      if (_isDragging) {
-                        _handleDragZoom(maxWidth);
-                      }
-                    } else if (event is FlPointerHoverEvent) {
-                      if (response?.lineBarSpots != null &&
-                          response!.lineBarSpots!.isNotEmpty) {
-                        setState(() {
-                          _hoveredValues.clear();
 
-                          // Collect values from all signals at this X position
-                          for (final spot in response.lineBarSpots!) {
-                            final barIndex = spot.barIndex;
-                            if (barIndex <
-                                widget
-                                    .configuration
-                                    .yAxis
-                                    .visibleSignals
-                                    .length) {
-                              final signal = widget
-                                  .configuration
-                                  .yAxis
-                                  .visibleSignals[barIndex];
-                              _hoveredValues[signal.fieldKey] = spot.y;
-                            }
-                          }
-                        });
-                      }
-                    } else if (event is FlPointerExitEvent) {
-                      setState(() {
-                        _hoveredValues.clear();
-                      });
-                    }
-                  },
-                  touchTooltipData: LineTouchTooltipData(
-                    getTooltipColor: (spot) => Theme.of(
-                      context,
-                    ).colorScheme.surface.withValues(alpha: 0.95),
-                    tooltipBorder: BorderSide(
-                      color: Theme.of(
-                        context,
-                      ).colorScheme.outline.withValues(alpha: 0.5),
-                      width: 1,
-                    ),
-                    tooltipPadding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 8,
-                    ),
-                    maxContentWidth: 300,
-                    fitInsideHorizontally: true,
-                    fitInsideVertically: true,
-                    getTooltipItems: (touchedSpots) {
-                      return touchedSpots.map((LineBarSpot spot) {
-                        final barIndex = spot.barIndex;
-                        if (barIndex >=
-                            widget.configuration.yAxis.visibleSignals.length) {
-                          return null;
+                            // Update showing tooltip indicators
+                            _showingTooltipIndicators = response.lineBarSpots!
+                                .map((spot) {
+                                  return ShowingTooltipIndicators([
+                                    LineBarSpot(spot.bar, spot.barIndex, spot),
+                                  ]);
+                                })
+                                .toList();
+                          });
                         }
-
-                        final signal =
-                            widget.configuration.yAxis.visibleSignals[barIndex];
-
-                        // Get original value from stored map
-                        final originalValue =
-                            _originalValues[signal.fieldKey]?[spot.x];
-                        final displayValue =
-                            originalValue?.toStringAsFixed(2) ??
-                            spot.y.toStringAsFixed(2);
-
-                        final fontSize =
-                            14.0 * widget.settingsManager.appearance.uiScale;
-
-                        return LineTooltipItem(
-                          '${signal.effectiveDisplayName}: $displayValue',
-                          TextStyle(
-                            color: signal.color,
-                            fontWeight: FontWeight.bold,
-                            fontSize: fontSize,
-                            fontFamily:
-                                'RobotoMono', // Use monospaced font for numbers
-                          ),
-                        );
-                      }).toList();
+                      } else if (event is FlPointerExitEvent) {
+                        // Don't clear hovered values or indicators to make it "sticky"
+                        // Only clear if we start dragging or explicitly clear
+                      }
                     },
-                  ),
-                  getTouchedSpotIndicator:
-                      (LineChartBarData barData, List<int> spotIndexes) {
-                        return spotIndexes.map((index) {
-                          return TouchedSpotIndicatorData(
-                            FlLine(
-                              color: Theme.of(
-                                context,
-                              ).colorScheme.onSurface.withValues(alpha: 0.5),
-                              strokeWidth: 1,
-                              dashArray: [4, 4],
-                            ),
-                            FlDotData(
-                              show: true,
-                              getDotPainter: (spot, percent, barData, index) {
-                                return FlDotCirclePainter(
-                                  radius: 4,
-                                  color: Theme.of(context).colorScheme.surface,
-                                  strokeWidth: 2,
-                                  strokeColor: barData.color!,
-                                );
-                              },
+                    touchTooltipData: LineTouchTooltipData(
+                      getTooltipColor: (spot) => Theme.of(
+                        context,
+                      ).colorScheme.surface.withValues(alpha: 0.95),
+                      tooltipBorder: BorderSide(
+                        color: Theme.of(
+                          context,
+                        ).colorScheme.outline.withValues(alpha: 0.5),
+                        width: 1,
+                      ),
+                      tooltipPadding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
+                      maxContentWidth: 300,
+                      fitInsideHorizontally: true,
+                      fitInsideVertically: true,
+                      getTooltipItems: (touchedSpots) {
+                        return touchedSpots.map((LineBarSpot spot) {
+                          final barIndex = spot.barIndex;
+                          if (barIndex >=
+                              widget
+                                  .configuration
+                                  .yAxis
+                                  .visibleSignals
+                                  .length) {
+                            return null;
+                          }
+
+                          final signal = widget
+                              .configuration
+                              .yAxis
+                              .visibleSignals[barIndex];
+
+                          // Get original value from stored map
+                          final originalValue =
+                              _originalValues[signal.fieldKey]?[spot.x];
+                          final displayValue =
+                              originalValue?.toStringAsFixed(2) ??
+                              spot.y.toStringAsFixed(2);
+
+                          final fontSize =
+                              14.0 * widget.settingsManager.appearance.uiScale;
+
+                          return LineTooltipItem(
+                            '${signal.effectiveDisplayName}: $displayValue',
+                            TextStyle(
+                              color: signal.color,
+                              fontWeight: FontWeight.bold,
+                              fontSize: fontSize,
+                              fontFamily:
+                                  'RobotoMono', // Use monospaced font for numbers
                             ),
                           );
                         }).toList();
                       },
-                ),
-                gridData: FlGridData(
-                  show: true,
-                  drawVerticalLine: true,
-                  horizontalInterval: (_maxY - _minY) / 5,
-                  verticalInterval:
-                      (widget.configuration.timeWindow.inMilliseconds /
-                          _zoomLevel) /
-                      5,
-                  getDrawingHorizontalLine: (value) => FlLine(
-                    color: Theme.of(
-                      context,
-                    ).colorScheme.outline.withValues(alpha: 0.1),
-                    strokeWidth: 1,
-                    dashArray: [5, 5],
+                    ),
+                    getTouchedSpotIndicator:
+                        (LineChartBarData barData, List<int> spotIndexes) {
+                          return spotIndexes.map((index) {
+                            return TouchedSpotIndicatorData(
+                              FlLine(
+                                color: Theme.of(
+                                  context,
+                                ).colorScheme.onSurface.withValues(alpha: 0.5),
+                                strokeWidth: 1,
+                                dashArray: [4, 4],
+                              ),
+                              FlDotData(
+                                show: true,
+                                getDotPainter: (spot, percent, barData, index) {
+                                  return FlDotCirclePainter(
+                                    radius: 4,
+                                    color: Theme.of(
+                                      context,
+                                    ).colorScheme.surface,
+                                    strokeWidth: 2,
+                                    strokeColor: barData.color!,
+                                  );
+                                },
+                              ),
+                            );
+                          }).toList();
+                        },
                   ),
-                  getDrawingVerticalLine: (value) => FlLine(
-                    color: Theme.of(
-                      context,
-                    ).colorScheme.outline.withValues(alpha: 0.1),
-                    strokeWidth: 1,
-                    dashArray: [5, 5],
-                  ),
-                ),
-                titlesData: FlTitlesData(
-                  show: true,
-                  rightTitles: const AxisTitles(
-                    sideTitles: SideTitles(showTitles: false),
-                  ),
-                  topTitles: const AxisTitles(
-                    sideTitles: SideTitles(showTitles: false),
-                  ),
-                  bottomTitles: AxisTitles(
-                    sideTitles: SideTitles(
-                      showTitles: true,
-                      reservedSize: _bottomTitleHeight,
-                      interval:
-                          widget.configuration.timeWindow.inMilliseconds / 4,
-                      getTitlesWidget: (value, meta) => _buildTimeLabel(value),
+                  gridData: FlGridData(
+                    show: true,
+                    drawVerticalLine: true,
+                    horizontalInterval: (_maxY - _minY) / 5,
+                    verticalInterval:
+                        (widget.configuration.timeWindow.inMilliseconds /
+                            _zoomLevel) /
+                        5,
+                    getDrawingHorizontalLine: (value) => FlLine(
+                      color: Theme.of(
+                        context,
+                      ).colorScheme.outline.withValues(alpha: 0.1),
+                      strokeWidth: 1,
+                      dashArray: [5, 5],
+                    ),
+                    getDrawingVerticalLine: (value) => FlLine(
+                      color: Theme.of(
+                        context,
+                      ).colorScheme.outline.withValues(alpha: 0.1),
+                      strokeWidth: 1,
+                      dashArray: [5, 5],
                     ),
                   ),
-                  leftTitles: AxisTitles(
-                    sideTitles: SideTitles(
-                      showTitles: true,
-                      interval: (_maxY - _minY) / 4,
-                      reservedSize: _leftTitleWidth,
-                      getTitlesWidget: (value, meta) => _buildValueLabel(value),
+                  titlesData: FlTitlesData(
+                    show: true,
+                    rightTitles: const AxisTitles(
+                      sideTitles: SideTitles(
+                        showTitles: false,
+                        reservedSize: 0,
+                      ),
+                    ),
+                    topTitles: const AxisTitles(
+                      sideTitles: SideTitles(
+                        showTitles: false,
+                        reservedSize: 0,
+                      ),
+                    ),
+                    bottomTitles: AxisTitles(
+                      sideTitles: SideTitles(
+                        showTitles: true,
+                        reservedSize: _bottomTitleHeight,
+                        interval:
+                            widget.configuration.timeWindow.inMilliseconds / 4,
+                        getTitlesWidget: (value, meta) =>
+                            _buildTimeLabel(value),
+                      ),
+                    ),
+                    leftTitles: AxisTitles(
+                      sideTitles: SideTitles(
+                        showTitles: true,
+                        interval: (_maxY - _minY) / 4,
+                        reservedSize: _leftTitleWidth,
+                        getTitlesWidget: (value, meta) =>
+                            _buildValueLabel(value),
+                      ),
                     ),
                   ),
-                ),
-                borderData: FlBorderData(
-                  show: true,
-                  border: Border.all(
-                    color: Theme.of(
-                      context,
-                    ).colorScheme.outline.withValues(alpha: 0.3),
+                  borderData: FlBorderData(
+                    show: true,
+                    border: Border.all(
+                      color: Theme.of(
+                        context,
+                      ).colorScheme.outline.withValues(alpha: 0.3),
+                    ),
                   ),
+                  minX: _calculateMinX(),
+                  maxX: _calculateMaxX(),
+                  minY: _minY,
+                  maxY: _maxY,
+                  lineBarsData: _buildLineChartBars(),
+                  showingTooltipIndicators: _showingTooltipIndicators,
                 ),
-                minX: _calculateMinX(),
-                maxX: _calculateMaxX(),
-                minY: _minY,
-                maxY: _maxY,
-                lineBarsData: _buildLineChartBars(),
+                // Animations disabled for performance
+                duration: Duration.zero,
               ),
-              // Animations disabled for performance
-              duration: Duration.zero,
             ),
             // Legend overlay
             if (widget.configuration.yAxis.visibleSignals.isNotEmpty)
