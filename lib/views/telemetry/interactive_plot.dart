@@ -63,6 +63,7 @@ class _InteractivePlotState extends ConsumerState<InteractivePlot> {
   // Layout constants
   static const double _leftTitleWidth = 70.0;
   static const double _bottomTitleHeight = 30.0;
+  static const double _borderWidth = 1.0;
 
   // Pause state tracking - store actual timestamps, not coordinates
   DateTime? _pauseWindowStartTime;
@@ -480,8 +481,11 @@ class _InteractivePlotState extends ConsumerState<InteractivePlot> {
               onPointerDown: (event) {
                 if (_dataManager.isPaused) {
                   final localX = event.localPosition.dx;
-                  // Clamp to chart area
-                  final clampedX = localX.clamp(_leftTitleWidth, maxWidth);
+                  // Clamp to chart area (inside border)
+                  final clampedX = localX.clamp(
+                    _leftTitleWidth + _borderWidth,
+                    maxWidth - _borderWidth,
+                  );
 
                   setState(() {
                     _dragStart = Offset(clampedX, event.localPosition.dy);
@@ -493,7 +497,10 @@ class _InteractivePlotState extends ConsumerState<InteractivePlot> {
               onPointerMove: (event) {
                 if (_isDragging) {
                   final localX = event.localPosition.dx;
-                  final clampedX = localX.clamp(_leftTitleWidth, maxWidth);
+                  final clampedX = localX.clamp(
+                    _leftTitleWidth + _borderWidth,
+                    maxWidth - _borderWidth,
+                  );
 
                   setState(() {
                     _dragEnd = Offset(clampedX, event.localPosition.dy);
@@ -705,6 +712,7 @@ class _InteractivePlotState extends ConsumerState<InteractivePlot> {
                       color: Theme.of(
                         context,
                       ).colorScheme.outline.withValues(alpha: 0.3),
+                      width: _borderWidth,
                     ),
                   ),
                   minX: _calculateMinX(),
@@ -854,12 +862,13 @@ class _InteractivePlotState extends ConsumerState<InteractivePlot> {
   void _handleDragZoom(double maxWidth) {
     if (_dragStart == null || _dragEnd == null || !_isDragging) return;
 
-    final chartWidth = maxWidth - _leftTitleWidth;
+    // Chart width excludes titles and borders
+    final chartWidth = maxWidth - _leftTitleWidth - (_borderWidth * 2);
     if (chartWidth <= 0) return;
 
-    // Calculate pixel range relative to chart area
-    final startPixel = _dragStart!.dx - _leftTitleWidth;
-    final endPixel = _dragEnd!.dx - _leftTitleWidth;
+    // Calculate pixel range relative to chart area (start after left border)
+    final startPixel = _dragStart!.dx - (_leftTitleWidth + _borderWidth);
+    final endPixel = _dragEnd!.dx - (_leftTitleWidth + _borderWidth);
 
     // Ensure we have a meaningful selection (e.g. > 10 pixels)
     if ((endPixel - startPixel).abs() < 10) {
