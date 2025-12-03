@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../providers/service_providers.dart';
@@ -7,6 +8,7 @@ import 'dashboard_config.dart';
 import 'hud_center_cluster.dart';
 import 'hud_side_indicators.dart';
 import 'shader_background.dart';
+import 'premium_animations.dart';
 
 /// Modular Jetshark Dashboard - Fighter Jet HUD Redesign
 class JetsharkDashboard extends ConsumerStatefulWidget {
@@ -20,12 +22,22 @@ class _JetsharkDashboardState extends ConsumerState<JetsharkDashboard>
     with TickerProviderStateMixin {
   StreamSubscription? _dataSubscription;
 
-  // Animation controllers
+  // Animation controllers - upgraded to physics-based system
   late AnimationController _startupController;
   late AnimationController _smoothDataController;
+  late StaggeredAnimationSystem _staggeredSystem;
 
   // Animated values
   late Animation<double> _startupAnimation;
+
+  // Physics-based interpolators for smooth data transitions
+  late SmoothValueInterpolator _rpmInterpolator;
+  late SmoothValueInterpolator _speedInterpolator;
+  late SmoothValueInterpolator _pitchInterpolator;
+  late SmoothValueInterpolator _rollInterpolator;
+  late SmoothValueInterpolator _yawInterpolator;
+  late SmoothValueInterpolator _leftWingInterpolator;
+  late SmoothValueInterpolator _rightWingInterpolator;
 
   // Data values (Raw Targets)
   double _targetRpm = 0.0;
@@ -36,29 +48,20 @@ class _JetsharkDashboardState extends ConsumerState<JetsharkDashboard>
   double _targetLeftWing = 0.0;
   double _targetRightWing = 0.0;
 
-  // Smoothed Data Values (for 60fps animation)
-  double _smoothRpm = 0;
-  double _smoothSpeed = 0;
-  double _smoothPitch = 0;
-  double _smoothRoll = 0;
-  double _smoothYaw = 0;
-  double _smoothLeftWing = 0;
-  double _smoothRightWing = 0;
+  // Note: Smoothed values now handled by physics interpolators
 
   @override
   void initState() {
     super.initState();
     _initializeAnimations();
+    _initializePhysicsInterpolators();
     _startDataListening();
 
-    // Setup smooth data animation loop (60fps)
-    _smoothDataController =
-        AnimationController(
-            vsync: this,
-            duration: const Duration(milliseconds: 16),
-          )
-          ..addListener(_updateSmoothData)
-          ..repeat();
+    // Setup enhanced smooth data animation loop (60fps)
+    _smoothDataController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 16),
+    )..addListener(_updatePhysicsBasedData)..repeat();
   }
 
   void _startDataListening() {
@@ -103,22 +106,20 @@ class _JetsharkDashboardState extends ConsumerState<JetsharkDashboard>
       leftWing = rollDeg;
       rightWing = -rollDeg;
 
-      setState(() {
-        _targetPitch = pitchDeg;
-        _targetRoll = rollDeg;
-        _targetYaw = yawDeg;
-      });
+      // Update physics interpolators for attitude data
+      _pitchInterpolator.setTarget(pitchDeg);
+      _rollInterpolator.setTarget(rollDeg);
+      _yawInterpolator.setTarget(yawDeg);
     }
 
     if (rpm != null || speed != null || leftWing != null || rightWing != null) {
-      setState(() {
-        if (rpm != null) _targetRpm = rpm;
-        if (speed != null) {
-          _targetSpeed = speed * DashboardConfig.speedConversionFactor;
-        }
-        if (leftWing != null) _targetLeftWing = leftWing;
-        if (rightWing != null) _targetRightWing = rightWing;
-      });
+      // Update physics interpolator targets instead of direct setState
+      if (rpm != null) _rpmInterpolator.setTarget(rpm);
+      if (speed != null) {
+        _speedInterpolator.setTarget(speed * DashboardConfig.speedConversionFactor);
+      }
+      if (leftWing != null) _leftWingInterpolator.setTarget(leftWing);
+      if (rightWing != null) _rightWingInterpolator.setTarget(rightWing);
     }
   }
 
@@ -134,37 +135,70 @@ class _JetsharkDashboardState extends ConsumerState<JetsharkDashboard>
   }
 
   void _initializeAnimations() {
+    // Enhanced startup animation with Tesla-style physics
     _startupController = AnimationController(
-      duration: DashboardConfig.startupAnimationDuration,
+      duration: PremiumAnimations.slowTransition,
       vsync: this,
-    )..forward();
+    );
 
     _startupAnimation = CurvedAnimation(
       parent: _startupController,
-      curve: Curves.easeOut,
+      curve: PremiumAnimations.teslaPhysicsSpring,
     );
-  }
 
-  void _updateSmoothData() {
-    // Smooth interpolation factor (adjust for responsiveness vs smoothness)
-    const double lerpFactor = 0.1;
 
-    setState(() {
-      _smoothRpm += (_targetRpm - _smoothRpm) * lerpFactor;
-      _smoothSpeed += (_targetSpeed - _smoothSpeed) * lerpFactor;
-      _smoothPitch += (_targetPitch - _smoothPitch) * lerpFactor;
-      _smoothRoll += (_targetRoll - _smoothRoll) * lerpFactor;
-      _smoothYaw += (_targetYaw - _smoothYaw) * lerpFactor;
-      _smoothLeftWing += (_targetLeftWing - _smoothLeftWing) * lerpFactor;
-      _smoothRightWing += (_targetRightWing - _smoothRightWing) * lerpFactor;
+    // Initialize staggered system for element reveals
+    _staggeredSystem = StaggeredAnimationSystem(
+      vsync: this,
+      itemCount: 4, // Speed, RPM, wings, attitude
+      itemDelay: const Duration(milliseconds: 150),
+    );
+
+    // Start the premium startup sequence
+    _startupController.forward().then((_) {
+      _staggeredSystem.start();
     });
   }
+
+  void _initializePhysicsInterpolators() {
+    // Initialize all physics-based interpolators with Tesla-style smoothing
+    _rpmInterpolator = SmoothValueInterpolator(smoothingFactor: 0.12);
+    _speedInterpolator = SmoothValueInterpolator(smoothingFactor: 0.08);
+    _pitchInterpolator = SmoothValueInterpolator(smoothingFactor: 0.15);
+    _rollInterpolator = SmoothValueInterpolator(smoothingFactor: 0.15);
+    _yawInterpolator = SmoothValueInterpolator(smoothingFactor: 0.10);
+    _leftWingInterpolator = SmoothValueInterpolator(smoothingFactor: 0.12);
+    _rightWingInterpolator = SmoothValueInterpolator(smoothingFactor: 0.12);
+  }
+
+  void _updatePhysicsBasedData() {
+    // Update all physics interpolators for smooth Tesla-style transitions
+    setState(() {
+      _rpmInterpolator.update();
+      _speedInterpolator.update();
+      _pitchInterpolator.update();
+      _rollInterpolator.update();
+      _yawInterpolator.update();
+      _leftWingInterpolator.update();
+      _rightWingInterpolator.update();
+    });
+  }
+
+  // Getter methods for smooth values
+  double get _smoothRpm => _rpmInterpolator.value;
+  double get _smoothSpeed => _speedInterpolator.value;
+  double get _smoothPitch => _pitchInterpolator.value;
+  double get _smoothRoll => _rollInterpolator.value;
+  double get _smoothYaw => _yawInterpolator.value;
+  double get _smoothLeftWing => _leftWingInterpolator.value;
+  double get _smoothRightWing => _rightWingInterpolator.value;
 
   @override
   void dispose() {
     _dataSubscription?.cancel();
     _startupController.dispose();
     _smoothDataController.dispose();
+    _staggeredSystem.dispose();
     super.dispose();
   }
 
@@ -183,64 +217,200 @@ class _JetsharkDashboardState extends ConsumerState<JetsharkDashboard>
                 // 1. Background Layer - GLSL Shader
                 const Positioned.fill(child: ShaderBackground()),
 
-                // 2. Center Cluster (Attitude + RPM)
+
+                // 2. Center Cluster (Attitude + RPM) with staggered animation
                 Positioned.fill(
-                  child: Padding(
-                    padding: const EdgeInsets.all(40.0),
-                    child: HudCenterCluster(
-                      pitch: _smoothPitch,
-                      roll: _smoothRoll,
-                      yaw: _smoothYaw,
-                      rpm: _smoothRpm,
-                    ),
+                  child: AnimatedBuilder(
+                    animation: _staggeredSystem.getAnimation(1),
+                    builder: (context, child) {
+                      final animation = _staggeredSystem.getAnimation(1);
+                      return Transform.scale(
+                        scale: 0.9 + (0.1 * animation.value),
+                        child: Opacity(
+                          opacity: animation.value,
+                          child: Padding(
+                            padding: const EdgeInsets.all(40.0),
+                            child: HudCenterCluster(
+                              pitch: _smoothPitch,
+                              roll: _smoothRoll,
+                              yaw: _smoothYaw,
+                              rpm: _smoothRpm,
+                            ),
+                          ),
+                        ),
+                      );
+                    },
                   ),
                 ),
 
-                // 3. Side Indicators (Wings)
+                // 3. Side Indicators (Wings) with staggered animation
                 Positioned(
-                  left: 80,
+                  left: 20,
                   top: 80,
                   bottom: 80,
-                  right: 80,
-                  child: HudSideIndicators(
-                    leftWingAngle: _smoothLeftWing,
-                    rightWingAngle: _smoothRightWing,
-                    targetLeftWingAngle: _targetLeftWing,
-                    targetRightWingAngle: _targetRightWing,
+                  right: 20,
+                  child: AnimatedBuilder(
+                    animation: _staggeredSystem.getAnimation(2),
+                    builder: (context, child) {
+                      final animation = _staggeredSystem.getAnimation(2);
+                      return Transform.scale(
+                        scale: 0.95 + (0.05 * animation.value),
+                        child: Opacity(
+                          opacity: animation.value,
+                          child: HudSideIndicators(
+                            leftWingAngle: _smoothLeftWing,
+                            rightWingAngle: _smoothRightWing,
+                            targetLeftWingAngle: _targetLeftWing,
+                            targetRightWingAngle: _targetRightWing,
+                          ),
+                        ),
+                      );
+                    },
                   ),
                 ),
 
-                // 4. Top Speed Display
+                // 4. Premium Glass Speed Display
                 Positioned(
-                  top: 30,
+                  top: 40,
                   right: 40,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      Text(
-                        _smoothSpeed.toStringAsFixed(1),
-                        style: const TextStyle(
-                          color: Color(0xFF00D9FF),
-                          fontSize: 64,
-                          fontWeight: FontWeight.w200,
-                          fontFamily: 'RobotoMono',
-                          shadows: [
-                            Shadow(blurRadius: 20, color: Color(0xFF00D9FF)),
-                          ],
-                        ),
-                      ),
-                      Text(
-                        'KNOTS',
-                        style: TextStyle(
-                          color: DashboardConfig.textSecondary.withValues(
-                            alpha: 0.6,
+                  child: AnimatedBuilder(
+                    animation: _staggeredSystem.getAnimation(0),
+                    builder: (context, child) {
+                      final animation = _staggeredSystem.getAnimation(0);
+                      return Transform.scale(
+                        scale: 0.8 + (0.2 * animation.value),
+                        child: Opacity(
+                          opacity: animation.value,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 24,
+                              vertical: 16,
+                            ),
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(20),
+                              gradient: LinearGradient(
+                                begin: const Alignment(-0.5, -1),
+                                end: const Alignment(0.5, 1),
+                                colors: [
+                                  Colors.white.withValues(alpha: 0.15),
+                                  Colors.white.withValues(alpha: 0.05),
+                                  Colors.white.withValues(alpha: 0.02),
+                                ],
+                              ),
+                              border: Border.all(
+                                color: Colors.white.withValues(alpha: 0.2),
+                                width: 1.5,
+                              ),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withValues(alpha: 0.3),
+                                  blurRadius: 20,
+                                  offset: const Offset(0, 10),
+                                ),
+                                BoxShadow(
+                                  color: const Color(0xFF00D9FF).withValues(alpha: 0.1),
+                                  blurRadius: 30,
+                                  spreadRadius: -5,
+                                ),
+                              ],
+                            ),
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(20),
+                              child: BackdropFilter(
+                                filter: ui.ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.end,
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Text(
+                                      _smoothSpeed.toStringAsFixed(1),
+                                      style: TextStyle(
+                                        color: Colors.white.withValues(alpha: 0.95),
+                                        fontSize: 52,
+                                        fontWeight: FontWeight.w200,
+                                        fontFamily: 'SF Pro Display',
+                                        letterSpacing: -1.0,
+                                        shadows: const [
+                                          Shadow(
+                                            blurRadius: 15,
+                                            color: Color(0xFF00D9FF),
+                                          ),
+                                          Shadow(
+                                            blurRadius: 30,
+                                            color: Color(0xFF00D9FF),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      'KNOTS',
+                                      style: TextStyle(
+                                        color: Colors.white.withValues(alpha: 0.6),
+                                        fontSize: 11,
+                                        letterSpacing: 2.0,
+                                        fontWeight: FontWeight.w400,
+                                        fontFamily: 'SF Pro Text',
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
                           ),
-                          fontSize: 14,
-                          letterSpacing: 3.0,
-                          fontWeight: FontWeight.w200,
                         ),
-                      ),
-                    ],
+                      );
+                    },
+                  ),
+                ),
+
+                // 5. Subtle Bottom RPM Display
+                Positioned(
+                  bottom: 40,
+                  left: 0,
+                  right: 0,
+                  child: AnimatedBuilder(
+                    animation: _staggeredSystem.getAnimation(3),
+                    builder: (context, child) {
+                      final animation = _staggeredSystem.getAnimation(3);
+                      return Opacity(
+                        opacity: animation.value,
+                        child: Center(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                _smoothRpm.toStringAsFixed(0),
+                                style: TextStyle(
+                                  color: Colors.white.withValues(alpha: 0.8),
+                                  fontSize: 36,
+                                  fontWeight: FontWeight.w200,
+                                  fontFamily: 'SF Pro Display',
+                                  letterSpacing: -1.0,
+                                  shadows: const [
+                                    Shadow(
+                                      blurRadius: 8,
+                                      color: Color(0xFF00D9FF),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                'RPM',
+                                style: TextStyle(
+                                  color: Colors.white.withValues(alpha: 0.5),
+                                  fontSize: 11,
+                                  letterSpacing: 2.0,
+                                  fontWeight: FontWeight.w300,
+                                  fontFamily: 'SF Pro Text',
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
                   ),
                 ),
               ],
