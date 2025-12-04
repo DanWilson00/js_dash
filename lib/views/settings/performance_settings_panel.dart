@@ -1,18 +1,18 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import '../../services/settings_manager.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../models/app_settings.dart';
+import '../../providers/service_providers.dart';
 
-class PerformanceSettingsPanel extends StatefulWidget {
-  final SettingsManager settingsManager;
-
-  const PerformanceSettingsPanel({super.key, required this.settingsManager});
+class PerformanceSettingsPanel extends ConsumerStatefulWidget {
+  const PerformanceSettingsPanel({super.key});
 
   @override
-  State<PerformanceSettingsPanel> createState() =>
+  ConsumerState<PerformanceSettingsPanel> createState() =>
       _PerformanceSettingsPanelState();
 }
 
-class _PerformanceSettingsPanelState extends State<PerformanceSettingsPanel> {
+class _PerformanceSettingsPanelState extends ConsumerState<PerformanceSettingsPanel> {
   late TextEditingController _updateIntervalController;
   late TextEditingController _bufferSizeController;
   late TextEditingController _retentionController;
@@ -20,7 +20,8 @@ class _PerformanceSettingsPanelState extends State<PerformanceSettingsPanel> {
   @override
   void initState() {
     super.initState();
-    final performance = widget.settingsManager.performance;
+    final settingsManager = ref.read(settingsManagerProvider);
+    final performance = settingsManager.performance;
     _updateIntervalController = TextEditingController(
       text: performance.updateInterval.toString(),
     );
@@ -30,34 +31,36 @@ class _PerformanceSettingsPanelState extends State<PerformanceSettingsPanel> {
     _retentionController = TextEditingController(
       text: performance.dataRetentionMinutes.toString(),
     );
-
-    // Listen to settings changes
-    widget.settingsManager.addListener(_onSettingsChanged);
   }
 
   @override
   void dispose() {
-    widget.settingsManager.removeListener(_onSettingsChanged);
     _updateIntervalController.dispose();
     _bufferSizeController.dispose();
     _retentionController.dispose();
     super.dispose();
   }
 
-  void _onSettingsChanged() {
-    if (mounted) {
-      setState(() {
-        final performance = widget.settingsManager.performance;
-        _updateIntervalController.text = performance.updateInterval.toString();
-        _bufferSizeController.text = performance.dataBufferSize.toString();
-        _retentionController.text = performance.dataRetentionMinutes.toString();
-      });
+  void _syncControllersIfNeeded(PerformanceSettings performance) {
+    // Only update if different to avoid cursor jumping during user input
+    if (_updateIntervalController.text != performance.updateInterval.toString()) {
+      _updateIntervalController.text = performance.updateInterval.toString();
+    }
+    if (_bufferSizeController.text != performance.dataBufferSize.toString()) {
+      _bufferSizeController.text = performance.dataBufferSize.toString();
+    }
+    if (_retentionController.text != performance.dataRetentionMinutes.toString()) {
+      _retentionController.text = performance.dataRetentionMinutes.toString();
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final performance = widget.settingsManager.performance;
+    final settingsManager = ref.watch(settingsManagerProvider);
+    final performance = settingsManager.performance;
+
+    // Sync controllers with settings (replaces listener pattern)
+    _syncControllersIfNeeded(performance);
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(12),
@@ -76,7 +79,7 @@ class _PerformanceSettingsPanelState extends State<PerformanceSettingsPanel> {
                 ),
                 value: performance.enablePointDecimation,
                 onChanged: (value) {
-                  widget.settingsManager.updatePointDecimation(enabled: value);
+                  settingsManager.updatePointDecimation(enabled: value);
                 },
               ),
               ListTile(
@@ -96,7 +99,7 @@ class _PerformanceSettingsPanelState extends State<PerformanceSettingsPanel> {
                     label: performance.decimationThreshold.toString(),
                     onChanged: performance.enablePointDecimation
                         ? (value) {
-                            widget.settingsManager.updatePointDecimation(
+                            settingsManager.updatePointDecimation(
                               threshold: value.round(),
                             );
                           }
@@ -119,7 +122,7 @@ class _PerformanceSettingsPanelState extends State<PerformanceSettingsPanel> {
                 ),
                 value: performance.enableUpdateThrottling,
                 onChanged: (value) {
-                  widget.settingsManager.updateThrottling(enabled: value);
+                  settingsManager.updateThrottling(enabled: value);
                 },
               ),
               ListTile(
@@ -151,7 +154,7 @@ class _PerformanceSettingsPanelState extends State<PerformanceSettingsPanel> {
                       if (interval != null &&
                           interval > 0 &&
                           interval <= 1000) {
-                        widget.settingsManager.updateThrottling(
+                        settingsManager.updateThrottling(
                           interval: interval,
                         );
                       }
@@ -191,7 +194,7 @@ class _PerformanceSettingsPanelState extends State<PerformanceSettingsPanel> {
                     onChanged: (value) {
                       final size = int.tryParse(value);
                       if (size != null && size >= 100 && size <= 10000) {
-                        widget.settingsManager.updateDataManagement(
+                        settingsManager.updateDataManagement(
                           bufferSize: size,
                         );
                       }
@@ -222,7 +225,7 @@ class _PerformanceSettingsPanelState extends State<PerformanceSettingsPanel> {
                     onChanged: (value) {
                       final minutes = int.tryParse(value);
                       if (minutes != null && minutes >= 1 && minutes <= 60) {
-                        widget.settingsManager.updateDataManagement(
+                        settingsManager.updateDataManagement(
                           retentionMinutes: minutes,
                         );
                       }

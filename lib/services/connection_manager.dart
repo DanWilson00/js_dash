@@ -14,16 +14,7 @@ import 'spoof_byte_source.dart';
 /// This service abstracts connection details from UI components and provides
 /// a unified interface for managing connections regardless of type
 class ConnectionManager implements IConnectionManager, Disposable {
-  // Singleton support for backward compatibility - will be deprecated
-  static ConnectionManager? _instance;
-  factory ConnectionManager() => _instance ??= ConnectionManager._internal();
-  ConnectionManager._internal() : _injectedTracker = null;
-
-  // New constructor for dependency injection
   ConnectionManager.injected(this._injectedTracker);
-
-  // For testing - allows creating fresh instances
-  ConnectionManager.forTesting() : _injectedTracker = null;
 
   final MavlinkMessageTracker? _injectedTracker;
 
@@ -236,11 +227,5 @@ class ConnectionManager implements IConnectionManager, Disposable {
   void dispose() {
     disconnect();
     _statusController.close();
-  }
-
-  // For testing - reset singleton instance
-  static void resetInstanceForTesting() {
-    _instance?.dispose();
-    _instance = null;
   }
 }

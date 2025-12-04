@@ -6,16 +6,13 @@ import '../map/map_view.dart';
 import '../../providers/service_providers.dart';
 import '../../providers/ui_providers.dart';
 import '../../providers/action_providers.dart';
-import '../../services/settings_manager.dart';
 import '../../core/connection_config.dart';
 
 class MainNavigation extends ConsumerStatefulWidget {
-  final SettingsManager settingsManager;
   final bool autoStartMonitor;
 
   const MainNavigation({
     super.key,
-    required this.settingsManager,
     this.autoStartMonitor = true,
   });
 
@@ -43,7 +40,7 @@ class _MainNavigationState extends ConsumerState<MainNavigation> {
 
     // Start listening to connection manager data streams
     await repository.startListening();
-  
+
     _isInitialized = true;
 
     // Load settings after widget tree is built
@@ -59,7 +56,8 @@ class _MainNavigationState extends ConsumerState<MainNavigation> {
     final connectionActions = ref.read(connectionActionsProvider);
     connectionActions.loadConnectionSettings();
 
-    final settings = widget.settingsManager.settings;
+    final settingsManager = ref.read(settingsManagerProvider);
+    final settings = settingsManager.settings;
     ref.read(selectedViewIndexProvider.notifier).state =
         settings.navigation.selectedViewIndex;
     ref.read(selectedPlotIndexProvider.notifier).state =
@@ -67,7 +65,8 @@ class _MainNavigationState extends ConsumerState<MainNavigation> {
   }
 
   void _autoStartSpoofingIfEnabled() {
-    final settings = widget.settingsManager.settings;
+    final settingsManager = ref.read(settingsManagerProvider);
+    final settings = settingsManager.settings;
 
     if (settings.connection.enableSpoofing) {
       // Auto-start spoofing if enabled in settings
@@ -102,10 +101,10 @@ class _MainNavigationState extends ConsumerState<MainNavigation> {
   Widget _buildBody(int selectedIndex) {
     return IndexedStack(
       index: selectedIndex,
-      children: [
-        const JetsharkDashboard(),
-        RealtimeDataDisplay(settingsManager: widget.settingsManager),
-        MapView(settingsManager: widget.settingsManager),
+      children: const [
+        JetsharkDashboard(),
+        RealtimeDataDisplay(),
+        MapView(),
       ],
     );
   }

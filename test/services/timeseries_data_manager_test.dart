@@ -1,20 +1,20 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:js_dash/services/timeseries_data_manager.dart';
+import 'package:js_dash/services/mavlink_message_tracker.dart';
 
 void main() {
   group('TimeSeriesDataManager', () {
     late TimeSeriesDataManager dataManager;
+    late MavlinkMessageTracker tracker;
 
     setUp(() {
-      // Use the default constructor which is now safe or the injected one if needed
-      // For this test, we can use the default one but we should ensure we don't rely on shared state
-      TimeSeriesDataManager.resetInstanceForTesting();
-      dataManager = TimeSeriesDataManager();
+      tracker = MavlinkMessageTracker();
+      dataManager = TimeSeriesDataManager.injected(tracker, null);
     });
 
     tearDown(() {
       dataManager.dispose();
-      TimeSeriesDataManager.resetInstanceForTesting();
+      tracker.dispose();
     });
 
     test('should start and stop tracking', () {

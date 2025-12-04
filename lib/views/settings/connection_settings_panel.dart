@@ -1,17 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../models/app_settings.dart';
 import '../../providers/action_providers.dart';
-import '../../services/settings_manager.dart';
+import '../../providers/service_providers.dart';
 import '../../core/connection_config.dart';
 
 class ConnectionSettingsPanel extends ConsumerStatefulWidget {
-  final SettingsManager settingsManager;
-
-  const ConnectionSettingsPanel({
-    super.key,
-    required this.settingsManager,
-  });
+  const ConnectionSettingsPanel({super.key});
 
   @override
   ConsumerState<ConnectionSettingsPanel> createState() => _ConnectionSettingsPanelState();
@@ -40,37 +36,41 @@ class _ConnectionSettingsPanelState extends ConsumerState<ConnectionSettingsPane
   @override
   void initState() {
     super.initState();
-    final connection = widget.settingsManager.connection;
+    final settingsManager = ref.read(settingsManagerProvider);
+    final connection = settingsManager.connection;
     _serialPortController = TextEditingController(text: connection.serialPort);
     _spoofSystemIdController = TextEditingController(text: connection.spoofSystemId.toString());
     _spoofComponentIdController = TextEditingController(text: connection.spoofComponentId.toString());
-
-    widget.settingsManager.addListener(_onSettingsChanged);
   }
 
   @override
   void dispose() {
-    widget.settingsManager.removeListener(_onSettingsChanged);
     _serialPortController.dispose();
     _spoofSystemIdController.dispose();
     _spoofComponentIdController.dispose();
     super.dispose();
   }
 
-  void _onSettingsChanged() {
-    if (mounted) {
-      setState(() {
-        final connection = widget.settingsManager.connection;
-        _serialPortController.text = connection.serialPort;
-        _spoofSystemIdController.text = connection.spoofSystemId.toString();
-        _spoofComponentIdController.text = connection.spoofComponentId.toString();
-      });
+  void _syncControllersIfNeeded(ConnectionSettings connection) {
+    // Only update if different to avoid cursor jumping during user input
+    if (_serialPortController.text != connection.serialPort) {
+      _serialPortController.text = connection.serialPort;
+    }
+    if (_spoofSystemIdController.text != connection.spoofSystemId.toString()) {
+      _spoofSystemIdController.text = connection.spoofSystemId.toString();
+    }
+    if (_spoofComponentIdController.text != connection.spoofComponentId.toString()) {
+      _spoofComponentIdController.text = connection.spoofComponentId.toString();
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final connection = widget.settingsManager.connection;
+    final settingsManager = ref.watch(settingsManagerProvider);
+    final connection = settingsManager.connection;
+
+    // Sync controllers with settings (replaces listener pattern)
+    _syncControllersIfNeeded(connection);
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(12),
@@ -116,17 +116,17 @@ class _ConnectionSettingsPanelState extends ConsumerState<ConnectionSettingsPane
                     }
 
                     // Update the setting
-                    widget.settingsManager.updateConnectionMode(value);
+                    settingsManager.updateConnectionMode(value);
 
                     // Auto-start spoofing if enabled
                     if (value) {
                       try {
                         final connectionActions = ref.read(connectionActionsProvider);
-                        final connection = widget.settingsManager.connection;
+                        final conn = settingsManager.connection;
                         await connectionActions.connectWith(SpoofConnectionConfig(
-                          systemId: connection.spoofSystemId,
-                          componentId: connection.spoofComponentId,
-                          baudRate: connection.spoofBaudRate,
+                          systemId: conn.spoofSystemId,
+                          componentId: conn.spoofComponentId,
+                          baudRate: conn.spoofBaudRate,
                         ));
                       } catch (e) {
                         // Silently handle auto-start failures
@@ -177,7 +177,7 @@ class _ConnectionSettingsPanelState extends ConsumerState<ConnectionSettingsPane
                         ),
                         onChanged: (value) {
                           if (value.isNotEmpty) {
-                            widget.settingsManager.updateSerialConnection(
+                            settingsManager.updateSerialConnection(
                               value,
                               connection.serialBaudRate,
                             );
@@ -200,7 +200,7 @@ class _ConnectionSettingsPanelState extends ConsumerState<ConnectionSettingsPane
                       )).toList(),
                       onChanged: (value) {
                         if (value != null) {
-                          widget.settingsManager.updateSerialConnection(
+                          settingsManager.updateSerialConnection(
                             connection.serialPort,
                             value,
                           );
@@ -257,7 +257,7 @@ class _ConnectionSettingsPanelState extends ConsumerState<ConnectionSettingsPane
                         onChanged: (value) {
                           final systemId = int.tryParse(value);
                           if (systemId != null && systemId > 0 && systemId <= 255) {
-                            widget.settingsManager.updateSpoofingConfig(spoofSystemId: systemId);
+                            settingsManager.updateSpoofingConfig(spoofSystemId: systemId);
                           }
                         },
                       ),
@@ -282,7 +282,7 @@ class _ConnectionSettingsPanelState extends ConsumerState<ConnectionSettingsPane
                         onChanged: (value) {
                           final componentId = int.tryParse(value);
                           if (componentId != null && componentId > 0 && componentId <= 255) {
-                            widget.settingsManager.updateSpoofingConfig(spoofComponentId: componentId);
+                            settingsManager.updateSpoofingConfig(spoofComponentId: componentId);
                           }
                         },
                       ),
@@ -302,7 +302,7 @@ class _ConnectionSettingsPanelState extends ConsumerState<ConnectionSettingsPane
                       )).toList(),
                       onChanged: (value) {
                         if (value != null) {
-                          widget.settingsManager.updateSpoofingConfig(spoofBaudRate: value);
+                          settingsManager.updateSpoofingConfig(spoofBaudRate: value);
                         }
                       },
                     ),
@@ -339,7 +339,7 @@ class _ConnectionSettingsPanelState extends ConsumerState<ConnectionSettingsPane
                   subtitle: const Text('Begin monitoring MAVLink messages on startup'),
                   value: connection.autoStartMonitor,
                   onChanged: (value) {
-                    widget.settingsManager.updateAutoStartMonitor(value);
+                    settingsManager.updateAutoStartMonitor(value);
                   },
                 ),
                 SwitchListTile(
@@ -348,7 +348,7 @@ class _ConnectionSettingsPanelState extends ConsumerState<ConnectionSettingsPane
                   subtitle: const Text('Begin with data collection paused'),
                   value: connection.isPaused,
                   onChanged: (value) {
-                    widget.settingsManager.updatePauseState(value);
+                    settingsManager.updatePauseState(value);
                   },
                 ),
               ],

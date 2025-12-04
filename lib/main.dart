@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:window_manager/window_manager.dart';
 import 'services/settings_manager.dart';
+import 'providers/service_providers.dart';
 import 'providers/ui_providers.dart';
 import 'views/navigation/main_navigation.dart';
 
@@ -47,7 +48,11 @@ void main() async {
 
   runApp(
     ProviderScope(
-      child: SubmersibleJetskiApp(settingsManager: settingsManager),
+      overrides: [
+        // Override the settingsManagerProvider to use the pre-initialized instance
+        settingsManagerProvider.overrideWithValue(settingsManager),
+      ],
+      child: const SubmersibleJetskiApp(),
     ),
   );
 }
@@ -55,11 +60,9 @@ void main() async {
 class SubmersibleJetskiApp extends ConsumerStatefulWidget {
   const SubmersibleJetskiApp({
     super.key,
-    required this.settingsManager,
     this.autoStartMonitor = true,
   });
 
-  final SettingsManager settingsManager;
   final bool autoStartMonitor;
 
   @override
@@ -110,7 +113,7 @@ class _SubmersibleJetskiAppState extends ConsumerState<SubmersibleJetskiApp>
 
     try {
       await _saveWindowState();
-      await widget.settingsManager.saveNow();
+      await ref.read(settingsManagerProvider).saveNow();
     } catch (e) {
       debugPrint('Error saving state on close: $e');
     } finally {
@@ -134,7 +137,7 @@ class _SubmersibleJetskiAppState extends ConsumerState<SubmersibleJetskiApp>
       final position = await windowManager.getPosition();
       final isMaximized = await windowManager.isMaximized();
 
-      widget.settingsManager.updateWindowState(
+      ref.read(settingsManagerProvider).updateWindowState(
         size: size,
         position: position,
         maximized: isMaximized,
@@ -152,7 +155,6 @@ class _SubmersibleJetskiAppState extends ConsumerState<SubmersibleJetskiApp>
       title: 'Submersible Jetski Dashboard',
       theme: theme,
       home: MainNavigation(
-        settingsManager: widget.settingsManager,
         autoStartMonitor: widget.autoStartMonitor,
       ),
       debugShowCheckedModeBanner: false,

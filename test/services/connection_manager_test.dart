@@ -8,7 +8,8 @@ void main() {
     late ConnectionManager connectionManager;
 
     setUp(() {
-      connectionManager = ConnectionManager.forTesting();
+      // Use injected constructor with null tracker for testing
+      connectionManager = ConnectionManager.injected(null);
     });
 
     tearDown(() {

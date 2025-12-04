@@ -8,7 +8,6 @@ import '../../models/plot_configuration.dart';
 import '../../core/timeseries_point.dart';
 
 import '../../services/timeseries_data_manager.dart';
-import '../../services/settings_manager.dart';
 import '../../providers/service_providers.dart';
 import 'plot_legend.dart';
 import 'plot_data_processor.dart';
@@ -19,12 +18,10 @@ class InteractivePlot extends ConsumerStatefulWidget {
   final VoidCallback? onAxisTap;
   final VoidCallback? onClearAxis;
   final VoidCallback? onLegendTap;
-  final SettingsManager settingsManager;
 
   const InteractivePlot({
     super.key,
     required this.configuration,
-    required this.settingsManager,
     this.isAxisSelected = false,
     this.onAxisTap,
     this.onClearAxis,
@@ -84,16 +81,6 @@ class _InteractivePlotState extends ConsumerState<InteractivePlot> {
     _dataManager = ref.read(timeSeriesDataManagerProvider);
     _initializeData();
     _setupDataListener();
-
-    // Listen to settings changes
-    widget.settingsManager.addListener(_onSettingsChanged);
-  }
-
-  void _onSettingsChanged() {
-    if (mounted) {
-      // Performance settings changed, update plot accordingly
-      setState(() {});
-    }
   }
 
   @override
@@ -109,7 +96,6 @@ class _InteractivePlotState extends ConsumerState<InteractivePlot> {
 
   @override
   void dispose() {
-    widget.settingsManager.removeListener(_onSettingsChanged);
     _updateTimer?.cancel();
     _dataSubscription?.cancel();
     super.dispose();
@@ -197,7 +183,7 @@ class _InteractivePlotState extends ConsumerState<InteractivePlot> {
 
   void _scheduleUpdate() {
     _pendingUpdate = true;
-    final performance = widget.settingsManager.performance;
+    final performance = ref.read(settingsManagerProvider).performance;
 
     if (_updateTimer == null || !_updateTimer!.isActive) {
       final updateInterval = Duration(milliseconds: performance.updateInterval);
@@ -227,7 +213,7 @@ class _InteractivePlotState extends ConsumerState<InteractivePlot> {
       allData: _getAllDataForSignals(widget.configuration.yAxis.visibleSignals),
       timeWindow: timeWindow,
       scalingMode: widget.configuration.yAxis.scalingMode,
-      performance: widget.settingsManager.performance,
+      performance: ref.read(settingsManagerProvider).performance,
       absoluteEpoch: _absoluteEpoch,
       lastDataTimestamps: Map.from(_lastDataTimestamps),
     );
@@ -606,7 +592,7 @@ class _InteractivePlotState extends ConsumerState<InteractivePlot> {
                               spot.y.toStringAsFixed(2);
 
                           final fontSize =
-                              14.0 * widget.settingsManager.appearance.uiScale;
+                              14.0 * ref.read(settingsManagerProvider).appearance.uiScale;
 
                           return LineTooltipItem(
                             '${signal.effectiveDisplayName}: $displayValue',

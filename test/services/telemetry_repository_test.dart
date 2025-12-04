@@ -82,9 +82,7 @@ void main() {
     setUp(() {
       tracker = MavlinkMessageTracker();
       connectionManager = ConnectionManager.injected(tracker);
-
-      TimeSeriesDataManager.resetInstanceForTesting();
-      timeSeriesManager = TimeSeriesDataManager();
+      timeSeriesManager = TimeSeriesDataManager.injected(tracker, null);
 
       repository = TelemetryRepository(
         connectionManager: connectionManager,
@@ -96,6 +94,7 @@ void main() {
       repository.dispose();
       connectionManager.dispose();
       timeSeriesManager.dispose();
+      tracker.dispose();
     });
 
     test('should initialize correctly', () async {

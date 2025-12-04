@@ -10,13 +10,6 @@ import 'mavlink_message_tracker.dart';
 import 'settings_manager.dart';
 
 class TimeSeriesDataManager implements IDataRepository, Disposable {
-  // Singleton support for backward compatibility - will be deprecated
-  static TimeSeriesDataManager? _instance;
-  factory TimeSeriesDataManager() => _instance ??= TimeSeriesDataManager._internal();
-  TimeSeriesDataManager._internal();
-  
-  // New constructor for dependency injection
-  // New constructor for dependency injection
   TimeSeriesDataManager.injected(this._tracker, this._settingsManager) {
     if (_tracker != null) {
       _messageSubscription = _tracker!.statsStream.listen((messageStats) {
@@ -295,12 +288,6 @@ class TimeSeriesDataManager implements IDataRepository, Disposable {
     if (!_dataController.isClosed) {
       _dataController.close();
     }
-  }
-
-  // For testing
-  static void resetInstanceForTesting() {
-    _instance?.dispose();
-    _instance = null;
   }
 
   // Get current data state for debugging

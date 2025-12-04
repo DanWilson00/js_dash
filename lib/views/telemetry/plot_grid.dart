@@ -1,28 +1,27 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:dashboard/dashboard.dart';
 import '../../models/plot_configuration.dart';
-import '../../services/settings_manager.dart';
+import '../../providers/service_providers.dart';
 import 'interactive_plot.dart';
 import 'signal_properties_panel.dart';
 
-class PlotGridManager extends StatefulWidget {
-  final SettingsManager settingsManager;
+class PlotGridManager extends ConsumerStatefulWidget {
   final VoidCallback? onFieldAssignment;
   final String tabId;
 
   const PlotGridManager({
     super.key,
-    required this.settingsManager,
     this.onFieldAssignment,
     required this.tabId,
   });
 
   @override
-  State<PlotGridManager> createState() => PlotGridManagerState();
+  ConsumerState<PlotGridManager> createState() => PlotGridManagerState();
 }
 
-class PlotGridManagerState extends State<PlotGridManager> {
+class PlotGridManagerState extends ConsumerState<PlotGridManager> {
   late List<PlotConfiguration> _plots;
   String? _selectedPlotId;
   late bool _showPropertiesPanel;
@@ -37,7 +36,7 @@ class PlotGridManagerState extends State<PlotGridManager> {
   }
 
   void _loadFromSettings() {
-    final plotSettings = widget.settingsManager.plots;
+    final plotSettings = ref.read(settingsManagerProvider).plots;
 
     // Find the tab by ID
     final tab = plotSettings.tabs.firstWhere(
@@ -82,7 +81,7 @@ class PlotGridManagerState extends State<PlotGridManager> {
     final newId = 'plot_${DateTime.now().millisecondsSinceEpoch}';
 
     // Get current time window from settings
-    final timeWindowLabel = widget.settingsManager.plots.timeWindow;
+    final timeWindowLabel = ref.read(settingsManagerProvider).plots.timeWindow;
     final timeWindowOption = TimeWindowOption.availableWindows.firstWhere(
       (w) => w.label == timeWindowLabel,
       orElse: () => TimeWindowOption.getDefault(),
@@ -110,7 +109,7 @@ class PlotGridManagerState extends State<PlotGridManager> {
   }
 
   void _saveToSettings() {
-    widget.settingsManager.updatePlotsInTab(widget.tabId, _plots);
+    ref.read(settingsManagerProvider).updatePlotsInTab(widget.tabId, _plots);
   }
 
   void _updateLayoutFromDelegate(List<DashboardItem> items) {
@@ -533,7 +532,6 @@ class PlotGridManagerState extends State<PlotGridManager> {
                         cursor: SystemMouseCursors.basic,
                         child: InteractivePlot(
                           configuration: plot,
-                          settingsManager: widget.settingsManager,
                           isAxisSelected: isSelected,
                           onAxisTap: () => _selectPlot(plot.id),
                           onClearAxis: () => _clearPlotAxis(plot.id),
