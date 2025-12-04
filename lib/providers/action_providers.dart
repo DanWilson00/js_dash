@@ -119,20 +119,11 @@ class ConnectionActions {
 
   /// Save connection settings
   Future<void> _saveConnectionSettings(ConnectionFormState formState) async {
-    _settingsManager.updateConnectionMode(
-      formState.enableSpoofing,
-      spoofMode: 'usb_serial',
-    );
-    
-    _settingsManager.updateConnectionType(formState.connectionType);
-    
-    if (formState.connectionType == 'udp') {
-      _settingsManager.updateMavlinkConnection(formState.udpHost, formState.udpPort);
-    } else if (formState.connectionType == 'serial') {
+    _settingsManager.updateConnectionMode(formState.enableSpoofing);
+
+    if (!formState.enableSpoofing) {
       _settingsManager.updateSerialConnection(formState.serialPort, formState.serialBaudRate);
-    }
-    
-    if (formState.enableSpoofing) {
+    } else {
       _settingsManager.updateSpoofingConfig(
         spoofBaudRate: formState.spoofBaudRate,
         spoofSystemId: formState.spoofSystemId,

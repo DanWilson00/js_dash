@@ -18,12 +18,10 @@ class ConnectionSettingsPanel extends ConsumerStatefulWidget {
 }
 
 class _ConnectionSettingsPanelState extends ConsumerState<ConnectionSettingsPanel> {
-  late TextEditingController _hostController;
-  late TextEditingController _portController;
   late TextEditingController _serialPortController;
   late TextEditingController _spoofSystemIdController;
   late TextEditingController _spoofComponentIdController;
-  
+
   // Common baud rates for MAVLink and serial communication
   static const List<int> _baudRates = [
     9600,
@@ -43,20 +41,16 @@ class _ConnectionSettingsPanelState extends ConsumerState<ConnectionSettingsPane
   void initState() {
     super.initState();
     final connection = widget.settingsManager.connection;
-    _hostController = TextEditingController(text: connection.mavlinkHost);
-    _portController = TextEditingController(text: connection.mavlinkPort.toString());
     _serialPortController = TextEditingController(text: connection.serialPort);
     _spoofSystemIdController = TextEditingController(text: connection.spoofSystemId.toString());
     _spoofComponentIdController = TextEditingController(text: connection.spoofComponentId.toString());
-    
+
     widget.settingsManager.addListener(_onSettingsChanged);
   }
 
   @override
   void dispose() {
     widget.settingsManager.removeListener(_onSettingsChanged);
-    _hostController.dispose();
-    _portController.dispose();
     _serialPortController.dispose();
     _spoofSystemIdController.dispose();
     _spoofComponentIdController.dispose();
@@ -67,8 +61,6 @@ class _ConnectionSettingsPanelState extends ConsumerState<ConnectionSettingsPane
     if (mounted) {
       setState(() {
         final connection = widget.settingsManager.connection;
-        _hostController.text = connection.mavlinkHost;
-        _portController.text = connection.mavlinkPort.toString();
         _serialPortController.text = connection.serialPort;
         _spoofSystemIdController.text = connection.spoofSystemId.toString();
         _spoofComponentIdController.text = connection.spoofComponentId.toString();
@@ -79,7 +71,7 @@ class _ConnectionSettingsPanelState extends ConsumerState<ConnectionSettingsPane
   @override
   Widget build(BuildContext context) {
     final connection = widget.settingsManager.connection;
-    
+
     return SingleChildScrollView(
       padding: const EdgeInsets.all(12),
       child: Column(
@@ -115,17 +107,17 @@ class _ConnectionSettingsPanelState extends ConsumerState<ConnectionSettingsPane
                     try {
                       final connectionActions = ref.read(connectionActionsProvider);
                       await connectionActions.disconnect();
-                      
+
                       // Clear any existing data to prevent showing stale "connected" status
                       final dataActions = ref.read(dataActionsProvider);
                       dataActions.clearAllData();
                     } catch (e) {
                       // Continue with settings update even if disconnect fails
                     }
-                    
+
                     // Update the setting
                     widget.settingsManager.updateConnectionMode(value);
-                    
+
                     // Auto-start spoofing if enabled
                     if (value) {
                       try {
@@ -145,10 +137,10 @@ class _ConnectionSettingsPanelState extends ConsumerState<ConnectionSettingsPane
               ],
             ),
           ),
-          
+
           const SizedBox(height: 16),
-          
-          // Real MAVLink Connection Settings (only when spoofing is disabled)
+
+          // Serial Connection Settings (only when spoofing is disabled)
           if (!connection.enableSpoofing) ...[
             Card(
               child: Column(
@@ -161,7 +153,7 @@ class _ConnectionSettingsPanelState extends ConsumerState<ConnectionSettingsPane
                         const Icon(Icons.settings_input_antenna, size: 20),
                         const SizedBox(width: 8),
                         Text(
-                          'MAVLink Connection',
+                          'Serial Connection',
                           style: Theme.of(context).textTheme.titleSmall?.copyWith(
                             fontWeight: FontWeight.bold,
                           ),
@@ -171,143 +163,57 @@ class _ConnectionSettingsPanelState extends ConsumerState<ConnectionSettingsPane
                   ),
                   ListTile(
                     dense: true,
-                    title: const Text('Connection type'),
-                    subtitle: const Text('How to connect to MAVLink source'),
-                    trailing: DropdownButton<String>(
-                      value: connection.connectionType,
-                      items: const [
-                        DropdownMenuItem(
-                          value: 'udp',
-                          child: Text('UDP'),
+                    title: const Text('Serial port'),
+                    subtitle: const Text('Serial port device path (e.g., /dev/ttyUSB0)'),
+                    trailing: SizedBox(
+                      width: 180,
+                      child: TextField(
+                        controller: _serialPortController,
+                        style: Theme.of(context).textTheme.bodySmall,
+                        decoration: const InputDecoration(
+                          isDense: true,
+                          border: OutlineInputBorder(),
+                          contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
                         ),
-                        DropdownMenuItem(
-                          value: 'serial',
-                          child: Text('Serial'),
-                        ),
-                      ],
-                      onChanged: (value) {
-                        if (value != null) {
-                          widget.settingsManager.updateConnectionType(value);
-                        }
-                      },
-                    ),
-                  ),
-                  
-                  const Divider(),
-                  
-                  // UDP Settings
-                  if (connection.connectionType == 'udp') ...[
-                    ListTile(
-                      dense: true,
-                      title: const Text('UDP host'),
-                      subtitle: const Text('IP address or hostname of MAVLink source'),
-                      trailing: SizedBox(
-                        width: 180,
-                        child: TextField(
-                          controller: _hostController,
-                          style: Theme.of(context).textTheme.bodySmall,
-                          decoration: const InputDecoration(
-                            isDense: true,
-                            border: OutlineInputBorder(),
-                            contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-                          ),
-                          onChanged: (value) {
-                            if (value.isNotEmpty) {
-                              widget.settingsManager.updateMavlinkConnection(
-                                value,
-                                connection.mavlinkPort,
-                              );
-                            }
-                          },
-                        ),
-                      ),
-                    ),
-                    ListTile(
-                      dense: true,
-                      title: const Text('UDP port'),
-                      subtitle: const Text('UDP port number for MAVLink communication'),
-                      trailing: SizedBox(
-                        width: 100,
-                        child: TextField(
-                          controller: _portController,
-                          keyboardType: TextInputType.number,
-                          inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                          style: Theme.of(context).textTheme.bodySmall,
-                          decoration: const InputDecoration(
-                            isDense: true,
-                            border: OutlineInputBorder(),
-                            contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-                          ),
-                          onChanged: (value) {
-                            final port = int.tryParse(value);
-                            if (port != null && port > 0 && port <= 65535) {
-                              widget.settingsManager.updateMavlinkConnection(
-                                connection.mavlinkHost,
-                                port,
-                              );
-                            }
-                          },
-                        ),
-                      ),
-                    ),
-                  ],
-                  
-                  // Serial Settings
-                  if (connection.connectionType == 'serial') ...[
-                    ListTile(
-                      dense: true,
-                      title: const Text('Serial port'),
-                      subtitle: const Text('Serial port device path (e.g., /dev/ttyUSB0)'),
-                      trailing: SizedBox(
-                        width: 180,
-                        child: TextField(
-                          controller: _serialPortController,
-                          style: Theme.of(context).textTheme.bodySmall,
-                          decoration: const InputDecoration(
-                            isDense: true,
-                            border: OutlineInputBorder(),
-                            contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-                          ),
-                          onChanged: (value) {
-                            if (value.isNotEmpty) {
-                              widget.settingsManager.updateSerialConnection(
-                                value,
-                                connection.serialBaudRate,
-                              );
-                            }
-                          },
-                        ),
-                      ),
-                    ),
-                    ListTile(
-                      dense: true,
-                      title: const Text('Baud rate'),
-                      subtitle: const Text('Serial communication speed'),
-                      trailing: DropdownButton<int>(
-                        value: _baudRates.contains(connection.serialBaudRate) 
-                            ? connection.serialBaudRate 
-                            : _baudRates.first,
-                        items: _baudRates.map((baudRate) => DropdownMenuItem(
-                          value: baudRate,
-                          child: Text('$baudRate bps'),
-                        )).toList(),
                         onChanged: (value) {
-                          if (value != null) {
+                          if (value.isNotEmpty) {
                             widget.settingsManager.updateSerialConnection(
-                              connection.serialPort,
                               value,
+                              connection.serialBaudRate,
                             );
                           }
                         },
                       ),
                     ),
-                  ],
+                  ),
+                  ListTile(
+                    dense: true,
+                    title: const Text('Baud rate'),
+                    subtitle: const Text('Serial communication speed'),
+                    trailing: DropdownButton<int>(
+                      value: _baudRates.contains(connection.serialBaudRate)
+                          ? connection.serialBaudRate
+                          : _baudRates.first,
+                      items: _baudRates.map((baudRate) => DropdownMenuItem(
+                        value: baudRate,
+                        child: Text('$baudRate bps'),
+                      )).toList(),
+                      onChanged: (value) {
+                        if (value != null) {
+                          widget.settingsManager.updateSerialConnection(
+                            connection.serialPort,
+                            value,
+                          );
+                        }
+                      },
+                    ),
+                  ),
                 ],
               ),
             ),
             const SizedBox(height: 16),
           ],
-          
+
           // Spoofing Settings (only when spoofing is enabled)
           if (connection.enableSpoofing) ...[
             Card(
@@ -329,10 +235,9 @@ class _ConnectionSettingsPanelState extends ConsumerState<ConnectionSettingsPane
                       ],
                     ),
                   ),
-                  // Removed spoof mode selection - only USB Serial spoofing available
-                  
+
                   const Divider(),
-                  
+
                   ListTile(
                     dense: true,
                     title: const Text('System ID'),
@@ -388,8 +293,8 @@ class _ConnectionSettingsPanelState extends ConsumerState<ConnectionSettingsPane
                     title: const Text('Spoof baud rate'),
                     subtitle: const Text('Simulated serial communication speed'),
                     trailing: DropdownButton<int>(
-                      value: _baudRates.contains(connection.spoofBaudRate) 
-                          ? connection.spoofBaudRate 
+                      value: _baudRates.contains(connection.spoofBaudRate)
+                          ? connection.spoofBaudRate
                           : _baudRates.first,
                       items: _baudRates.map((baudRate) => DropdownMenuItem(
                         value: baudRate,
@@ -407,7 +312,7 @@ class _ConnectionSettingsPanelState extends ConsumerState<ConnectionSettingsPane
             ),
             const SizedBox(height: 16),
           ],
-          
+
           // General Settings
           Card(
             child: Column(

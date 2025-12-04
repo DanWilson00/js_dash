@@ -4,7 +4,12 @@
     "allow": [
       "Bash(rm:*)",
       "Bash(flutter analyze:*)",
-      "Bash(flutter test:*)"
+      "Bash(flutter test:*)",
+      "Bash(grep:*)",
+      "Bash(find:*)",
+      "Bash(xargs ls:*)",
+      "Bash(wc:*)",
+      "Bash(flutter pub run build_runner build:*)"
     ],
     "deny": []
   }

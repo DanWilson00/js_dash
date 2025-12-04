@@ -1,187 +1,100 @@
 import 'dart:async';
-import 'dart:io';
 import 'dart:typed_data';
 import 'package:dart_mavlink/mavlink.dart';
 import 'package:dart_mavlink/dialects/common.dart';
-import 'package:flutter_libserialport/flutter_libserialport.dart';
-import '../core/connection_config.dart';
+import '../interfaces/i_byte_source.dart';
 import 'mavlink_data_provider.dart';
+import 'serial_byte_source.dart';
 
+/// MAVLink service that parses bytes from an IByteSource
+/// This service handles the MAVLink protocol parsing and message dispatch
 class MavlinkService extends MavlinkDataProvider {
-  // Connection state
+  final IByteSource _byteSource;
+  final MavlinkDialect _dialect;
+
   MavlinkParser? _parser;
-  RawDatagramSocket? _socket;
-  StreamSubscription? _socketSubscription;
-  SerialPort? _serialPort;
-  Timer? _serialReader;
+  StreamSubscription<Uint8List>? _bytesSubscription;
 
   final StreamController<MavlinkFrame> _frameController =
       StreamController<MavlinkFrame>.broadcast();
   final StreamController<Uint8List> _rawDataController =
       StreamController<Uint8List>.broadcast();
 
-  // Configuration
-  ConnectionConfig? _currentConfig;
-  final MavlinkDialect _dialect;
-
-  MavlinkService({required super.tracker}) : _dialect = MavlinkDialectCommon();
+  MavlinkService({
+    required IByteSource byteSource,
+    required super.tracker,
+  })  : _byteSource = byteSource,
+        _dialect = MavlinkDialectCommon();
 
   Stream<MavlinkFrame> get frameStream => _frameController.stream;
   Stream<Uint8List> get rawDataStream => _rawDataController.stream;
 
-  // Implement IDataSource.messageStream
   @override
   Stream<dynamic> get messageStream =>
       frameStream.map((frame) => frame.message);
 
   @override
-  bool get isConnected =>
-      (_socket != null) || (_serialPort != null && _serialPort!.isOpen);
+  bool get isConnected => _byteSource.isConnected;
 
   @override
-  bool get isPaused => _socketSubscription?.isPaused ?? false;
-
-  /// Configure the service with connection settings
-  void configure(ConnectionConfig config) {
-    _currentConfig = config;
-  }
+  bool get isPaused => false; // Pause handled at byte source level
 
   @override
   Future<void> initialize() async {
-    // No initialization needed for now
+    _parser = MavlinkParser(_dialect);
+    _parser!.stream.listen((MavlinkFrame frame) {
+      _frameController.add(frame);
+      addMessage(frame.message);
+    });
   }
 
   @override
   Future<void> connect() async {
-    if (_currentConfig == null) {
-      throw Exception('Connection configuration not set');
-    }
-
-    if (_currentConfig is UdpConnectionConfig) {
-      await _connectUdp(_currentConfig as UdpConnectionConfig);
-    } else if (_currentConfig is SerialConnectionConfig) {
-      await _connectSerial(_currentConfig as SerialConnectionConfig);
-    } else {
-      throw Exception('Unsupported connection type');
-    }
-  }
-
-  Future<void> _connectUdp(UdpConnectionConfig config) async {
     await disconnect();
 
-    try {
-      _parser = MavlinkParser(_dialect);
-      _parser!.stream.listen((MavlinkFrame frame) {
-        _frameController.add(frame);
-        addMessage(frame.message);
-      });
-
-      _socket = await RawDatagramSocket.bind(InternetAddress.anyIPv4, 0);
-      _socket!.broadcastEnabled = true;
-
-      // Send a heartbeat to start the connection
-      // TODO: Implement heartbeat sending
-
-      _socketSubscription = _socket!.listen((RawSocketEvent event) {
-        if (event == RawSocketEvent.read) {
-          final datagram = _socket!.receive();
-          if (datagram != null) {
-            _rawDataController.add(datagram.data);
-            _parser!.parse(datagram.data);
-          }
-        }
-      });
-    } catch (e) {
-      await disconnect();
-      rethrow;
+    // Ensure parser is initialized
+    if (_parser == null) {
+      await initialize();
     }
-  }
 
-  Future<void> _connectSerial(SerialConnectionConfig config) async {
-    await disconnect();
+    // Subscribe to byte stream
+    _bytesSubscription = _byteSource.bytes.listen((data) {
+      _rawDataController.add(data);
+      _parser?.parse(data);
+    });
 
-    try {
-      _parser = MavlinkParser(_dialect);
-      _parser!.stream.listen((MavlinkFrame frame) {
-        _frameController.add(frame);
-        addMessage(frame.message);
-      });
-
-      _serialPort = SerialPort(config.port);
-      if (!_serialPort!.openReadWrite()) {
-        throw Exception('Failed to open serial port ${config.port}');
-      }
-
-      final serialConfig = _serialPort!.config;
-      serialConfig.baudRate = config.baudRate;
-      serialConfig.parity = SerialPortParity.none;
-      serialConfig.bits = 8;
-      serialConfig.stopBits = 1;
-      serialConfig.rts = SerialPortRts.off;
-      serialConfig.dtr = SerialPortDtr.off;
-      serialConfig.xonXoff = SerialPortXonXoff.disabled;
-      _serialPort!.config = serialConfig;
-
-      // Poll for data
-      _serialReader = Timer.periodic(const Duration(milliseconds: 10), (timer) {
-        if (_serialPort != null && _serialPort!.isOpen) {
-          try {
-            if (_serialPort!.bytesAvailable > 0) {
-              final data = _serialPort!.read(_serialPort!.bytesAvailable);
-              _rawDataController.add(data);
-              _parser!.parse(data);
-            }
-          } catch (e) {
-            // Ignore read errors
-          }
-        }
-      });
-    } catch (e) {
-      await disconnect();
-      rethrow;
-    }
+    // Connect the byte source
+    await _byteSource.connect();
   }
 
   @override
   Future<void> disconnect() async {
-    _serialReader?.cancel();
-    _serialReader = null;
-
-    if (_serialPort != null) {
-      if (_serialPort!.isOpen) _serialPort!.close();
-      _serialPort!.dispose();
-      _serialPort = null;
-    }
-
-    _socketSubscription?.cancel();
-    _socketSubscription = null;
-
-    _socket?.close();
-    _socket = null;
-
-    _parser = null;
+    await _bytesSubscription?.cancel();
+    _bytesSubscription = null;
+    await _byteSource.disconnect();
   }
 
   @override
   void pause() {
-    _socketSubscription?.pause();
+    // Could implement pause at byte source level if needed
   }
 
   @override
   void resume() {
-    _socketSubscription?.resume();
+    // Could implement resume at byte source level if needed
   }
 
   @override
   void dispose() {
     disconnect();
+    _byteSource.dispose();
     _frameController.close();
     _rawDataController.close();
     super.dispose();
   }
 
-  /// Get available serial ports
+  /// Get available serial ports (convenience method)
   static List<String> getAvailableSerialPorts() {
-    return SerialPort.availablePorts;
+    return SerialByteSource.getAvailablePorts();
   }
 }

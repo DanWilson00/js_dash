@@ -24,17 +24,6 @@ void main() {
       expect(connectionManager.isConnecting, false);
     });
 
-    test('should create UDP connection config', () {
-      final config = ConnectionManager.createUdpConfig(
-        host: '192.168.1.1',
-        port: 14550,
-      );
-      expect(config, isA<UdpConnectionConfig>());
-      final udpConfig = config as UdpConnectionConfig;
-      expect(udpConfig.host, '192.168.1.1');
-      expect(udpConfig.port, 14550);
-    });
-
     test('should create serial connection config', () {
       final config = ConnectionManager.createSerialConfig(
         port: '/dev/ttyUSB0',

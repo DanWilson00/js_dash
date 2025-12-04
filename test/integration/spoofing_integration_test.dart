@@ -2,7 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:js_dash/core/connection_config.dart';
 import 'package:js_dash/providers/service_providers.dart';
-import 'package:js_dash/services/usb_serial_spoof_service.dart';
+import 'package:js_dash/services/mavlink_service.dart';
 import 'package:js_dash/services/mavlink_message_tracker.dart';
 
 /// Integration tests for spoofing enable/disable flow
@@ -45,9 +45,9 @@ void main() {
       expect(connected, isTrue);
       expect(connectionManager.currentStatus.isConnected, isTrue);
 
-      // Verify data source is spoof service
+      // Verify data source is MavlinkService (with SpoofByteSource)
       final dataSource = connectionManager.currentDataSource;
-      expect(dataSource, isA<UsbSerialSpoofService>());
+      expect(dataSource, isA<MavlinkService>());
     });
 
     test('should stop spoofing when disabled in settings', () async {
@@ -93,10 +93,10 @@ void main() {
         // Wait longer for data to start flowing and be processed
         await Future.delayed(const Duration(milliseconds: 500));
 
-        // Check if spoof service is actually producing data
+        // Check if service is actually producing data
         final dataSource = connectionManager.currentDataSource;
         expect(dataSource, isNotNull);
-        expect(dataSource, isA<UsbSerialSpoofService>());
+        expect(dataSource, isA<MavlinkService>());
 
         // For now, just verify the connection works - data flow test needs more setup
         expect(connectionManager.currentStatus.isConnected, isTrue);
@@ -181,7 +181,7 @@ void main() {
       // Get the current data source
       final dataSource = connectionManager.currentDataSource;
       expect(dataSource, isNotNull);
-      expect(dataSource, isA<UsbSerialSpoofService>());
+      expect(dataSource, isA<MavlinkService>());
 
       // Verify that UI components should get data through repository, not directly
       // This is enforced by architecture - direct access should be discouraged
