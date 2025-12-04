@@ -65,8 +65,8 @@ class _JetsharkDashboardState extends ConsumerState<JetsharkDashboard>
   }
 
   void _startDataListening() {
-    final repository = ref.read(telemetryRepositoryProvider);
-    _dataSubscription = repository.dataStream.listen((dataBuffers) {
+    final dataManager = ref.read(timeSeriesDataManagerProvider);
+    _dataSubscription = dataManager.dataStream.listen((dataBuffers) {
       _updateFromDataBuffers(dataBuffers);
     });
   }

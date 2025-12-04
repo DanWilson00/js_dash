@@ -8,7 +8,7 @@ import 'package:js_dash/providers/service_providers.dart';
 import 'package:js_dash/providers/ui_providers.dart';
 import 'package:js_dash/providers/action_providers.dart';
 import 'package:js_dash/services/connection_manager.dart';
-import 'package:js_dash/services/telemetry_repository.dart';
+import 'package:js_dash/services/timeseries_data_manager.dart';
 import 'package:js_dash/services/settings_manager.dart';
 
 void main() {
@@ -29,10 +29,10 @@ void main() {
       expect(connectionManager, isA<ConnectionManager>());
     });
 
-    test('should provide telemetry repository', () {
-      final repository = container.read(telemetryRepositoryProvider);
-      expect(repository, isA<IDataRepository>());
-      expect(repository, isA<TelemetryRepository>());
+    test('should provide time series data manager', () {
+      final dataManager = container.read(timeSeriesDataManagerProvider);
+      expect(dataManager, isA<IDataRepository>());
+      expect(dataManager, isA<TimeSeriesDataManager>());
     });
 
     test('should provide settings manager', () {

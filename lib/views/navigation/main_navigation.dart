@@ -34,12 +34,12 @@ class _MainNavigationState extends ConsumerState<MainNavigation> {
       return;
     }
 
-    // Initialize telemetry repository
-    final repository = ref.read(telemetryRepositoryProvider);
-    repository.startTracking();
+    // Initialize data manager
+    final dataManager = ref.read(timeSeriesDataManagerProvider);
+    dataManager.startTracking();
 
     // Start listening to connection manager data streams
-    await repository.startListening();
+    await dataManager.startListening();
 
     _isInitialized = true;
 

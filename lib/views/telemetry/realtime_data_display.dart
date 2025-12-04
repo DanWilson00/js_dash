@@ -62,30 +62,30 @@ class _RealtimeDataDisplayState extends ConsumerState<RealtimeDataDisplay> {
   void didChangeDependencies() {
     super.didChangeDependencies();
 
-    // Set up data stream subscription using TelemetryRepository
-    final repository = ref.read(telemetryRepositoryProvider);
-    _dataStreamSubscription = repository.dataStream.listen((_) {
+    // Set up data stream subscription using TimeSeriesDataManager
+    final dataManager = ref.read(timeSeriesDataManagerProvider);
+    _dataStreamSubscription = dataManager.dataStream.listen((_) {
       if (mounted) {
         setState(() {}); // Trigger rebuild to update connection status
       }
     });
 
-    // Sync repository with current pause state
+    // Sync data manager with current pause state
     if (_isPaused) {
-      repository.pause();
+      dataManager.pause();
     } else {
-      repository.resume();
+      dataManager.resume();
     }
   }
 
   void _syncPauseState(bool newIsPaused) {
     if (newIsPaused != _isPaused) {
       _isPaused = newIsPaused;
-      final repository = ref.read(telemetryRepositoryProvider);
+      final dataManager = ref.read(timeSeriesDataManagerProvider);
       if (_isPaused) {
-        repository.pause();
+        dataManager.pause();
       } else {
-        repository.resume();
+        dataManager.resume();
       }
     }
   }
@@ -110,11 +110,11 @@ class _RealtimeDataDisplayState extends ConsumerState<RealtimeDataDisplay> {
   void _togglePause() {
     setState(() {
       _isPaused = !_isPaused;
-      final repository = ref.read(telemetryRepositoryProvider);
+      final dataManager = ref.read(timeSeriesDataManagerProvider);
       if (_isPaused) {
-        repository.pause();
+        dataManager.pause();
       } else {
-        repository.resume();
+        dataManager.resume();
       }
     });
 
@@ -131,8 +131,8 @@ class _RealtimeDataDisplayState extends ConsumerState<RealtimeDataDisplay> {
 
   void _clearAllPlots() {
     _currentPlotGridKey.currentState?.clearAllPlots();
-    final repository = ref.read(telemetryRepositoryProvider);
-    repository.clearAllData();
+    final dataManager = ref.read(timeSeriesDataManagerProvider);
+    dataManager.clearAllData();
   }
 
   void _openSettings() {

@@ -136,8 +136,8 @@ class ConnectionActions {
 /// Data Actions Provider
 /// Handles data-related operations
 final dataActionsProvider = Provider<DataActions>((ref) {
-  final repository = ref.read(telemetryRepositoryProvider);
-  return DataActions(repository, ref);
+  final dataManager = ref.read(timeSeriesDataManagerProvider);
+  return DataActions(dataManager, ref);
 });
 
 class DataActions {

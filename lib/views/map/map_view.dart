@@ -60,12 +60,12 @@ class _MapViewState extends ConsumerState<MapView> {
     });
   }
 
-  /// Setup telemetry listening from repository
+  /// Setup telemetry listening from data manager
   void _setupTelemetryListening() {
-    final repository = ref.read(telemetryRepositoryProvider);
+    final dataManager = ref.read(timeSeriesDataManagerProvider);
 
-    // Listen to telemetry data stream from the repository
-    _dataSubscription = repository.dataStream.listen((dataBuffers) {
+    // Listen to telemetry data stream from the data manager
+    _dataSubscription = dataManager.dataStream.listen((dataBuffers) {
       if (!mounted) return;
       _updateMapFromDataBuffers(dataBuffers);
     });
