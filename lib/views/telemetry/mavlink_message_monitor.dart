@@ -1,9 +1,9 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../services/mavlink_message_tracker.dart';
 
 import '../../providers/service_providers.dart';
+import '../../services/generic_message_tracker.dart';
 
 class MavlinkMessageMonitor extends ConsumerStatefulWidget {
   const MavlinkMessageMonitor({
@@ -31,7 +31,7 @@ class MavlinkMessageMonitor extends ConsumerStatefulWidget {
 
 class _MavlinkMessageMonitorState extends ConsumerState<MavlinkMessageMonitor> {
   static const double _baseMonitorWidth = 350.0;
-  Map<String, MessageStats> _messageStats = {};
+  Map<String, GenericMessageStats> _messageStats = {};
   StreamSubscription? _statsSubscription;
   final Set<String> _expandedMessages = {};
 
@@ -138,7 +138,7 @@ class _MavlinkMessageMonitorState extends ConsumerState<MavlinkMessageMonitor> {
   }
 
   Widget _buildMessageList(
-    List<MapEntry<String, MessageStats>> sortedMessages,
+    List<MapEntry<String, GenericMessageStats>> sortedMessages,
   ) {
     return ListView.builder(
       itemCount: sortedMessages.length,
@@ -155,10 +155,11 @@ class _MavlinkMessageMonitorState extends ConsumerState<MavlinkMessageMonitor> {
 
   Widget _buildMessageTile(
     String messageName,
-    MessageStats stats,
+    GenericMessageStats stats,
     bool isExpanded,
   ) {
-    final fields = stats.getMessageFields();
+    final registry = ref.read(mavlinkRegistryProvider);
+    final fields = stats.getFormattedFields(registry);
 
     return Card(
       margin: EdgeInsets.symmetric(

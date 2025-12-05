@@ -1,19 +1,19 @@
 import 'dart:async';
-import 'package:dart_mavlink/dialects/common.dart';
+
+import '../mavlink/mavlink.dart';
 import 'disposable.dart';
 
 /// Abstract interface for MAVLink data sources
 /// Provides a unified interface for both real MAVLink connections and spoofing
 abstract interface class IDataSource implements Disposable {
   /// Stream of incoming MAVLink messages
-  Stream<dynamic> get messageStream;
+  Stream<MavlinkMessage> get messageStream;
 
-  /// Stream for specific message types
-  Stream<Heartbeat> get heartbeatStream;
-  Stream<SysStatus> get sysStatusStream;
-  Stream<Attitude> get attitudeStream;
-  Stream<GlobalPositionInt> get globalPositionStream;
-  Stream<VfrHud> get vfrHudStream;
+  /// Get a filtered stream for a specific message name
+  Stream<MavlinkMessage> streamByName(String name);
+
+  /// Get a filtered stream for a specific message ID
+  Stream<MavlinkMessage> streamById(int id);
 
   /// Connection state
   bool get isConnected;

@@ -9,7 +9,15 @@
       "Bash(find:*)",
       "Bash(xargs ls:*)",
       "Bash(wc:*)",
-      "Bash(flutter pub run build_runner build:*)"
+      "Bash(flutter pub run build_runner build:*)",
+      "Bash(python:*)",
+      "WebSearch",
+      "Bash(pip show:*)",
+      "Bash(flutter pub get:*)",
+      "Bash(dir interface)",
+      "Bash(Get-Content .gitmodules)",
+      "Bash(git submodule:*)",
+      "Bash(git rm:*)"
     ],
     "deny": []
   }

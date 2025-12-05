@@ -1,9 +1,9 @@
 import 'dart:async';
 import 'dart:math' as math;
 import 'dart:typed_data';
-import 'package:dart_mavlink/mavlink.dart';
-import 'package:dart_mavlink/dialects/common.dart';
+
 import '../interfaces/i_byte_source.dart';
+import '../mavlink/mavlink.dart';
 
 /// Spoof implementation of IByteSource
 /// Generates fake MAVLink byte streams for testing without real hardware
@@ -11,6 +11,9 @@ import '../interfaces/i_byte_source.dart';
 class SpoofByteSource implements IByteSource {
   final int systemId;
   final int componentId;
+  final MavlinkMetadataRegistry _registry;
+
+  late final MavlinkFrameBuilder _frameBuilder;
 
   Timer? _fastTelemetryTimer;
   Timer? _slowTelemetryTimer;
@@ -41,9 +44,12 @@ class SpoofByteSource implements IByteSource {
   double _rpmDirection = 1.0;
 
   SpoofByteSource({
+    required MavlinkMetadataRegistry registry,
     this.systemId = 1,
     this.componentId = 1,
-  });
+  }) : _registry = registry {
+    _frameBuilder = MavlinkFrameBuilder(_registry);
+  }
 
   @override
   Stream<Uint8List> get bytes => _bytesController.stream;
@@ -93,18 +99,20 @@ class SpoofByteSource implements IByteSource {
     _bytesController.close();
   }
 
-  void _emitMessage(MavlinkMessage message) {
+  void _emitMessage(String messageName, Map<String, dynamic> values) {
     if (!_isConnected || _bytesController.isClosed) return;
 
-    final frame = MavlinkFrame.v2(
-      _sequenceNumber++,
-      systemId,
-      componentId,
-      message,
+    final frame = _frameBuilder.buildFrame(
+      messageName: messageName,
+      values: values,
+      sequence: _sequenceNumber++,
+      systemId: systemId,
+      componentId: componentId,
     );
 
-    final bytes = frame.serialize();
-    _bytesController.add(Uint8List.fromList(bytes));
+    if (frame != null) {
+      _bytesController.add(frame);
+    }
   }
 
   void _generateFastTelemetry() {
@@ -166,37 +174,39 @@ class SpoofByteSource implements IByteSource {
     }
     _rpm = _rpm.clamp(1000.0, 8000.0);
 
-    // Generate messages
-    _emitMessage(GlobalPositionInt(
-      timeBootMs: now,
-      lat: (_latitude * 1e7).round(),
-      lon: (_longitude * 1e7).round(),
-      alt: (_altitude * 1000).round(),
-      relativeAlt: (_altitude * 1000).round(),
-      vx: (_groundSpeed * math.cos(headingRadians) * 100).round(),
-      vy: (_groundSpeed * math.sin(headingRadians) * 100).round(),
-      vz: 0,
-      hdg: (_heading * 100).round(),
-    ));
+    // Generate GLOBAL_POSITION_INT
+    _emitMessage('GLOBAL_POSITION_INT', {
+      'time_boot_ms': now,
+      'lat': (_latitude * 1e7).round(),
+      'lon': (_longitude * 1e7).round(),
+      'alt': (_altitude * 1000).round(),
+      'relative_alt': (_altitude * 1000).round(),
+      'vx': (_groundSpeed * math.cos(headingRadians) * 100).round(),
+      'vy': (_groundSpeed * math.sin(headingRadians) * 100).round(),
+      'vz': 0,
+      'hdg': (_heading * 100).round(),
+    });
 
-    _emitMessage(Attitude(
-      timeBootMs: now,
-      roll: _roll * math.pi / 180.0,
-      pitch: _pitch * math.pi / 180.0,
-      yaw: _yaw,
-      rollspeed: 0.0,
-      pitchspeed: 0.0,
-      yawspeed: 0.0,
-    ));
+    // Generate ATTITUDE
+    _emitMessage('ATTITUDE', {
+      'time_boot_ms': now,
+      'roll': _roll * math.pi / 180.0,
+      'pitch': _pitch * math.pi / 180.0,
+      'yaw': _yaw,
+      'rollspeed': 0.0,
+      'pitchspeed': 0.0,
+      'yawspeed': 0.0,
+    });
 
-    _emitMessage(VfrHud(
-      airspeed: _groundSpeed,
-      groundspeed: _groundSpeed,
-      heading: _heading.round(),
-      throttle: 50 + (DateTime.now().millisecond % 40 - 20),
-      alt: _altitude,
-      climb: (DateTime.now().millisecond % 100 - 50) / 50.0,
-    ));
+    // Generate VFR_HUD
+    _emitMessage('VFR_HUD', {
+      'airspeed': _groundSpeed,
+      'groundspeed': _groundSpeed,
+      'heading': _heading.round(),
+      'throttle': 50 + (DateTime.now().millisecond % 40 - 20),
+      'alt': _altitude,
+      'climb': (DateTime.now().millisecond % 100 - 50) / 50.0,
+    });
   }
 
   void _generateSlowTelemetry() {
@@ -205,37 +215,35 @@ class SpoofByteSource implements IByteSource {
     _batteryVoltage = 12.6 + (DateTime.now().millisecond % 100 - 50) / 1000.0;
     _batteryVoltage = _batteryVoltage.clamp(10.0, 13.0);
 
-    _emitMessage(SysStatus(
-      onboardControlSensorsPresent: 0x7FF,
-      onboardControlSensorsEnabled: 0x7FF,
-      onboardControlSensorsHealth: 0x7FF,
-      load: 100,
-      voltageBattery: (_batteryVoltage * 1000).round(),
-      currentBattery: -1,
-      batteryRemaining: 85,
-      dropRateComm: 0,
-      errorsComm: 0,
-      errorsCount1: 0,
-      errorsCount2: 0,
-      errorsCount3: 0,
-      errorsCount4: 0,
-      onboardControlSensorsPresentExtended: 0,
-      onboardControlSensorsEnabledExtended: 0,
-      onboardControlSensorsHealthExtended: 0,
-    ));
+    _emitMessage('SYS_STATUS', {
+      'onboard_control_sensors_present': 0x7FF,
+      'onboard_control_sensors_enabled': 0x7FF,
+      'onboard_control_sensors_health': 0x7FF,
+      'load': 100,
+      'voltage_battery': (_batteryVoltage * 1000).round(),
+      'current_battery': -1,
+      'battery_remaining': 85,
+      'drop_rate_comm': 0,
+      'errors_comm': 0,
+      'errors_count1': 0,
+      'errors_count2': 0,
+      'errors_count3': 0,
+      'errors_count4': 0,
+    });
   }
 
   void _generateHeartbeat() {
     if (!_isConnected) return;
 
-    _emitMessage(Heartbeat(
-      type: mavTypeGroundRover,
-      autopilot: mavAutopilotGeneric,
-      baseMode: 0,
-      customMode: 0,
-      systemStatus: 0,
-      mavlinkVersion: 3,
-    ));
+    // MAV_TYPE_GROUND_ROVER = 10, MAV_AUTOPILOT_GENERIC = 0
+    _emitMessage('HEARTBEAT', {
+      'type': 10, // MAV_TYPE_GROUND_ROVER
+      'autopilot': 0, // MAV_AUTOPILOT_GENERIC
+      'base_mode': 0,
+      'custom_mode': 0,
+      'system_status': 0,
+      'mavlink_version': 3,
+    });
   }
 
   // Expose simulation values for dashboard compatibility

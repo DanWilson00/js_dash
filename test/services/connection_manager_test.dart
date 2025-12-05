@@ -1,15 +1,34 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:js_dash/core/connection_config.dart';
 import 'package:js_dash/core/connection_status.dart';
+import 'package:js_dash/mavlink/mavlink.dart';
 import 'package:js_dash/services/connection_manager.dart';
 
 void main() {
   group('ConnectionManager', () {
     late ConnectionManager connectionManager;
+    late MavlinkMetadataRegistry registry;
 
     setUp(() {
-      // Use injected constructor with null tracker for testing
-      connectionManager = ConnectionManager.injected(null);
+      registry = MavlinkMetadataRegistry();
+      // Load minimal test metadata
+      registry.loadFromJsonString('''
+{
+  "schema_version": "1.0.0",
+  "enums": {},
+  "messages": {
+    "0": {
+      "id": 0,
+      "name": "HEARTBEAT",
+      "description": "Heartbeat",
+      "crc_extra": 50,
+      "encoded_length": 9,
+      "fields": []
+    }
+  }
+}
+''');
+      connectionManager = ConnectionManager.injected(registry, null);
     });
 
     tearDown(() {
@@ -55,7 +74,7 @@ void main() {
 
       final spoofConfig = ConnectionManager.createSpoofConfig();
 
-      // Attempt connection (may fail due to lack of real spoof service setup, but should emit status)
+      // Attempt connection
       await connectionManager.connect(spoofConfig);
 
       // Give some time for async operations

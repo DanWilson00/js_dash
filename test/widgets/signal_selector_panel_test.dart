@@ -1,25 +1,49 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:js_dash/mavlink/mavlink.dart';
 import 'package:js_dash/models/plot_configuration.dart';
 import 'package:js_dash/views/telemetry/signal_selector_panel.dart';
 import 'package:js_dash/services/timeseries_data_manager.dart';
-import 'package:js_dash/services/mavlink_message_tracker.dart';
+import 'package:js_dash/services/generic_message_tracker.dart';
 import 'package:js_dash/providers/service_providers.dart';
 
 void main() {
   group('SignalSelectorPanel Widget Tests', () {
     late TimeSeriesDataManager dataManager;
-    late MavlinkMessageTracker tracker;
+    late MavlinkMetadataRegistry registry;
+    late GenericMessageTracker tracker;
 
     setUp(() {
-      tracker = MavlinkMessageTracker();
-      dataManager = TimeSeriesDataManager.injected(tracker, null);
+      registry = MavlinkMetadataRegistry();
+      registry.loadFromJsonString('''
+{
+  "schema_version": "1.0.0",
+  "enums": {},
+  "messages": {
+    "30": {
+      "id": 30,
+      "name": "ATTITUDE",
+      "description": "Attitude",
+      "crc_extra": 39,
+      "encoded_length": 28,
+      "fields": [
+        {"name": "time_boot_ms", "type": "uint32_t", "base_type": "uint32_t", "offset": 0, "size": 4, "array_length": 1, "description": "", "extension": false},
+        {"name": "roll", "type": "float", "base_type": "float", "offset": 4, "size": 4, "array_length": 1, "description": "", "extension": false},
+        {"name": "pitch", "type": "float", "base_type": "float", "offset": 8, "size": 4, "array_length": 1, "description": "", "extension": false}
+      ]
+    }
+  }
+}
+''');
+      tracker = GenericMessageTracker(registry);
+      tracker.startTracking();
+      dataManager = TimeSeriesDataManager.injected(tracker, null, null);
     });
 
     tearDown(() {
       dataManager.dispose();
-      tracker.dispose();
+      tracker.stopTracking();
     });
 
     Widget buildTestWidget({

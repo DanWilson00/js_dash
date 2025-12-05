@@ -1,20 +1,44 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:js_dash/mavlink/mavlink.dart';
+import 'package:js_dash/services/generic_message_tracker.dart';
 import 'package:js_dash/services/timeseries_data_manager.dart';
-import 'package:js_dash/services/mavlink_message_tracker.dart';
 
 void main() {
   group('TimeSeriesDataManager', () {
     late TimeSeriesDataManager dataManager;
-    late MavlinkMessageTracker tracker;
+    late MavlinkMetadataRegistry registry;
+    late GenericMessageTracker tracker;
 
     setUp(() {
-      tracker = MavlinkMessageTracker();
-      dataManager = TimeSeriesDataManager.injected(tracker, null);
+      registry = MavlinkMetadataRegistry();
+      // Load minimal test metadata
+      registry.loadFromJsonString('''
+{
+  "schema_version": "1.0.0",
+  "enums": {},
+  "messages": {
+    "0": {
+      "id": 0,
+      "name": "HEARTBEAT",
+      "description": "Heartbeat",
+      "crc_extra": 50,
+      "encoded_length": 9,
+      "fields": [
+        {"name": "custom_mode", "type": "uint32_t", "base_type": "uint32_t", "offset": 0, "size": 4, "array_length": 1, "description": "", "extension": false},
+        {"name": "type", "type": "uint8_t", "base_type": "uint8_t", "offset": 4, "size": 1, "array_length": 1, "description": "", "extension": false}
+      ]
+    }
+  }
+}
+''');
+      tracker = GenericMessageTracker(registry);
+      tracker.startTracking();
+      dataManager = TimeSeriesDataManager.injected(tracker, null, null);
     });
 
     tearDown(() {
       dataManager.dispose();
-      tracker.dispose();
+      tracker.stopTracking();
     });
 
     test('should start and stop tracking', () {
@@ -38,7 +62,7 @@ void main() {
     });
 
     test('should get field data', () {
-      final data = dataManager.getFieldData('HEARTBEAT', 'Type');
+      final data = dataManager.getFieldData('HEARTBEAT', 'type');
       expect(data, isA<List>());
       expect(data, isEmpty);
     });

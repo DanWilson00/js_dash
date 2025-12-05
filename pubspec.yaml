@@ -31,10 +31,6 @@ dependencies:
   flutter:
     sdk: flutter
 
-  # The RUNTIME ENGINE for handling MAVLink communication
-  # This is used in your main application code.
-  dart_mavlink: ^0.1.0 # Use the latest version from pub.dev
-
   # Charting libraries for time-series plots
   fl_chart: 1.0.0
   
@@ -97,10 +93,9 @@ flutter:
   shaders:
     - shaders/grid_terrain.frag
 
-  # To add assets to your application, add an assets section, like this:
-  # assets:
-  #   - images/a_dot_burr.jpeg
-  #   - images/a_dot_ham.jpeg
+  # MAVLink dialect metadata files
+  assets:
+    - assets/mavlink_common.json
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images

@@ -1,14 +1,14 @@
 import 'dart:async';
-import 'package:dart_mavlink/mavlink_message.dart';
-import 'package:dart_mavlink/dialects/common.dart';
+
 import '../core/circular_buffer.dart';
 import '../core/timeseries_point.dart';
 import '../interfaces/disposable.dart';
 import '../interfaces/i_data_repository.dart';
 import '../interfaces/i_data_source.dart';
+import '../mavlink/mavlink.dart';
 
 import 'connection_manager.dart';
-import 'mavlink_message_tracker.dart';
+import 'generic_message_tracker.dart';
 import 'settings_manager.dart';
 
 class TimeSeriesDataManager implements IDataRepository, Disposable {
@@ -35,7 +35,7 @@ class TimeSeriesDataManager implements IDataRepository, Disposable {
   StreamSubscription? _messageSubscription;
   StreamSubscription? _dataSourceSubscription;
   StreamSubscription? _connectionStatusSubscription;
-  MavlinkMessageTracker? _tracker;
+  GenericMessageTracker? _tracker;
   ConnectionManager? _connectionManager;
   bool _isTracking = false;
   bool _isPaused = false;
@@ -45,15 +45,16 @@ class TimeSeriesDataManager implements IDataRepository, Disposable {
   // Buffer configuration - defaults that can be overridden by settings
   int _currentBufferSize = 2000; // ~10 minutes at 3Hz, covers 5m window + margin
   Duration _currentMaxAge = const Duration(minutes: 10);
-  
+
   // Performance optimizations
   static const int maxFieldCount = 500; // Limit field discovery to prevent unbounded growth
 
   @override
   Stream<Map<String, CircularBuffer>> get dataStream => _dataController.stream;
-  
+
   /// Stream of message statistics from the internal tracker
-  Stream<Map<String, MessageStats>> get messageStatsStream => _tracker?.statsStream ?? const Stream.empty();
+  Stream<Map<String, GenericMessageStats>> get messageStatsStream =>
+      _tracker?.statsStream ?? const Stream.empty();
 
   @override
   void startTracking([SettingsManager? settingsManager]) {
@@ -67,20 +68,23 @@ class TimeSeriesDataManager implements IDataRepository, Disposable {
       settingsManager.addListener(_updateFromSettings);
     }
 
-    _tracker = MavlinkMessageTracker();
-    _tracker!.startTracking();
-    _messageSubscription = _tracker!.statsStream.listen((messageStats) {
-      _processMessageUpdates(messageStats);
-    });
+    // Note: _tracker should be injected, not created here
+    // This method is kept for backward compatibility
+    _tracker?.startTracking();
+    if (_tracker != null) {
+      _messageSubscription = _tracker!.statsStream.listen((messageStats) {
+        _processMessageUpdates(messageStats);
+      });
+    }
   }
 
   void _updateFromSettings() {
     if (_settingsManager == null) return;
-    
+
     final performance = _settingsManager!.performance;
     _currentBufferSize = performance.dataBufferSize;
     _currentMaxAge = Duration(minutes: performance.dataRetentionMinutes);
-    
+
     // Note: Cannot dynamically resize existing CircularBuffers
     // New buffers will use the updated size
   }
@@ -91,7 +95,6 @@ class TimeSeriesDataManager implements IDataRepository, Disposable {
     _messageSubscription?.cancel();
     _messageSubscription = null;
     _tracker?.stopTracking();
-    _tracker = null;
     _settingsManager?.removeListener(_updateFromSettings);
     _settingsManager = null;
   }
@@ -191,9 +194,9 @@ class TimeSeriesDataManager implements IDataRepository, Disposable {
     _connectionManager?.resume();
   }
 
-  void _processMessageUpdates(Map<String, MessageStats> messageStats) {
+  void _processMessageUpdates(Map<String, GenericMessageStats> messageStats) {
     if (_isPaused) return; // Don't process new data when paused
-    
+
     final now = DateTime.now();
     bool hasNewData = false;
     final updatedBuffers = <String, CircularBuffer>{};
@@ -201,42 +204,20 @@ class TimeSeriesDataManager implements IDataRepository, Disposable {
     for (final entry in messageStats.entries) {
       final messageName = entry.key;
       final stats = entry.value;
-      
+
       if (stats.lastMessage != null) {
-        // Extract raw numeric values directly from the MAVLink message for dashboard
-        final rawFields = _extractRawMessageFields(messageName, stats.lastMessage!);
-        
+        // Extract raw numeric values directly from the message
+        final rawFields = _extractRawMessageFields(stats.lastMessage!);
+
         for (final field in rawFields.entries) {
           final fieldKey = '$messageName.${field.key}';
-          
+
           // Skip if we've reached field limit (prevent unbounded growth)
           if (_dataBuffers.length >= maxFieldCount && !_dataBuffers.containsKey(fieldKey)) {
             continue;
           }
-          
+
           final value = field.value;
-          if (value != null) {
-            _dataBuffers.putIfAbsent(fieldKey, () => CircularBuffer(_currentBufferSize));
-            _dataBuffers[fieldKey]!.add(TimeSeriesPoint(now, value));
-            updatedBuffers[fieldKey] = _dataBuffers[fieldKey]!;
-            hasNewData = true;
-          }
-        }
-        
-        // Also extract formatted fields for backward compatibility with plotting
-        // These have different field names (capitalized, with units) than raw fields
-        final formattedFields = stats.getMessageFields();
-        
-        for (final field in formattedFields.entries) {
-          final fieldKey = '$messageName.${field.key}';
-          
-          // Skip if we've reached field limit (prevent unbounded growth)
-          if (_dataBuffers.length >= maxFieldCount && !_dataBuffers.containsKey(fieldKey)) {
-            continue;
-          }
-          
-          final value = _parseNumericValue(field.value);
-          
           if (value != null) {
             _dataBuffers.putIfAbsent(fieldKey, () => CircularBuffer(_currentBufferSize));
             _dataBuffers[fieldKey]!.add(TimeSeriesPoint(now, value));
@@ -260,73 +241,30 @@ class TimeSeriesDataManager implements IDataRepository, Disposable {
 
   void _cleanupOldData(DateTime now) {
     final cutoff = now.subtract(_currentMaxAge);
-    
+
     for (final buffer in _dataBuffers.values) {
       buffer.removeOldData(cutoff);
     }
   }
 
-  /// Parse numeric values from formatted strings (for backward compatibility)
-  double? _parseNumericValue(dynamic value) {
-    if (value is num) {
-      return value.toDouble();
-    } else if (value is String) {
-      // First try direct parse
-      final result = double.tryParse(value);
-      if (result != null) return result;
-      
-      // Try removing units and symbols
-      final cleaned = value.replaceAll(RegExp(r'[^\d\.\-eE\+]'), '');
-      return double.tryParse(cleaned);
-    }
-    return null;
-  }
-
-  /// Extract raw numeric fields directly from MAVLink messages
-  Map<String, double?> _extractRawMessageFields(String messageName, MavlinkMessage message) {
+  /// Extract raw numeric fields from MavlinkMessage using metadata
+  Map<String, double?> _extractRawMessageFields(MavlinkMessage message) {
     final fields = <String, double?>{};
-    
-    if (message is Heartbeat) {
-      fields['type'] = message.type.toDouble();
-      fields['autopilot'] = message.autopilot.toDouble();
-      fields['baseMode'] = message.baseMode.toDouble();
-      fields['customMode'] = message.customMode.toDouble();
-      fields['systemStatus'] = message.systemStatus.toDouble();
-      fields['mavlinkVersion'] = message.mavlinkVersion.toDouble();
-    } else if (message is SysStatus) {
-      fields['voltageBattery'] = message.voltageBattery.toDouble();
-      fields['currentBattery'] = message.currentBattery.toDouble();
-      fields['batteryRemaining'] = message.batteryRemaining.toDouble();
-      fields['load'] = message.load.toDouble();
-      fields['dropRateComm'] = message.dropRateComm.toDouble();
-      fields['errorsComm'] = message.errorsComm.toDouble();
-    } else if (message is Attitude) {
-      fields['roll'] = message.roll;
-      fields['pitch'] = message.pitch;
-      fields['yaw'] = message.yaw;
-      fields['rollspeed'] = message.rollspeed;
-      fields['pitchspeed'] = message.pitchspeed;
-      fields['yawspeed'] = message.yawspeed;
-      fields['timeBootMs'] = message.timeBootMs.toDouble();
-    } else if (message is GlobalPositionInt) {
-      fields['lat'] = message.lat.toDouble();
-      fields['lon'] = message.lon.toDouble();
-      fields['alt'] = message.alt.toDouble();
-      fields['relativeAlt'] = message.relativeAlt.toDouble();
-      fields['vx'] = message.vx.toDouble();
-      fields['vy'] = message.vy.toDouble();
-      fields['vz'] = message.vz.toDouble();
-      fields['hdg'] = message.hdg.toDouble();
-      fields['timeBootMs'] = message.timeBootMs.toDouble();
-    } else if (message is VfrHud) {
-      fields['airspeed'] = message.airspeed;
-      fields['groundspeed'] = message.groundspeed;
-      fields['heading'] = message.heading.toDouble();
-      fields['throttle'] = message.throttle.toDouble();
-      fields['alt'] = message.alt;
-      fields['climb'] = message.climb;
+
+    for (final entry in message.values.entries) {
+      final value = entry.value;
+      if (value is num) {
+        fields[entry.key] = value.toDouble();
+      } else if (value is List) {
+        // For arrays, extract individual elements
+        for (int i = 0; i < value.length; i++) {
+          if (value[i] is num) {
+            fields['${entry.key}[$i]'] = (value[i] as num).toDouble();
+          }
+        }
+      }
     }
-    
+
     return fields;
   }
 
@@ -340,7 +278,7 @@ class TimeSeriesDataManager implements IDataRepository, Disposable {
   List<String> getAvailableFields() {
     return _dataBuffers.keys.toList()..sort();
   }
-  
+
   @override
   void pause() {
     _isPaused = true;
@@ -349,19 +287,19 @@ class TimeSeriesDataManager implements IDataRepository, Disposable {
       _dataController.add(Map.from(_dataBuffers));
     }
   }
-  
+
   @override
   void resume() {
     _isPaused = false;
-    // Emit immediate event to notify listeners of pause state change  
+    // Emit immediate event to notify listeners of pause state change
     if (!_dataController.isClosed) {
       _dataController.add(Map.from(_dataBuffers));
     }
   }
-  
+
   @override
   bool get isPaused => _isPaused;
-  
+
   @override
   void clearAllData() {
     _dataBuffers.clear();
@@ -403,10 +341,10 @@ class TimeSeriesDataManager implements IDataRepository, Disposable {
     final key = '$messageType.$fieldName';
     final now = DateTime.now();
     final point = TimeSeriesPoint(now, value);
-    
+
     _dataBuffers.putIfAbsent(key, () => CircularBuffer(_currentBufferSize));
     _dataBuffers[key]!.add(point);
-    
+
     if (!_dataController.isClosed) {
       _dataController.add(Map.from(_dataBuffers));
     }
