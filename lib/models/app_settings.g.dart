@@ -68,6 +68,7 @@ PlotSettings _$PlotSettingsFromJson(Map<String, dynamic> json) => PlotSettings(
   selectedTabId: json['selectedTabId'] as String? ?? 'main',
   timeWindow: json['timeWindow'] as String? ?? '1 Minute',
   messagePanelWidth: (json['messagePanelWidth'] as num?)?.toDouble() ?? 350.0,
+  propertiesPanelVisible: json['propertiesPanelVisible'] as bool? ?? false,
 );
 
 Map<String, dynamic> _$PlotSettingsToJson(PlotSettings instance) =>
@@ -76,17 +77,14 @@ Map<String, dynamic> _$PlotSettingsToJson(PlotSettings instance) =>
       'selectedTabId': instance.selectedTabId,
       'timeWindow': instance.timeWindow,
       'messagePanelWidth': instance.messagePanelWidth,
+      'propertiesPanelVisible': instance.propertiesPanelVisible,
     };
 
 ConnectionSettings _$ConnectionSettingsFromJson(Map<String, dynamic> json) =>
     ConnectionSettings(
-      connectionType: json['connectionType'] as String,
-      mavlinkHost: json['mavlinkHost'] as String,
-      mavlinkPort: (json['mavlinkPort'] as num).toInt(),
       serialPort: json['serialPort'] as String,
       serialBaudRate: (json['serialBaudRate'] as num).toInt(),
       enableSpoofing: json['enableSpoofing'] as bool,
-      spoofMode: json['spoofMode'] as String,
       spoofBaudRate: (json['spoofBaudRate'] as num).toInt(),
       spoofSystemId: (json['spoofSystemId'] as num).toInt(),
       spoofComponentId: (json['spoofComponentId'] as num).toInt(),
@@ -96,13 +94,9 @@ ConnectionSettings _$ConnectionSettingsFromJson(Map<String, dynamic> json) =>
 
 Map<String, dynamic> _$ConnectionSettingsToJson(ConnectionSettings instance) =>
     <String, dynamic>{
-      'connectionType': instance.connectionType,
-      'mavlinkHost': instance.mavlinkHost,
-      'mavlinkPort': instance.mavlinkPort,
       'serialPort': instance.serialPort,
       'serialBaudRate': instance.serialBaudRate,
       'enableSpoofing': instance.enableSpoofing,
-      'spoofMode': instance.spoofMode,
       'spoofBaudRate': instance.spoofBaudRate,
       'spoofSystemId': instance.spoofSystemId,
       'spoofComponentId': instance.spoofComponentId,

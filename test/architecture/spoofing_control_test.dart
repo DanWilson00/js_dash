@@ -3,8 +3,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:js_dash/core/connection_status.dart';
 import 'package:js_dash/providers/service_providers.dart';
 import 'package:js_dash/services/connection_manager.dart';
+import 'package:js_dash/services/mavlink_service.dart';
 import 'package:js_dash/services/mavlink_message_tracker.dart';
-import 'package:js_dash/services/usb_serial_spoof_service.dart';
 
 void main() {
   late ProviderContainer container;
@@ -36,9 +36,9 @@ void main() {
     // Verify connection state
     expect(connectionManager.currentStatus.state, ConnectionState.connected);
 
-    // Verify data source type
+    // Verify data source type - now using MavlinkService with SpoofByteSource
     final dataSource = connectionManager.currentDataSource;
-    expect(dataSource, isA<UsbSerialSpoofService>());
+    expect(dataSource, isA<MavlinkService>());
     expect(dataSource!.isConnected, isTrue);
   });
 
@@ -66,9 +66,8 @@ void main() {
     await connectionManager.connect(spoofConfig);
     expect(connectionManager.currentStatus.isConnected, isTrue);
 
-    final spoofService =
-        connectionManager.currentDataSource as UsbSerialSpoofService;
-    expect(spoofService, isNotNull);
+    final service = connectionManager.currentDataSource as MavlinkService;
+    expect(service, isNotNull);
 
     await connectionManager.disconnect();
     expect(connectionManager.currentStatus.isConnected, isFalse);

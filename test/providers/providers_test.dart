@@ -8,7 +8,7 @@ import 'package:js_dash/providers/service_providers.dart';
 import 'package:js_dash/providers/ui_providers.dart';
 import 'package:js_dash/providers/action_providers.dart';
 import 'package:js_dash/services/connection_manager.dart';
-import 'package:js_dash/services/telemetry_repository.dart';
+import 'package:js_dash/services/timeseries_data_manager.dart';
 import 'package:js_dash/services/settings_manager.dart';
 
 void main() {
@@ -29,10 +29,10 @@ void main() {
       expect(connectionManager, isA<ConnectionManager>());
     });
 
-    test('should provide telemetry repository', () {
-      final repository = container.read(telemetryRepositoryProvider);
-      expect(repository, isA<IDataRepository>());
-      expect(repository, isA<TelemetryRepository>());
+    test('should provide time series data manager', () {
+      final dataManager = container.read(timeSeriesDataManagerProvider);
+      expect(dataManager, isA<IDataRepository>());
+      expect(dataManager, isA<TimeSeriesDataManager>());
     });
 
     test('should provide settings manager', () {
@@ -100,49 +100,42 @@ void main() {
     test('should provide connection form state', () {
       final formState = container.read(connectionFormProvider);
       expect(formState, isA<ConnectionFormState>());
-      expect(formState.udpHost, '127.0.0.1');
-      expect(formState.udpPort, 14550);
-      expect(formState.connectionType, 'udp');
+      expect(formState.serialPort, '');
+      expect(formState.serialBaudRate, 115200);
       expect(formState.enableSpoofing, false);
     });
 
     test('should update connection form state', () {
       final notifier = container.read(connectionFormProvider.notifier);
 
-      notifier.updateUdpHost('192.168.1.100');
-      notifier.updateUdpPort(14551);
-      notifier.updateConnectionType('serial');
+      notifier.updateSerialPort('/dev/ttyUSB0');
+      notifier.updateSerialBaudRate(57600);
       notifier.updateEnableSpoofing(true);
 
       final updatedState = container.read(connectionFormProvider);
-      expect(updatedState.udpHost, '192.168.1.100');
-      expect(updatedState.udpPort, 14551);
-      expect(updatedState.connectionType, 'serial');
+      expect(updatedState.serialPort, '/dev/ttyUSB0');
+      expect(updatedState.serialBaudRate, 57600);
       expect(updatedState.enableSpoofing, true);
     });
 
     test('should validate connection form', () {
       final notifier = container.read(connectionFormProvider.notifier);
 
-      // Valid UDP configuration
-      notifier.updateUdpHost('127.0.0.1');
-      notifier.updateUdpPort(14550);
-      notifier.updateConnectionType('udp');
-      expect(container.read(connectionFormProvider).isValid, true);
-
-      // Invalid UDP port
-      notifier.updateUdpPort(0);
-      expect(container.read(connectionFormProvider).isValid, false);
-
       // Valid serial configuration
-      notifier.updateConnectionType('serial');
       notifier.updateSerialPort('/dev/ttyUSB0');
       notifier.updateSerialBaudRate(115200);
       expect(container.read(connectionFormProvider).isValid, true);
 
-      // Invalid serial port
+      // Invalid serial port (empty)
       notifier.updateSerialPort('');
       expect(container.read(connectionFormProvider).isValid, false);
+
+      // Valid spoof configuration
+      notifier.updateEnableSpoofing(true);
+      notifier.updateSpoofSystemId(1);
+      notifier.updateSpoofComponentId(1);
+      notifier.updateSpoofBaudRate(57600);
+      expect(container.read(connectionFormProvider).isValid, true);
     });
 
     test('should provide theme', () {

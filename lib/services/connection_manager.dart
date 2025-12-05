@@ -7,22 +7,14 @@ import 'mavlink_message_tracker.dart';
 import '../interfaces/i_connection_manager.dart';
 import '../interfaces/i_data_source.dart';
 import 'mavlink_service.dart';
-import 'usb_serial_spoof_service.dart';
+import 'serial_byte_source.dart';
+import 'spoof_byte_source.dart';
 
 /// Central connection manager that handles different MAVLink data sources
 /// This service abstracts connection details from UI components and provides
 /// a unified interface for managing connections regardless of type
 class ConnectionManager implements IConnectionManager, Disposable {
-  // Singleton support for backward compatibility - will be deprecated
-  static ConnectionManager? _instance;
-  factory ConnectionManager() => _instance ??= ConnectionManager._internal();
-  ConnectionManager._internal() : _injectedTracker = null;
-  
-  // New constructor for dependency injection
   ConnectionManager.injected(this._injectedTracker);
-  
-  // For testing - allows creating fresh instances
-  ConnectionManager.forTesting() : _injectedTracker = null;
 
   final MavlinkMessageTracker? _injectedTracker;
 
@@ -33,7 +25,7 @@ class ConnectionManager implements IConnectionManager, Disposable {
 
   DateTime? _lastDataReceived;
 
-  final StreamController<ConnectionStatus> _statusController = 
+  final StreamController<ConnectionStatus> _statusController =
       StreamController<ConnectionStatus>.broadcast();
 
   @override
@@ -41,11 +33,11 @@ class ConnectionManager implements IConnectionManager, Disposable {
 
   @override
   ConnectionStatus get currentStatus => ConnectionStatus(
-    state: _state,
-    message: _getStateMessage(),
-    timestamp: DateTime.now(),
-    errorDetails: _errorMessage,
-  );
+        state: _state,
+        message: _getStateMessage(),
+        timestamp: DateTime.now(),
+        errorDetails: _errorMessage,
+      );
 
   bool get isConnected => _state == ConnectionState.connected;
   bool get isConnecting => _state == ConnectionState.connecting;
@@ -70,18 +62,17 @@ class ConnectionManager implements IConnectionManager, Disposable {
 
     _updateState(ConnectionState.connecting);
     _clearError();
-    
+
     try {
       _currentDataSource = _createDataSource(config);
       _currentConfig = config;
-      
+
       // Initialize and connect the data source
       await _currentDataSource!.initialize();
       await _currentDataSource!.connect();
-      
+
       _updateState(ConnectionState.connected);
       return true;
-      
     } catch (e) {
       _setError('Connection failed: $e');
       _currentDataSource = null;
@@ -142,26 +133,30 @@ class ConnectionManager implements IConnectionManager, Disposable {
 
   /// Create appropriate data source based on configuration type
   IDataSource _createDataSource(ConnectionConfig config) {
+    final tracker = _injectedTracker ?? MavlinkMessageTracker();
+
     return switch (config) {
-      UdpConnectionConfig udpConfig => _createMavlinkService(udpConfig),
-      SerialConnectionConfig serialConfig => _createMavlinkService(serialConfig),
-      SpoofConnectionConfig spoofConfig => _createSpoofService(spoofConfig),
+      SerialConnectionConfig serialConfig => _createSerialService(serialConfig, tracker),
+      SpoofConnectionConfig spoofConfig => _createSpoofService(spoofConfig, tracker),
     };
   }
 
-  /// Create MAVLink service for UDP/Serial connections
-  IDataSource _createMavlinkService(ConnectionConfig config) {
-    // Create new instance for dependency injection
-    // Use injected tracker if available, otherwise create a new one (fallback for legacy/testing)
-    final tracker = _injectedTracker ?? MavlinkMessageTracker();
-    return MavlinkService(tracker: tracker);
+  /// Create MAVLink service with serial byte source
+  IDataSource _createSerialService(SerialConnectionConfig config, MavlinkMessageTracker tracker) {
+    final byteSource = SerialByteSource(
+      portName: config.port,
+      baudRate: config.baudRate,
+    );
+    return MavlinkService(byteSource: byteSource, tracker: tracker);
   }
 
-  /// Create spoof service based on configuration
-  IDataSource _createSpoofService(SpoofConnectionConfig config) {
-    // Create new instance - USB Serial Spoof Service as default
-    final tracker = _injectedTracker ?? MavlinkMessageTracker();
-    return UsbSerialSpoofService(tracker: tracker);
+  /// Create MAVLink service with spoof byte source
+  IDataSource _createSpoofService(SpoofConnectionConfig config, MavlinkMessageTracker tracker) {
+    final byteSource = SpoofByteSource(
+      systemId: config.systemId,
+      componentId: config.componentId,
+    );
+    return MavlinkService(byteSource: byteSource, tracker: tracker);
   }
 
   /// Update connection state and notify listeners
@@ -196,12 +191,12 @@ class ConnectionManager implements IConnectionManager, Disposable {
     return switch (_state) {
       ConnectionState.disconnected => 'Disconnected',
       ConnectionState.connecting => 'Connecting...',
-      ConnectionState.connected => 'Connected to ${_currentConfig?.toString() ?? 'unknown'}',
+      ConnectionState.connected =>
+        'Connected to ${_currentConfig?.toString() ?? 'unknown'}',
       ConnectionState.error => _errorMessage ?? 'Connection error',
       ConnectionState.paused => 'Paused',
     };
   }
-
 
   /// Get available serial ports (convenience method)
   static List<String> getAvailableSerialPorts() {
@@ -209,24 +204,17 @@ class ConnectionManager implements IConnectionManager, Disposable {
   }
 
   /// Create connection configurations (convenience methods)
-  static ConnectionConfig createUdpConfig({
-    String host = '127.0.0.1', 
-    int port = 14550
-  }) {
-    return UdpConnectionConfig(host: host, port: port);
-  }
-
   static ConnectionConfig createSerialConfig({
-    required String port, 
-    int baudRate = 115200
+    required String port,
+    int baudRate = 115200,
   }) {
     return SerialConnectionConfig(port: port, baudRate: baudRate);
   }
 
   static ConnectionConfig createSpoofConfig({
     int systemId = 1,
-    int componentId = 1, 
-    int baudRate = 57600
+    int componentId = 1,
+    int baudRate = 57600,
   }) {
     return SpoofConnectionConfig(
       systemId: systemId,
@@ -239,11 +227,5 @@ class ConnectionManager implements IConnectionManager, Disposable {
   void dispose() {
     disconnect();
     _statusController.close();
-  }
-
-  // For testing - reset singleton instance
-  static void resetInstanceForTesting() {
-    _instance?.dispose();
-    _instance = null;
   }
 }

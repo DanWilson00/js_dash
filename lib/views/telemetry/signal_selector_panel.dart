@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../models/plot_configuration.dart';
-import '../../services/timeseries_data_manager.dart';
+import '../../providers/service_providers.dart';
 
-class SignalSelectorPanel extends StatefulWidget {
+class SignalSelectorPanel extends ConsumerStatefulWidget {
   final List<PlotSignalConfiguration> activeSignals;
   final Function(String messageType, String fieldName) onSignalToggle;
   final ScalingMode scalingMode;
@@ -17,11 +18,10 @@ class SignalSelectorPanel extends StatefulWidget {
   });
 
   @override
-  State<SignalSelectorPanel> createState() => _SignalSelectorPanelState();
+  ConsumerState<SignalSelectorPanel> createState() => _SignalSelectorPanelState();
 }
 
-class _SignalSelectorPanelState extends State<SignalSelectorPanel> {
-  final TimeSeriesDataManager _dataManager = TimeSeriesDataManager();
+class _SignalSelectorPanelState extends ConsumerState<SignalSelectorPanel> {
   List<String> _availableFields = [];
   Set<String> _activeFieldKeys = {};
 
@@ -41,7 +41,8 @@ class _SignalSelectorPanelState extends State<SignalSelectorPanel> {
   }
 
   void _loadAvailableFields() {
-    _availableFields = _dataManager.getAvailableFields();
+    final dataManager = ref.read(timeSeriesDataManagerProvider);
+    _availableFields = dataManager.getAvailableFields();
     setState(() {});
   }
 

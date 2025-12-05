@@ -2,7 +2,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../services/connection_manager.dart';
 import '../services/mavlink_message_tracker.dart';
 import '../services/settings_manager.dart';
-import '../services/telemetry_repository.dart';
 import '../services/timeseries_data_manager.dart';
 import '../interfaces/i_data_source.dart';
 import '../core/connection_status.dart';
@@ -26,24 +25,14 @@ final connectionManagerProvider = Provider<ConnectionManager>((ref) {
 });
 
 /// Time Series Data Manager Provider
+/// This is the primary data repository for telemetry data
 final timeSeriesDataManagerProvider = Provider<TimeSeriesDataManager>((ref) {
   final tracker = ref.watch(mavlinkMessageTrackerProvider);
   final settingsManager = ref.watch(settingsManagerProvider);
-  final manager = TimeSeriesDataManager.injected(tracker, settingsManager);
+  final connectionManager = ref.watch(connectionManagerProvider);
+  final manager = TimeSeriesDataManager.injected(tracker, settingsManager, connectionManager);
   ref.onDispose(() => manager.dispose());
   return manager;
-});
-
-/// Telemetry Repository Provider
-final telemetryRepositoryProvider = Provider<TelemetryRepository>((ref) {
-  final connectionManager = ref.watch(connectionManagerProvider);
-  final timeSeriesManager = ref.watch(timeSeriesDataManagerProvider);
-  final repository = TelemetryRepository(
-    connectionManager: connectionManager,
-    timeSeriesManager: timeSeriesManager,
-  );
-  ref.onDispose(() => repository.dispose());
-  return repository;
 });
 
 /// Current Data Source Provider
@@ -76,6 +65,6 @@ final isConnectedProvider = Provider<bool>((ref) {
 
 /// Available Fields Provider
 final availableFieldsProvider = Provider<List<String>>((ref) {
-  final repository = ref.watch(telemetryRepositoryProvider);
-  return repository.getAvailableFields();
+  final dataManager = ref.watch(timeSeriesDataManagerProvider);
+  return dataManager.getAvailableFields();
 });

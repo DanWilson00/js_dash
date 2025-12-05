@@ -1,4 +1,5 @@
 import 'dart:math' as math;
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'dashboard_config.dart';
 
@@ -30,6 +31,64 @@ class HudCenterCluster extends StatelessWidget {
             height: size,
             child: Stack(
               children: [
+                // Glass morphism background panel
+                Positioned.fill(
+                  child: Container(
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      gradient: RadialGradient(
+                        center: const Alignment(-0.3, -0.3),
+                        colors: [
+                          Colors.white.withValues(alpha: 0.05),
+                          Colors.white.withValues(alpha: 0.02),
+                          Colors.transparent,
+                        ],
+                        stops: const [0.0, 0.7, 1.0],
+                      ),
+                      border: Border.all(
+                        color: Colors.white.withValues(alpha: 0.1),
+                        width: 1.5,
+                      ),
+                      boxShadow: [
+                        // Multiple shadow layers for depth
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.3),
+                          blurRadius: 30,
+                          spreadRadius: -5,
+                          offset: const Offset(0, 15),
+                        ),
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.1),
+                          blurRadius: 60,
+                          spreadRadius: -10,
+                          offset: const Offset(0, 30),
+                        ),
+                        // Inner highlight
+                        BoxShadow(
+                          color: Colors.white.withValues(alpha: 0.1),
+                          blurRadius: 20,
+                          spreadRadius: -15,
+                          offset: const Offset(-5, -5),
+                        ),
+                      ],
+                    ),
+                    child: ClipOval(
+                      child: BackdropFilter(
+                        filter: ui.ImageFilter.blur(sigmaX: 10, sigmaY: 10),
+                        child: Container(
+                          decoration: BoxDecoration(
+                            gradient: RadialGradient(
+                              colors: [
+                                Colors.white.withValues(alpha: 0.08),
+                                Colors.white.withValues(alpha: 0.03),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
                 // Attitude Indicator (Inner)
                 Positioned.fill(
                   child: CustomPaint(
@@ -44,47 +103,6 @@ class HudCenterCluster extends StatelessWidget {
                 Positioned.fill(
                   child: CustomPaint(
                     painter: RpmRingPainter(rpm: rpm, maxRpm: maxRpm),
-                  ),
-                ),
-                // Digital RPM Readout (Bottom Center)
-                Positioned(
-                  bottom: size * 0.15,
-                  left: 0,
-                  right: 0,
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        rpm.toStringAsFixed(0),
-                        style: TextStyle(
-                          color: DashboardConfig.textPrimary,
-                          fontSize: size * 0.08,
-                          fontWeight: FontWeight.w300,
-                          fontFamily: 'RobotoMono',
-                          shadows: const [
-                            Shadow(
-                              blurRadius: 20,
-                              color: DashboardConfig.primaryAccent,
-                            ),
-                            Shadow(
-                              blurRadius: 40,
-                              color: DashboardConfig.primaryAccent,
-                            ),
-                          ],
-                        ),
-                      ),
-                      Text(
-                        'RPM',
-                        style: TextStyle(
-                          color: DashboardConfig.textSecondary.withValues(
-                            alpha: 0.6,
-                          ),
-                          fontSize: size * 0.025,
-                          letterSpacing: 3.0,
-                          fontWeight: FontWeight.w200,
-                        ),
-                      ),
-                    ],
                   ),
                 ),
               ],
@@ -129,17 +147,19 @@ class AttitudePainter extends CustomPainter {
       height: size.height * 3,
     );
 
-    // Enhanced sky gradient
+    // Premium sky gradient with depth
     final skyPaint = Paint()
       ..shader =
           LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.center,
             colors: [
-              const Color(0xFF000814),
-              const Color(0xFF001D3D),
-              const Color(0xFF003566),
+              const Color(0xFF001122),  // Deep sky blue
+              const Color(0xFF002244),  // Mid sky
+              const Color(0xFF003366),  // Horizon sky
+              const Color(0xFF004488),  // Near horizon
             ],
+            stops: const [0.0, 0.3, 0.7, 1.0],
           ).createShader(
             Rect.fromLTWH(
               bgRect.left,
@@ -159,17 +179,19 @@ class AttitudePainter extends CustomPainter {
       skyPaint,
     );
 
-    // Enhanced ground gradient
+    // Premium ground gradient with texture
     final groundPaint = Paint()
       ..shader =
           LinearGradient(
             begin: Alignment.center,
             end: Alignment.bottomCenter,
             colors: [
-              const Color(0xFF2D1B00),
-              const Color(0xFF1A0F00),
-              const Color(0xFF0A0500),
+              const Color(0xFF3D2815),  // Horizon earth
+              const Color(0xFF2D1F10),  // Mid ground
+              const Color(0xFF1F160A),  // Deep ground
+              const Color(0xFF0F0A05),  // Shadow ground
             ],
+            stops: const [0.0, 0.3, 0.7, 1.0],
           ).createShader(
             Rect.fromLTWH(
               bgRect.left,
@@ -189,23 +211,36 @@ class AttitudePainter extends CustomPainter {
       groundPaint,
     );
 
-    // Horizon Line with glow
-    final horizonGlowPaint = Paint()
-      ..color = const Color(0xFF00D9FF).withValues(alpha: 0.3)
-      ..strokeWidth = 6
+    // Enhanced Horizon Line with premium glow
+    final horizonOuterGlowPaint = Paint()
+      ..color = const Color(0xFF00D9FF).withValues(alpha: 0.2)
+      ..strokeWidth = 12
       ..style = PaintingStyle.stroke
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8);
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 15);
 
     canvas.drawLine(
       Offset(-size.width * 2, pitchPixels),
       Offset(size.width * 2, pitchPixels),
-      horizonGlowPaint,
+      horizonOuterGlowPaint,
+    );
+
+    final horizonInnerGlowPaint = Paint()
+      ..color = const Color(0xFF00D9FF).withValues(alpha: 0.4)
+      ..strokeWidth = 6
+      ..style = PaintingStyle.stroke
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6);
+
+    canvas.drawLine(
+      Offset(-size.width * 2, pitchPixels),
+      Offset(size.width * 2, pitchPixels),
+      horizonInnerGlowPaint,
     );
 
     final horizonPaint = Paint()
-      ..color = const Color(0xFF00D9FF)
-      ..strokeWidth = 2
-      ..style = PaintingStyle.stroke;
+      ..color = const Color(0xFF00FFFF)
+      ..strokeWidth = 2.5
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round;
 
     canvas.drawLine(
       Offset(-size.width * 2, pitchPixels),
@@ -226,30 +261,54 @@ class AttitudePainter extends CustomPainter {
   }
 
   void _drawMetallicBezel(Canvas canvas, Offset center, double radius) {
-    // Outer ring - brushed metal effect
-    final outerPaint = Paint()
+    // Enhanced outer shadow for depth
+    final outerShadowPaint = Paint()
+      ..color = Colors.black.withValues(alpha: 0.4)
+      ..style = PaintingStyle.fill
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 12);
+    
+    canvas.drawCircle(center, radius + 12, outerShadowPaint);
+    
+    // Premium brushed metal bezel with multiple layers
+    final bezelPaint = Paint()
       ..shader = RadialGradient(
+        center: const Alignment(-0.3, -0.3),
         colors: [
+          const Color(0xFF4A4A4A),
+          const Color(0xFF3A3A3A),
           const Color(0xFF2A2A2A),
           const Color(0xFF1A1A1A),
           const Color(0xFF0A0A0A),
         ],
-        stops: const [0.0, 0.5, 1.0],
+        stops: const [0.0, 0.3, 0.5, 0.8, 1.0],
       ).createShader(Rect.fromCircle(center: center, radius: radius + 8));
 
-    canvas.drawCircle(center, radius + 8, outerPaint);
+    canvas.drawCircle(center, radius + 8, bezelPaint);
 
-    // Inner highlight
-    final highlightPaint = Paint()
-      ..shader = RadialGradient(
+    // Brushed metal texture effect
+    final brushPaint = Paint()
+      ..shader = LinearGradient(
+        begin: const Alignment(-1, -1),
+        end: const Alignment(1, 1),
         colors: [
-          const Color(0xFF4A4A4A).withValues(alpha: 0.3),
+          Colors.white.withValues(alpha: 0.2),
           Colors.transparent,
+          Colors.white.withValues(alpha: 0.1),
+          Colors.transparent,
+          Colors.white.withValues(alpha: 0.15),
         ],
-        stops: const [0.8, 1.0],
+        stops: const [0.0, 0.2, 0.5, 0.8, 1.0],
       ).createShader(Rect.fromCircle(center: center, radius: radius + 6));
 
-    canvas.drawCircle(center, radius + 6, highlightPaint);
+    canvas.drawCircle(center, radius + 6, brushPaint);
+    
+    // Inner rim with premium highlight
+    final innerRimPaint = Paint()
+      ..color = Colors.white.withValues(alpha: 0.3)
+      ..strokeWidth = 1.5
+      ..style = PaintingStyle.stroke;
+    
+    canvas.drawCircle(center, radius + 2, innerRimPaint);
   }
 
   void _drawPitchLadder(Canvas canvas, double pitchPixels, double radius) {
@@ -309,38 +368,62 @@ class AttitudePainter extends CustomPainter {
   }
 
   void _drawAircraftSymbol(Canvas canvas, Offset center, double radius) {
-    final paint = Paint()
-      ..color = const Color(0xFFFFAA00)
-      ..strokeWidth = 3
+    // Enhanced aircraft symbol with premium styling
+    final outerGlowPaint = Paint()
+      ..color = const Color(0xFFFFAA00).withValues(alpha: 0.3)
+      ..strokeWidth = 8
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 12);
+
+    final innerGlowPaint = Paint()
+      ..color = const Color(0xFFFFAA00).withValues(alpha: 0.6)
+      ..strokeWidth = 5
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 6);
+
+    final mainPaint = Paint()
+      ..color = const Color(0xFFFFCC00)
+      ..strokeWidth = 2.5
       ..style = PaintingStyle.stroke
       ..strokeCap = StrokeCap.round;
 
-    final glowPaint = Paint()
-      ..color = const Color(0xFFFFAA00).withValues(alpha: 0.5)
-      ..strokeWidth = 6
-      ..style = PaintingStyle.stroke
-      ..strokeCap = StrokeCap.round
+    final centerDotPaint = Paint()
+      ..color = const Color(0xFFFFCC00)
+      ..style = PaintingStyle.fill;
+
+    // Center dot with glow
+    final centerGlowPaint = Paint()
+      ..color = const Color(0xFFFFAA00).withValues(alpha: 0.6)
+      ..style = PaintingStyle.fill
       ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8);
+
+    canvas.drawCircle(center, 8, centerGlowPaint);
+    canvas.drawCircle(center, 4, centerDotPaint);
 
     final path = Path();
 
-    // Center dot
-    path.addOval(Rect.fromCircle(center: center, radius: 4));
+    // Enhanced wings with better geometry
+    path.moveTo(center.dx - 70, center.dy + 3);
+    path.lineTo(center.dx - 18, center.dy);
+    path.moveTo(center.dx + 18, center.dy);
+    path.lineTo(center.dx + 70, center.dy + 3);
 
-    // Wings - more aggressive angle
-    path.moveTo(center.dx - 60, center.dy + 5);
-    path.lineTo(center.dx - 15, center.dy);
-    path.moveTo(center.dx + 15, center.dy);
-    path.lineTo(center.dx + 60, center.dy + 5);
+    // Wing tips with slight upward angle
+    path.moveTo(center.dx - 70, center.dy + 3);
+    path.lineTo(center.dx - 70, center.dy + 12);
+    path.moveTo(center.dx + 70, center.dy + 3);
+    path.lineTo(center.dx + 70, center.dy + 12);
 
-    // Wing tips
-    path.moveTo(center.dx - 60, center.dy + 5);
-    path.lineTo(center.dx - 60, center.dy + 15);
-    path.moveTo(center.dx + 60, center.dy + 5);
-    path.lineTo(center.dx + 60, center.dy + 15);
+    // Center vertical reference line
+    path.moveTo(center.dx, center.dy - 15);
+    path.lineTo(center.dx, center.dy + 15);
 
-    canvas.drawPath(path, glowPaint);
-    canvas.drawPath(path, paint);
+    // Draw with multiple layers for premium effect
+    canvas.drawPath(path, outerGlowPaint);
+    canvas.drawPath(path, innerGlowPaint);
+    canvas.drawPath(path, mainPaint);
   }
 
   void _drawRollScale(Canvas canvas, Offset center, double radius) {
@@ -385,64 +468,187 @@ class RpmRingPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final center = Offset(size.width / 2, size.height / 2);
-    final radius = size.width / 2 - 15;
+    final outerRadius = size.width / 2 - 8;
+    final trackWidth = 24.0;
+    final innerRadius = outerRadius - trackWidth;
 
-    // Background Ring with carbon fiber texture effect
-    final bgPaint = Paint()
-      ..shader = RadialGradient(
-        colors: [
-          const Color(0xFF1A1A1A).withValues(alpha: 0.3),
-          const Color(0xFF0A0A0A).withValues(alpha: 0.5),
-        ],
-      ).createShader(Rect.fromCircle(center: center, radius: radius))
-      ..strokeWidth = 20
+    // Draw premium track background with multiple layers
+    _drawTrackBackground(canvas, center, outerRadius, innerRadius, trackWidth);
+    
+    // Draw graduated tick marks
+    _drawTickMarks(canvas, center, outerRadius, innerRadius);
+    
+    // Draw active RPM arc with enhanced styling
+    _drawActiveArc(canvas, center, outerRadius, innerRadius, trackWidth);
+    
+    // Add premium finishing touches
+    _drawFinishingTouches(canvas, center, outerRadius, innerRadius, trackWidth);
+  }
+
+  void _drawTrackBackground(Canvas canvas, Offset center, double outerRadius, double innerRadius, double trackWidth) {
+    final trackRect = Rect.fromCircle(center: center, radius: outerRadius - trackWidth/2);
+    
+    // Outer shadow for depth
+    final outerShadowPaint = Paint()
+      ..color = Colors.black.withValues(alpha: 0.4)
+      ..strokeWidth = trackWidth + 4
       ..style = PaintingStyle.stroke
-      ..strokeCap = StrokeCap.butt;
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8);
+    
+    canvas.drawCircle(center, outerRadius - trackWidth/2, outerShadowPaint);
+    
+    // Main track with brushed metal effect
+    final trackPaint = Paint()
+      ..strokeWidth = trackWidth
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.butt
+      ..shader = RadialGradient(
+        center: const Alignment(-0.3, -0.3),
+        colors: [
+          const Color(0xFF2A2A2A),
+          const Color(0xFF1A1A1A),
+          const Color(0xFF0F0F0F),
+          const Color(0xFF1A1A1A),
+          const Color(0xFF2A2A2A),
+        ],
+        stops: const [0.0, 0.3, 0.5, 0.7, 1.0],
+      ).createShader(trackRect);
+    
+    canvas.drawCircle(center, outerRadius - trackWidth/2, trackPaint);
+    
+    // Inner highlight
+    final highlightPaint = Paint()
+      ..strokeWidth = trackWidth - 4
+      ..style = PaintingStyle.stroke
+      ..shader = LinearGradient(
+        begin: const Alignment(-1, -1),
+        end: const Alignment(1, 1),
+        colors: [
+          Colors.white.withValues(alpha: 0.15),
+          Colors.transparent,
+          Colors.white.withValues(alpha: 0.05),
+        ],
+      ).createShader(trackRect);
+    
+    canvas.drawCircle(center, outerRadius - trackWidth/2, highlightPaint);
+  }
 
-    canvas.drawCircle(center, radius, bgPaint);
-
-    // Active RPM Arc
+  void _drawTickMarks(Canvas canvas, Offset center, double outerRadius, double innerRadius) {
     const startAngle = 135 * math.pi / 180;
     const fullSweep = 270 * math.pi / 180;
+    
+    // Major tick marks (every 1000 RPM)
+    final majorTickPaint = Paint()
+      ..color = Colors.white.withValues(alpha: 0.6)
+      ..strokeWidth = 2.5
+      ..strokeCap = StrokeCap.round;
+    
+    // Minor tick marks (every 500 RPM) 
+    final minorTickPaint = Paint()
+      ..color = Colors.white.withValues(alpha: 0.3)
+      ..strokeWidth = 1.5
+      ..strokeCap = StrokeCap.round;
+    
+    // Draw 17 total marks (8 major + 9 minor)
+    for (int i = 0; i <= 16; i++) {
+      final isMajor = i % 2 == 0;
+      final angle = startAngle + (i / 16.0) * fullSweep;
+      final tickLength = isMajor ? 16.0 : 8.0;
+      final paint = isMajor ? majorTickPaint : minorTickPaint;
+      
+      final outerTick = Offset(
+        center.dx + outerRadius * math.cos(angle),
+        center.dy + outerRadius * math.sin(angle),
+      );
+      final innerTick = Offset(
+        center.dx + (outerRadius - tickLength) * math.cos(angle),
+        center.dy + (outerRadius - tickLength) * math.sin(angle),
+      );
+      
+      // Add glow effect to major ticks
+      if (isMajor) {
+        final glowPaint = Paint()
+          ..color = Colors.white.withValues(alpha: 0.2)
+          ..strokeWidth = 5
+          ..strokeCap = StrokeCap.round
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4);
+        
+        canvas.drawLine(outerTick, innerTick, glowPaint);
+      }
+      
+      canvas.drawLine(outerTick, innerTick, paint);
+    }
+  }
 
+  void _drawActiveArc(Canvas canvas, Offset center, double outerRadius, double innerRadius, double trackWidth) {
+    const startAngle = 135 * math.pi / 180;
+    const fullSweep = 270 * math.pi / 180;
+    
     final sweepAngle = (rpm / maxRpm).clamp(0.0, 1.0) * fullSweep;
-
-    // Main arc (no glow)
+    
+    if (sweepAngle <= 0) return;
+    
+    final arcRect = Rect.fromCircle(center: center, radius: outerRadius - trackWidth/2);
+    
+    // Outer glow effect
+    final glowPaint = Paint()
+      ..strokeWidth = trackWidth + 8
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round
+      ..shader = SweepGradient(
+        startAngle: startAngle,
+        endAngle: startAngle + sweepAngle,
+        colors: _getRpmColors(rpm, maxRpm).map((c) => c.withValues(alpha: 0.3)).toList(),
+      ).createShader(arcRect)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 12);
+    
+    canvas.drawArc(arcRect, startAngle, sweepAngle, false, glowPaint);
+    
+    // Main active arc
     final activePaint = Paint()
-      ..strokeWidth = 18
+      ..strokeWidth = trackWidth - 2
       ..style = PaintingStyle.stroke
       ..strokeCap = StrokeCap.round
       ..shader = SweepGradient(
         startAngle: startAngle,
         endAngle: startAngle + sweepAngle,
         colors: _getRpmColors(rpm, maxRpm),
-      ).createShader(Rect.fromCircle(center: center, radius: radius));
-
+      ).createShader(arcRect);
+    
+    canvas.drawArc(arcRect, startAngle, sweepAngle, false, activePaint);
+    
+    // Inner highlight on active arc
+    final innerHighlightPaint = Paint()
+      ..strokeWidth = 6
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round
+      ..shader = SweepGradient(
+        startAngle: startAngle,
+        endAngle: startAngle + sweepAngle,
+        colors: _getRpmColors(rpm, maxRpm).map((c) => 
+          Color.lerp(c, Colors.white, 0.4)!).toList(),
+      ).createShader(Rect.fromCircle(center: center, radius: innerRadius + 6));
+    
     canvas.drawArc(
-      Rect.fromCircle(center: center, radius: radius),
-      startAngle,
-      sweepAngle,
-      false,
-      activePaint,
+      Rect.fromCircle(center: center, radius: innerRadius + 6),
+      startAngle, 
+      sweepAngle, 
+      false, 
+      innerHighlightPaint
     );
+  }
 
-    // Tick marks
-    final tickPaint = Paint()
-      ..color = Colors.white.withValues(alpha: 0.3)
-      ..strokeWidth = 2;
-
-    for (int i = 0; i <= 8; i++) {
-      final angle = startAngle + (i / 8) * fullSweep;
-      final inner = Offset(
-        center.dx + (radius - 12) * math.cos(angle),
-        center.dy + (radius - 12) * math.sin(angle),
-      );
-      final outer = Offset(
-        center.dx + (radius + 12) * math.cos(angle),
-        center.dy + (radius + 12) * math.sin(angle),
-      );
-      canvas.drawLine(inner, outer, tickPaint);
-    }
+  void _drawFinishingTouches(Canvas canvas, Offset center, double outerRadius, double innerRadius, double trackWidth) {
+    // Subtle outer rim only
+    final rimPaint = Paint()
+      ..color = Colors.white.withValues(alpha: 0.1)
+      ..strokeWidth = 1
+      ..style = PaintingStyle.stroke;
+    
+    canvas.drawCircle(center, outerRadius, rimPaint);
+    canvas.drawCircle(center, innerRadius, rimPaint);
+    
+    // Center circle removed - leave attitude indicator visible
   }
 
   List<Color> _getRpmColors(double rpm, double maxRpm) {

@@ -38,11 +38,8 @@ final connectionFormProvider =
 
 /// Connection form state
 class ConnectionFormState {
-  final String udpHost;
-  final int udpPort;
   final String serialPort;
   final int serialBaudRate;
-  final String connectionType;
   final bool enableSpoofing;
   final int spoofSystemId;
   final int spoofComponentId;
@@ -50,11 +47,8 @@ class ConnectionFormState {
   final bool isValid;
 
   const ConnectionFormState({
-    this.udpHost = '127.0.0.1',
-    this.udpPort = 14550,
     this.serialPort = '',
     this.serialBaudRate = 115200,
-    this.connectionType = 'udp',
     this.enableSpoofing = false,
     this.spoofSystemId = 1,
     this.spoofComponentId = 1,
@@ -63,11 +57,8 @@ class ConnectionFormState {
   });
 
   ConnectionFormState copyWith({
-    String? udpHost,
-    int? udpPort,
     String? serialPort,
     int? serialBaudRate,
-    String? connectionType,
     bool? enableSpoofing,
     int? spoofSystemId,
     int? spoofComponentId,
@@ -75,11 +66,8 @@ class ConnectionFormState {
     bool? isValid,
   }) {
     return ConnectionFormState(
-      udpHost: udpHost ?? this.udpHost,
-      udpPort: udpPort ?? this.udpPort,
       serialPort: serialPort ?? this.serialPort,
       serialBaudRate: serialBaudRate ?? this.serialBaudRate,
-      connectionType: connectionType ?? this.connectionType,
       enableSpoofing: enableSpoofing ?? this.enableSpoofing,
       spoofSystemId: spoofSystemId ?? this.spoofSystemId,
       spoofComponentId: spoofComponentId ?? this.spoofComponentId,
@@ -98,30 +86,16 @@ class ConnectionFormState {
       );
     }
 
-    return switch (connectionType) {
-      'udp' => ConnectionConfigFactory.udp(host: udpHost, port: udpPort),
-      'serial' => ConnectionConfigFactory.serial(
-        port: serialPort,
-        baudRate: serialBaudRate,
-      ),
-      _ => ConnectionConfigFactory.udp(host: udpHost, port: udpPort),
-    };
+    return ConnectionConfigFactory.serial(
+      port: serialPort,
+      baudRate: serialBaudRate,
+    );
   }
 }
 
 /// Connection form state notifier
 class ConnectionFormNotifier extends StateNotifier<ConnectionFormState> {
   ConnectionFormNotifier() : super(const ConnectionFormState());
-
-  void updateUdpHost(String host) {
-    state = state.copyWith(udpHost: host);
-    _validateForm();
-  }
-
-  void updateUdpPort(int port) {
-    state = state.copyWith(udpPort: port);
-    _validateForm();
-  }
 
   void updateSerialPort(String port) {
     state = state.copyWith(serialPort: port);
@@ -130,11 +104,6 @@ class ConnectionFormNotifier extends StateNotifier<ConnectionFormState> {
 
   void updateSerialBaudRate(int baudRate) {
     state = state.copyWith(serialBaudRate: baudRate);
-    _validateForm();
-  }
-
-  void updateConnectionType(String type) {
-    state = state.copyWith(connectionType: type);
     _validateForm();
   }
 
@@ -168,15 +137,8 @@ class ConnectionFormNotifier extends StateNotifier<ConnectionFormState> {
           state.spoofComponentId > 0 &&
           state.spoofBaudRate > 0;
     } else {
-      // Real connection validation
-      if (state.connectionType == 'udp') {
-        isValid =
-            state.udpHost.isNotEmpty &&
-            state.udpPort > 0 &&
-            state.udpPort <= 65535;
-      } else if (state.connectionType == 'serial') {
-        isValid = state.serialPort.isNotEmpty && state.serialBaudRate > 0;
-      }
+      // Serial connection validation
+      isValid = state.serialPort.isNotEmpty && state.serialBaudRate > 0;
     }
 
     state = state.copyWith(isValid: isValid);
@@ -185,11 +147,8 @@ class ConnectionFormNotifier extends StateNotifier<ConnectionFormState> {
   void loadFromSettings(AppSettings settings) {
     final conn = settings.connection;
     state = ConnectionFormState(
-      udpHost: conn.mavlinkHost,
-      udpPort: conn.mavlinkPort,
       serialPort: conn.serialPort,
       serialBaudRate: conn.serialBaudRate,
-      connectionType: conn.connectionType,
       enableSpoofing: conn.enableSpoofing,
       spoofSystemId: conn.spoofSystemId,
       spoofComponentId: conn.spoofComponentId,

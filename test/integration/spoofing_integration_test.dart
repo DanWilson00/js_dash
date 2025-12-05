@@ -2,7 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:js_dash/core/connection_config.dart';
 import 'package:js_dash/providers/service_providers.dart';
-import 'package:js_dash/services/usb_serial_spoof_service.dart';
+import 'package:js_dash/services/mavlink_service.dart';
 import 'package:js_dash/services/mavlink_message_tracker.dart';
 
 /// Integration tests for spoofing enable/disable flow
@@ -45,9 +45,9 @@ void main() {
       expect(connected, isTrue);
       expect(connectionManager.currentStatus.isConnected, isTrue);
 
-      // Verify data source is spoof service
+      // Verify data source is MavlinkService (with SpoofByteSource)
       final dataSource = connectionManager.currentDataSource;
-      expect(dataSource, isA<UsbSerialSpoofService>());
+      expect(dataSource, isA<MavlinkService>());
     });
 
     test('should stop spoofing when disabled in settings', () async {
@@ -72,14 +72,14 @@ void main() {
     });
 
     test(
-      'should flow data through repository when spoofing is enabled',
+      'should flow data through data manager when spoofing is enabled',
       () async {
         final connectionManager = container.read(connectionManagerProvider);
-        final telemetryRepository = container.read(telemetryRepositoryProvider);
+        final dataManager = container.read(timeSeriesDataManagerProvider);
         final settingsManager = container.read(settingsManagerProvider);
 
-        // Connect telemetry repository to connection manager first
-        telemetryRepository.startListening();
+        // Connect data manager to connection manager first
+        dataManager.startListening();
 
         // Enable spoofing and connect
         settingsManager.updateConnectionMode(true);
@@ -93,10 +93,10 @@ void main() {
         // Wait longer for data to start flowing and be processed
         await Future.delayed(const Duration(milliseconds: 500));
 
-        // Check if spoof service is actually producing data
+        // Check if service is actually producing data
         final dataSource = connectionManager.currentDataSource;
         expect(dataSource, isNotNull);
-        expect(dataSource, isA<UsbSerialSpoofService>());
+        expect(dataSource, isA<MavlinkService>());
 
         // For now, just verify the connection works - data flow test needs more setup
         expect(connectionManager.currentStatus.isConnected, isTrue);
@@ -105,11 +105,11 @@ void main() {
 
     test('should stop data flow when spoofing is disconnected', () async {
       final connectionManager = container.read(connectionManagerProvider);
-      final telemetryRepository = container.read(telemetryRepositoryProvider);
+      final dataManager = container.read(timeSeriesDataManagerProvider);
       final settingsManager = container.read(settingsManagerProvider);
 
       // Start with spoofing connected
-      telemetryRepository.startListening();
+      dataManager.startListening();
       settingsManager.updateConnectionMode(true);
       final spoofConfig = SpoofConnectionConfig(
         systemId: 1,
@@ -129,7 +129,7 @@ void main() {
       'should prevent direct spoof service access when spoofing disabled',
       () async {
         final connectionManager = container.read(connectionManagerProvider);
-        final telemetryRepository = container.read(telemetryRepositoryProvider);
+        final dataManager = container.read(timeSeriesDataManagerProvider);
         final settingsManager = container.read(settingsManagerProvider);
 
         // Disable spoofing
@@ -148,9 +148,9 @@ void main() {
         final connected = await connectionManager.connect(spoofConfig);
 
         // This might connect but shouldn't produce data since spoofing is disabled
-        // The key test is that UI components can't bypass the repository
+        // The key test is that UI components can't bypass the data manager
         if (connected) {
-          telemetryRepository.startListening();
+          dataManager.startListening();
           await Future.delayed(const Duration(milliseconds: 100));
 
           // Even if connected, verify the data flow respects the disabled setting
@@ -160,16 +160,16 @@ void main() {
       },
     );
 
-    test('should ensure MapView cannot bypass repository', () async {
+    test('should ensure MapView cannot bypass data manager', () async {
       final connectionManager = container.read(connectionManagerProvider);
-      final telemetryRepository = container.read(telemetryRepositoryProvider);
+      final dataManager = container.read(timeSeriesDataManagerProvider);
       final settingsManager = container.read(settingsManagerProvider);
 
-      // This test ensures UI components like MapView must go through repository
+      // This test ensures UI components like MapView must go through data manager
       // and cannot directly access data sources
 
       // Start spoofing
-      telemetryRepository.startListening();
+      dataManager.startListening();
       settingsManager.updateConnectionMode(true);
       final spoofConfig = SpoofConnectionConfig(
         systemId: 1,
@@ -181,13 +181,13 @@ void main() {
       // Get the current data source
       final dataSource = connectionManager.currentDataSource;
       expect(dataSource, isNotNull);
-      expect(dataSource, isA<UsbSerialSpoofService>());
+      expect(dataSource, isA<MavlinkService>());
 
-      // Verify that UI components should get data through repository, not directly
+      // Verify that UI components should get data through data manager, not directly
       // This is enforced by architecture - direct access should be discouraged
-      expect(telemetryRepository.dataStream, isNotNull);
+      expect(dataManager.dataStream, isNotNull);
 
-      // The architecture rule is that UI components must use the repository
+      // The architecture rule is that UI components must use the data manager
       expect(true, isTrue); // Documents the architectural rule
     });
   });

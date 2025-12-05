@@ -1,19 +1,15 @@
 // ignore_for_file: use_build_context_synchronously
 import 'package:flutter/material.dart';
-import '../../services/settings_manager.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../providers/service_providers.dart';
 
-class AdvancedSettingsPanel extends StatefulWidget {
-  final SettingsManager settingsManager;
-
-  const AdvancedSettingsPanel({super.key, required this.settingsManager});
+class AdvancedSettingsPanel extends ConsumerWidget {
+  const AdvancedSettingsPanel({super.key});
 
   @override
-  State<AdvancedSettingsPanel> createState() => _AdvancedSettingsPanelState();
-}
+  Widget build(BuildContext context, WidgetRef ref) {
+    final settingsManager = ref.watch(settingsManagerProvider);
 
-class _AdvancedSettingsPanelState extends State<AdvancedSettingsPanel> {
-  @override
-  Widget build(BuildContext context) {
     return SingleChildScrollView(
       padding: const EdgeInsets.all(12),
       child: Column(
@@ -64,8 +60,7 @@ class _AdvancedSettingsPanelState extends State<AdvancedSettingsPanel> {
                           ),
                           TextButton(
                             onPressed: () async {
-                              await widget.settingsManager.resetToDefaults();
-                              if (!mounted) return;
+                              await settingsManager.resetToDefaults();
 
                               Navigator.of(dialogContext).pop();
                               ScaffoldMessenger.of(context).showSnackBar(

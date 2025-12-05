@@ -5,19 +5,18 @@ import '../core/circular_buffer.dart';
 import '../core/timeseries_point.dart';
 import '../interfaces/disposable.dart';
 import '../interfaces/i_data_repository.dart';
+import '../interfaces/i_data_source.dart';
 
+import 'connection_manager.dart';
 import 'mavlink_message_tracker.dart';
 import 'settings_manager.dart';
 
 class TimeSeriesDataManager implements IDataRepository, Disposable {
-  // Singleton support for backward compatibility - will be deprecated
-  static TimeSeriesDataManager? _instance;
-  factory TimeSeriesDataManager() => _instance ??= TimeSeriesDataManager._internal();
-  TimeSeriesDataManager._internal();
-  
-  // New constructor for dependency injection
-  // New constructor for dependency injection
-  TimeSeriesDataManager.injected(this._tracker, this._settingsManager) {
+  TimeSeriesDataManager.injected(
+    this._tracker,
+    this._settingsManager, [
+    this._connectionManager,
+  ]) {
     if (_tracker != null) {
       _messageSubscription = _tracker!.statsStream.listen((messageStats) {
         _processMessageUpdates(messageStats);
@@ -30,13 +29,17 @@ class TimeSeriesDataManager implements IDataRepository, Disposable {
   }
 
   final Map<String, CircularBuffer> _dataBuffers = {};
-  final StreamController<Map<String, CircularBuffer>> _dataController = 
+  final StreamController<Map<String, CircularBuffer>> _dataController =
       StreamController<Map<String, CircularBuffer>>.broadcast();
-  
+
   StreamSubscription? _messageSubscription;
+  StreamSubscription? _dataSourceSubscription;
+  StreamSubscription? _connectionStatusSubscription;
   MavlinkMessageTracker? _tracker;
+  ConnectionManager? _connectionManager;
   bool _isTracking = false;
   bool _isPaused = false;
+  bool _isInitialized = false;
   SettingsManager? _settingsManager;
 
   // Buffer configuration - defaults that can be overridden by settings
@@ -92,11 +95,100 @@ class TimeSeriesDataManager implements IDataRepository, Disposable {
     _settingsManager?.removeListener(_updateFromSettings);
     _settingsManager = null;
   }
-  
+
   /// Track a message through the internal tracker
   /// This allows external sources to feed messages into the time series data
   void trackMessage(MavlinkMessage message) {
     _tracker?.trackMessage(message);
+  }
+
+  // ============================================================
+  // Connection and Data Source Management (merged from TelemetryRepository)
+  // ============================================================
+
+  /// Initialize the data manager and set up data flow
+  Future<void> initialize() async {
+    if (_isInitialized) return;
+    startTracking();
+    _isInitialized = true;
+  }
+
+  /// Start listening to the current data source via connection manager
+  Future<void> startListening() async {
+    await initialize();
+
+    if (_connectionManager == null) return;
+
+    final currentDataSource = _connectionManager!.currentDataSource;
+    if (currentDataSource != null) {
+      await _subscribeToDataSource(currentDataSource);
+    }
+
+    // Listen for connection changes to update data source subscription
+    _connectionStatusSubscription = _connectionManager!.statusStream.listen((status) {
+      if (status.isConnected) {
+        final newDataSource = _connectionManager!.currentDataSource;
+        if (newDataSource != null) {
+          _subscribeToDataSource(newDataSource);
+        }
+      } else {
+        _unsubscribeFromDataSource();
+      }
+    });
+  }
+
+  /// Stop listening to data sources
+  Future<void> stopListening() async {
+    _unsubscribeFromDataSource();
+    _connectionStatusSubscription?.cancel();
+    _connectionStatusSubscription = null;
+    stopTracking();
+  }
+
+  /// Subscribe to a specific data source
+  Future<void> _subscribeToDataSource(IDataSource dataSource) async {
+    // Unsubscribe from previous source first
+    _unsubscribeFromDataSource();
+
+    // Subscribe to the message stream and forward to tracker
+    _dataSourceSubscription = dataSource.messageStream.listen((message) {
+      if (!_isPaused) {
+        trackMessage(message);
+      }
+    });
+  }
+
+  /// Unsubscribe from current data source
+  void _unsubscribeFromDataSource() {
+    _dataSourceSubscription?.cancel();
+    _dataSourceSubscription = null;
+  }
+
+  /// Get current connection status
+  bool get isConnected => _connectionManager?.currentStatus.isConnected ?? false;
+
+  /// Get current data source
+  IDataSource? get currentDataSource => _connectionManager?.currentDataSource;
+
+  /// Connect using configuration (convenience method)
+  Future<bool> connectWith(dynamic config) async {
+    if (_connectionManager == null) return false;
+    return await _connectionManager!.connect(config);
+  }
+
+  /// Disconnect (convenience method)
+  Future<void> disconnect() async {
+    await _connectionManager?.disconnect();
+  }
+
+  /// Pause connection (convenience method)
+  void pauseConnection() {
+    _connectionManager?.pause();
+  }
+
+  /// Resume connection (convenience method)
+  void resumeConnection() {
+    _connectionManager?.resume();
   }
 
   void _processMessageUpdates(Map<String, MessageStats> messageStats) {
@@ -290,17 +382,14 @@ class TimeSeriesDataManager implements IDataRepository, Disposable {
 
   @override
   void dispose() {
+    _unsubscribeFromDataSource();
+    _connectionStatusSubscription?.cancel();
+    _connectionStatusSubscription = null;
     stopTracking();
     _dataBuffers.clear();
     if (!_dataController.isClosed) {
       _dataController.close();
     }
-  }
-
-  // For testing
-  static void resetInstanceForTesting() {
-    _instance?.dispose();
-    _instance = null;
   }
 
   // Get current data state for debugging

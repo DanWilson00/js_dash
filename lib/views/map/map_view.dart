@@ -8,12 +8,9 @@ import '../../services/bing_maps_service.dart';
 import '../../core/circular_buffer.dart';
 import '../../providers/service_providers.dart';
 import '../../providers/ui_providers.dart';
-import '../../services/settings_manager.dart';
 
 class MapView extends ConsumerStatefulWidget {
-  final SettingsManager settingsManager;
-
-  const MapView({super.key, required this.settingsManager});
+  const MapView({super.key});
 
   @override
   ConsumerState<MapView> createState() => _MapViewState();
@@ -63,12 +60,12 @@ class _MapViewState extends ConsumerState<MapView> {
     });
   }
 
-  /// Setup telemetry listening from repository
+  /// Setup telemetry listening from data manager
   void _setupTelemetryListening() {
-    final repository = ref.read(telemetryRepositoryProvider);
+    final dataManager = ref.read(timeSeriesDataManagerProvider);
 
-    // Listen to telemetry data stream from the repository
-    _dataSubscription = repository.dataStream.listen((dataBuffers) {
+    // Listen to telemetry data stream from the data manager
+    _dataSubscription = dataManager.dataStream.listen((dataBuffers) {
       if (!mounted) return;
       _updateMapFromDataBuffers(dataBuffers);
     });
@@ -122,14 +119,15 @@ class _MapViewState extends ConsumerState<MapView> {
   void _saveMapState() {
     final camera = _mapController.camera;
     final mapSettings = ref.read(mapSettingsProvider);
+    final settingsManager = ref.read(settingsManagerProvider);
 
     // Always save zoom, but only save position if not following vehicle
     if (mapSettings.followVehicle) {
       // When following vehicle, only save zoom level, keep saved position
-      widget.settingsManager.updateMapZoom(camera.zoom);
+      settingsManager.updateMapZoom(camera.zoom);
     } else {
       // When not following, save both position and zoom
-      widget.settingsManager.updateMapCenterAndZoom(
+      settingsManager.updateMapCenterAndZoom(
         camera.center.latitude,
         camera.center.longitude,
         camera.zoom,
@@ -147,6 +145,7 @@ class _MapViewState extends ConsumerState<MapView> {
   @override
   Widget build(BuildContext context) {
     final mapSettings = ref.watch(mapSettingsProvider);
+    final settingsManager = ref.watch(settingsManagerProvider);
     final defaultCenter = LatLng(
       mapSettings.centerLatitude,
       mapSettings.centerLongitude,
@@ -207,7 +206,7 @@ class _MapViewState extends ConsumerState<MapView> {
                 if (mapEvent is MapEventMoveStart &&
                     mapEvent.source == MapEventSource.onDrag) {
                   if (mapSettings.followVehicle) {
-                    widget.settingsManager.updateMapFollowVehicle(false);
+                    settingsManager.updateMapFollowVehicle(false);
                   }
                 }
               },
@@ -278,6 +277,7 @@ class _MapViewState extends ConsumerState<MapView> {
 
   Widget _buildMapControls() {
     final mapSettings = ref.watch(mapSettingsProvider);
+    final settingsManager = ref.watch(settingsManagerProvider);
 
     return Positioned(
       top: 20,
@@ -363,7 +363,7 @@ class _MapViewState extends ConsumerState<MapView> {
                     color: mapSettings.showPath ? Colors.blue : Colors.white,
                   ),
                   onPressed: () {
-                    widget.settingsManager.updateMapShowPath(
+                    settingsManager.updateMapShowPath(
                       !mapSettings.showPath,
                     );
                   },
@@ -422,7 +422,7 @@ class _MapViewState extends ConsumerState<MapView> {
                           : Colors.white,
                     ),
                     onPressed: () {
-                      widget.settingsManager.updateMapFollowVehicle(
+                      settingsManager.updateMapFollowVehicle(
                         !mapSettings.followVehicle,
                       );
                       // If enabling follow mode, immediately center on vehicle
@@ -483,6 +483,7 @@ class _MapViewState extends ConsumerState<MapView> {
   // Show path configuration dialog
   void _showPathConfigDialog() {
     final mapSettings = ref.read(mapSettingsProvider);
+    final settingsManager = ref.read(settingsManagerProvider);
     showDialog(
       context: context,
       builder: (BuildContext context) {
@@ -523,7 +524,7 @@ class _MapViewState extends ConsumerState<MapView> {
                 ),
                 TextButton(
                   onPressed: () {
-                    widget.settingsManager.updateMapMaxPathPoints(
+                    settingsManager.updateMapMaxPathPoints(
                       tempMaxPathPoints,
                     );
                     // Trim existing path if it's too long

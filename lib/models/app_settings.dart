@@ -192,16 +192,12 @@ class PlotSettings {
 
 @JsonSerializable()
 class ConnectionSettings {
-  // Receiving Settings
-  final String connectionType; // 'udp', 'serial'
-  final String mavlinkHost;
-  final int mavlinkPort;
+  // Serial Connection Settings
   final String serialPort;
   final int serialBaudRate;
 
   // Spoofing Settings
   final bool enableSpoofing;
-  final String spoofMode; // 'timer', 'usb_serial'
   final int spoofBaudRate;
   final int spoofSystemId;
   final int spoofComponentId;
@@ -211,13 +207,9 @@ class ConnectionSettings {
   final bool isPaused;
 
   const ConnectionSettings({
-    required this.connectionType,
-    required this.mavlinkHost,
-    required this.mavlinkPort,
     required this.serialPort,
     required this.serialBaudRate,
     required this.enableSpoofing,
-    required this.spoofMode,
     required this.spoofBaudRate,
     required this.spoofSystemId,
     required this.spoofComponentId,
@@ -227,37 +219,40 @@ class ConnectionSettings {
 
   factory ConnectionSettings.defaults() {
     return const ConnectionSettings(
-      // Receiving defaults
-      connectionType: 'udp',
-      mavlinkHost: '127.0.0.1',
-      mavlinkPort: 14550,
+      // Serial defaults
       serialPort: '/dev/ttyUSB0',
       serialBaudRate: 57600,
       // Spoofing defaults
       enableSpoofing: true,
-      spoofMode: 'usb_serial', // Only option now
       spoofBaudRate: 57600,
       spoofSystemId: 1,
       spoofComponentId: 1,
       // General defaults
       autoStartMonitor: true,
-      isPaused:
-          false, // Start running by default (will be overridden by persistence)
+      isPaused: false,
     );
   }
 
-  factory ConnectionSettings.fromJson(Map<String, dynamic> json) =>
-      _$ConnectionSettingsFromJson(json);
+  factory ConnectionSettings.fromJson(Map<String, dynamic> json) {
+    // Migration: handle old settings with UDP fields
+    return ConnectionSettings(
+      serialPort: json['serialPort'] as String? ?? '/dev/ttyUSB0',
+      serialBaudRate: (json['serialBaudRate'] as num?)?.toInt() ?? 57600,
+      enableSpoofing: json['enableSpoofing'] as bool? ?? true,
+      spoofBaudRate: (json['spoofBaudRate'] as num?)?.toInt() ?? 57600,
+      spoofSystemId: (json['spoofSystemId'] as num?)?.toInt() ?? 1,
+      spoofComponentId: (json['spoofComponentId'] as num?)?.toInt() ?? 1,
+      autoStartMonitor: json['autoStartMonitor'] as bool? ?? true,
+      isPaused: json['isPaused'] as bool? ?? false,
+    );
+  }
+
   Map<String, dynamic> toJson() => _$ConnectionSettingsToJson(this);
 
   ConnectionSettings copyWith({
-    String? connectionType,
-    String? mavlinkHost,
-    int? mavlinkPort,
     String? serialPort,
     int? serialBaudRate,
     bool? enableSpoofing,
-    String? spoofMode,
     int? spoofBaudRate,
     int? spoofSystemId,
     int? spoofComponentId,
@@ -265,13 +260,9 @@ class ConnectionSettings {
     bool? isPaused,
   }) {
     return ConnectionSettings(
-      connectionType: connectionType ?? this.connectionType,
-      mavlinkHost: mavlinkHost ?? this.mavlinkHost,
-      mavlinkPort: mavlinkPort ?? this.mavlinkPort,
       serialPort: serialPort ?? this.serialPort,
       serialBaudRate: serialBaudRate ?? this.serialBaudRate,
       enableSpoofing: enableSpoofing ?? this.enableSpoofing,
-      spoofMode: spoofMode ?? this.spoofMode,
       spoofBaudRate: spoofBaudRate ?? this.spoofBaudRate,
       spoofSystemId: spoofSystemId ?? this.spoofSystemId,
       spoofComponentId: spoofComponentId ?? this.spoofComponentId,
@@ -279,9 +270,6 @@ class ConnectionSettings {
       isPaused: isPaused ?? this.isPaused,
     );
   }
-
-  // Legacy compatibility properties
-  bool get useSpoofMode => enableSpoofing;
 }
 
 @JsonSerializable()

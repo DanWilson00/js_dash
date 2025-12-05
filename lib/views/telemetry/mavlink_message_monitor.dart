@@ -48,9 +48,9 @@ class _MavlinkMessageMonitorState extends ConsumerState<MavlinkMessageMonitor> {
   }
 
   void _initializeTracker() {
-    // Use centralized message stats stream from TelemetryRepository
-    final repository = ref.read(telemetryRepositoryProvider);
-    _statsSubscription = repository.messageStatsStream.listen((stats) {
+    // Use centralized message stats stream from TimeSeriesDataManager
+    final dataManager = ref.read(timeSeriesDataManagerProvider);
+    _statsSubscription = dataManager.messageStatsStream.listen((stats) {
       if (mounted) {
         setState(() {
           _messageStats = stats;

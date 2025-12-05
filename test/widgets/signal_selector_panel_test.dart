@@ -1,34 +1,57 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:js_dash/models/plot_configuration.dart';
 import 'package:js_dash/views/telemetry/signal_selector_panel.dart';
 import 'package:js_dash/services/timeseries_data_manager.dart';
+import 'package:js_dash/services/mavlink_message_tracker.dart';
+import 'package:js_dash/providers/service_providers.dart';
 
 void main() {
   group('SignalSelectorPanel Widget Tests', () {
     late TimeSeriesDataManager dataManager;
+    late MavlinkMessageTracker tracker;
 
     setUp(() {
-      TimeSeriesDataManager.resetInstanceForTesting();
-      dataManager = TimeSeriesDataManager();
+      tracker = MavlinkMessageTracker();
+      dataManager = TimeSeriesDataManager.injected(tracker, null);
     });
 
     tearDown(() {
       dataManager.dispose();
-      TimeSeriesDataManager.resetInstanceForTesting();
+      tracker.dispose();
     });
+
+    Widget buildTestWidget({
+      required List<PlotSignalConfiguration> activeSignals,
+      required ScalingMode scalingMode,
+      required Function(String, String) onSignalToggle,
+      required Function(ScalingMode) onScalingModeChanged,
+    }) {
+      return ProviderScope(
+        overrides: [
+          timeSeriesDataManagerProvider.overrideWithValue(dataManager),
+        ],
+        child: MaterialApp(
+          home: Scaffold(
+            body: SignalSelectorPanel(
+              activeSignals: activeSignals,
+              scalingMode: scalingMode,
+              onSignalToggle: onSignalToggle,
+              onScalingModeChanged: onScalingModeChanged,
+            ),
+          ),
+        ),
+      );
+    }
 
     testWidgets('should display available signals title', (tester) async {
       await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: SignalSelectorPanel(
-              activeSignals: [],
-              scalingMode: ScalingMode.autoScale,
-              onSignalToggle: (messageType, fieldName) {},
-              onScalingModeChanged: (mode) {},
-            ),
-          ),
+        buildTestWidget(
+          activeSignals: [],
+          scalingMode: ScalingMode.autoScale,
+          onSignalToggle: (messageType, fieldName) {},
+          onScalingModeChanged: (mode) {},
         ),
       );
 
@@ -37,15 +60,11 @@ void main() {
 
     testWidgets('should show empty state when no data available', (tester) async {
       await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: SignalSelectorPanel(
-              activeSignals: [],
-              scalingMode: ScalingMode.autoScale,
-              onSignalToggle: (messageType, fieldName) {},
-              onScalingModeChanged: (mode) {},
-            ),
-          ),
+        buildTestWidget(
+          activeSignals: [],
+          scalingMode: ScalingMode.autoScale,
+          onSignalToggle: (messageType, fieldName) {},
+          onScalingModeChanged: (mode) {},
         ),
       );
 
@@ -63,15 +82,11 @@ void main() {
       ];
 
       await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: SignalSelectorPanel(
-              activeSignals: activeSignals,
-              scalingMode: ScalingMode.autoScale,
-              onSignalToggle: (messageType, fieldName) {},
-              onScalingModeChanged: (mode) {},
-            ),
-          ),
+        buildTestWidget(
+          activeSignals: activeSignals,
+          scalingMode: ScalingMode.autoScale,
+          onSignalToggle: (messageType, fieldName) {},
+          onScalingModeChanged: (mode) {},
         ),
       );
 
@@ -80,15 +95,11 @@ void main() {
 
     testWidgets('should show scaling mode dropdown', (tester) async {
       await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: SignalSelectorPanel(
-              activeSignals: [],
-              scalingMode: ScalingMode.autoScale,
-              onSignalToggle: (messageType, fieldName) {},
-              onScalingModeChanged: (mode) {},
-            ),
-          ),
+        buildTestWidget(
+          activeSignals: [],
+          scalingMode: ScalingMode.autoScale,
+          onSignalToggle: (messageType, fieldName) {},
+          onScalingModeChanged: (mode) {},
         ),
       );
 
@@ -99,23 +110,19 @@ void main() {
     testWidgets('should call onSignalToggle when signal is tapped', (tester) async {
       String? toggledMessageType;
       String? toggledFieldName;
-      
+
       // Add some test data
       dataManager.injectTestData('ATTITUDE', 'roll', 1.5);
-      
+
       await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: SignalSelectorPanel(
-              activeSignals: [],
-              scalingMode: ScalingMode.autoScale,
-              onSignalToggle: (messageType, fieldName) {
-                toggledMessageType = messageType;
-                toggledFieldName = fieldName;
-              },
-              onScalingModeChanged: (mode) {},
-            ),
-          ),
+        buildTestWidget(
+          activeSignals: [],
+          scalingMode: ScalingMode.autoScale,
+          onSignalToggle: (messageType, fieldName) {
+            toggledMessageType = messageType;
+            toggledFieldName = fieldName;
+          },
+          onScalingModeChanged: (mode) {},
         ),
       );
 
@@ -147,19 +154,15 @@ void main() {
 
     testWidgets('should call onScalingModeChanged when dropdown changed', (tester) async {
       ScalingMode? changedMode;
-      
+
       await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: SignalSelectorPanel(
-              activeSignals: [],
-              scalingMode: ScalingMode.autoScale,
-              onSignalToggle: (messageType, fieldName) {},
-              onScalingModeChanged: (mode) {
-                changedMode = mode;
-              },
-            ),
-          ),
+        buildTestWidget(
+          activeSignals: [],
+          scalingMode: ScalingMode.autoScale,
+          onSignalToggle: (messageType, fieldName) {},
+          onScalingModeChanged: (mode) {
+            changedMode = mode;
+          },
         ),
       );
 
@@ -186,17 +189,13 @@ void main() {
       // Add test data
       dataManager.injectTestData('ATTITUDE', 'roll', 1.5);
       dataManager.injectTestData('ATTITUDE', 'pitch', 0.5);
-      
+
       await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: SignalSelectorPanel(
-              activeSignals: [activeSignal],
-              scalingMode: ScalingMode.autoScale,
-              onSignalToggle: (messageType, fieldName) {},
-              onScalingModeChanged: (mode) {},
-            ),
-          ),
+        buildTestWidget(
+          activeSignals: [activeSignal],
+          scalingMode: ScalingMode.autoScale,
+          onSignalToggle: (messageType, fieldName) {},
+          onScalingModeChanged: (mode) {},
         ),
       );
 
@@ -220,15 +219,11 @@ void main() {
 
       // Start with no active signals
       await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: SignalSelectorPanel(
-              activeSignals: [],
-              scalingMode: ScalingMode.autoScale,
-              onSignalToggle: (messageType, fieldName) {},
-              onScalingModeChanged: (mode) {},
-            ),
-          ),
+        buildTestWidget(
+          activeSignals: [],
+          scalingMode: ScalingMode.autoScale,
+          onSignalToggle: (messageType, fieldName) {},
+          onScalingModeChanged: (mode) {},
         ),
       );
 
@@ -236,15 +231,11 @@ void main() {
 
       // Update to have one active signal
       await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: SignalSelectorPanel(
-              activeSignals: [signal1],
-              scalingMode: ScalingMode.autoScale,
-              onSignalToggle: (messageType, fieldName) {},
-              onScalingModeChanged: (mode) {},
-            ),
-          ),
+        buildTestWidget(
+          activeSignals: [signal1],
+          scalingMode: ScalingMode.autoScale,
+          onSignalToggle: (messageType, fieldName) {},
+          onScalingModeChanged: (mode) {},
         ),
       );
 

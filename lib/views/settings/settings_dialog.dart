@@ -1,17 +1,11 @@
 import 'package:flutter/material.dart';
-import '../../services/settings_manager.dart';
 import 'performance_settings_panel.dart';
 import 'connection_settings_panel.dart';
 import 'display_settings_panel.dart';
 import 'advanced_settings_panel.dart';
 
 class SettingsDialog extends StatefulWidget {
-  final SettingsManager settingsManager;
-
-  const SettingsDialog({
-    super.key,
-    required this.settingsManager,
-  });
+  const SettingsDialog({super.key});
 
   @override
   State<SettingsDialog> createState() => _SettingsDialogState();
@@ -48,11 +42,11 @@ class _SettingsDialogState extends State<SettingsDialog> with SingleTickerProvid
             Expanded(
               child: TabBarView(
                 controller: _tabController,
-                children: [
-                  PerformanceSettingsPanel(settingsManager: widget.settingsManager),
-                  ConnectionSettingsPanel(settingsManager: widget.settingsManager),
-                  DisplaySettingsPanel(settingsManager: widget.settingsManager),
-                  AdvancedSettingsPanel(settingsManager: widget.settingsManager),
+                children: const [
+                  PerformanceSettingsPanel(),
+                  ConnectionSettingsPanel(),
+                  DisplaySettingsPanel(),
+                  AdvancedSettingsPanel(),
                 ],
               ),
             ),

@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../models/plot_configuration.dart';
-import '../../services/timeseries_data_manager.dart';
+import '../../providers/service_providers.dart';
 
-class MultiSignalSelectionDialog extends StatefulWidget {
+class MultiSignalSelectionDialog extends ConsumerStatefulWidget {
   final List<PlotSignalConfiguration> currentSignals;
   final VoidCallback? onSignalsChanged;
 
@@ -13,11 +14,10 @@ class MultiSignalSelectionDialog extends StatefulWidget {
   });
 
   @override
-  State<MultiSignalSelectionDialog> createState() => _MultiSignalSelectionDialogState();
+  ConsumerState<MultiSignalSelectionDialog> createState() => _MultiSignalSelectionDialogState();
 }
 
-class _MultiSignalSelectionDialogState extends State<MultiSignalSelectionDialog> {
-  final TimeSeriesDataManager _dataManager = TimeSeriesDataManager();
+class _MultiSignalSelectionDialogState extends ConsumerState<MultiSignalSelectionDialog> {
   List<String> _availableFields = [];
   final Map<String, bool> _selectedFields = {};
   final Map<String, PlotSignalConfiguration> _existingSignals = {};
@@ -30,7 +30,8 @@ class _MultiSignalSelectionDialogState extends State<MultiSignalSelectionDialog>
   }
 
   void _loadAvailableFields() {
-    _availableFields = _dataManager.getAvailableFields();
+    final dataManager = ref.read(timeSeriesDataManagerProvider);
+    _availableFields = dataManager.getAvailableFields();
     setState(() {});
   }
 

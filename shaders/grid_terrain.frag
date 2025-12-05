@@ -5,22 +5,15 @@ uniform float uTime;
 
 out vec4 fragColor;
 
-// 3D rotation function
-mat2 rot(float a) {
-    float s = sin(a);
-    float c = cos(a);
-    return mat2(c, -s, s, c);
-}
-
 void main() {
     vec2 uv = (FlutterFragCoord().xy - 0.5 * uResolution.xy) / uResolution.y;
     
-    // Camera movement
-    float speed = 0.5;
-    vec3 ro = vec3(0.0, 1.0, uTime * speed); // Ray origin
-    vec3 rd = normalize(vec3(uv.x, uv.y - 0.2, 1.0)); // Ray direction
+    // Simple camera movement
+    float speed = 0.3;
+    vec3 ro = vec3(0.0, 1.2, uTime * speed);
+    vec3 rd = normalize(vec3(uv.x, uv.y - 0.15, 1.0));
     
-    // Floor plane
+    // Floor plane intersection
     float t = -ro.y / rd.y;
     
     vec3 col = vec3(0.0);
@@ -28,30 +21,39 @@ void main() {
     if (t > 0.0) {
         vec3 pos = ro + t * rd;
         
-        // Grid effect
-        vec2 grid = fract(pos.xz * 2.0) - 0.5;
+        // Clean grid lines
+        vec2 grid = fract(pos.xz * 1.5) - 0.5;
         float line = min(abs(grid.x), abs(grid.y));
-        float intensity = smoothstep(0.05, 0.0, line);
+        float intensity = smoothstep(0.04, 0.0, line) * 0.6;
         
         // Distance fading
         float fade = exp(-t * 0.2);
         
-        // Color gradient for the grid
-        vec3 gridColor = mix(vec3(0.0, 0.8, 1.0), vec3(1.0, 0.0, 0.5), sin(pos.z * 0.1) * 0.5 + 0.5);
+        // Clean cyan grid color
+        vec3 gridColor = vec3(0.0, 0.7, 1.0);
         
+        // Apply grid
         col += gridColor * intensity * fade;
         
-        // Add a subtle glow to the floor
-        col += vec3(0.0, 0.1, 0.2) * fade * 0.5;
+        // Minimal floor ambient
+        col += vec3(0.0, 0.05, 0.1) * fade * 0.3;
     }
     
-    // Background gradient (sky)
-    vec3 skyCol = mix(vec3(0.0, 0.0, 0.05), vec3(0.0, 0.02, 0.1), uv.y + 0.5);
-    col += skyCol;
+    // Simple background gradient
+    vec3 skyGradient = mix(
+        vec3(0.0, 0.0, 0.02),      // Deep space
+        vec3(0.0, 0.03, 0.08),     // Horizon
+        smoothstep(-0.5, 0.5, uv.y)
+    );
     
-    // Vignette
-    float vig = 1.0 - length(uv) * 0.5;
-    col *= vig;
+    col += skyGradient;
+    
+    // Clean vignette
+    float vignette = 1.0 - smoothstep(0.0, 1.2, length(uv)) * 0.3;
+    col *= vignette;
+    
+    // Ensure minimum brightness for visibility
+    col = max(col, vec3(0.01, 0.02, 0.04));
 
     fragColor = vec4(col, 1.0);
 }

@@ -1,35 +1,14 @@
 import 'package:flutter/material.dart';
-import '../../services/settings_manager.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../providers/service_providers.dart';
 
-class DisplaySettingsPanel extends StatefulWidget {
-  final SettingsManager settingsManager;
-
-  const DisplaySettingsPanel({super.key, required this.settingsManager});
-
-  @override
-  State<DisplaySettingsPanel> createState() => _DisplaySettingsPanelState();
-}
-
-class _DisplaySettingsPanelState extends State<DisplaySettingsPanel> {
-  @override
-  void initState() {
-    super.initState();
-    widget.settingsManager.addListener(_onSettingsChanged);
-  }
+class DisplaySettingsPanel extends ConsumerWidget {
+  const DisplaySettingsPanel({super.key});
 
   @override
-  void dispose() {
-    widget.settingsManager.removeListener(_onSettingsChanged);
-    super.dispose();
-  }
-
-  void _onSettingsChanged() {
-    setState(() {});
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final appearance = widget.settingsManager.appearance;
+  Widget build(BuildContext context, WidgetRef ref) {
+    final settingsManager = ref.watch(settingsManagerProvider);
+    final appearance = settingsManager.appearance;
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
@@ -76,7 +55,7 @@ class _DisplaySettingsPanelState extends State<DisplaySettingsPanel> {
                         divisions: 8,
                         label: '${(appearance.uiScale * 100).round()}%',
                         onChanged: (value) {
-                          widget.settingsManager.updateAppearance(
+                          settingsManager.updateAppearance(
                             appearance.copyWith(uiScale: value),
                           );
                         },
@@ -104,57 +83,6 @@ class _DisplaySettingsPanelState extends State<DisplaySettingsPanel> {
               ],
             ),
           ),
-          const SizedBox(height: 16),
-          // Scaling mode settings removed as they are now per-plot
-          // Card(
-          //   child: Column(
-          //     crossAxisAlignment: CrossAxisAlignment.start,
-          //     children: [
-          //       Padding(
-          //         padding: const EdgeInsets.all(16),
-          //         child: Row(
-          //           children: [
-          //             const Icon(Icons.auto_graph, size: 20),
-          //             const SizedBox(width: 8),
-          //             Text(
-          //               'Default Scaling',
-          //               style: Theme.of(context).textTheme.titleSmall?.copyWith(
-          //                 fontWeight: FontWeight.bold,
-          //               ),
-          //             ),
-          //           ],
-          //         ),
-          //       ),
-          //       ListTile(
-          //         dense: true,
-          //         title: const Text('Y-axis scaling mode'),
-          //         subtitle: const Text('Default scaling for new plots'),
-          //         trailing: DropdownButton<String>(
-          //           value: plots.scalingMode,
-          //           items: const [
-          //             DropdownMenuItem(
-          //               value: 'autoScale',
-          //               child: Text('Auto Scale'),
-          //             ),
-          //             DropdownMenuItem(
-          //               value: 'unified',
-          //               child: Text('Unified'),
-          //             ),
-          //             DropdownMenuItem(
-          //               value: 'independent',
-          //               child: Text('Independent'),
-          //             ),
-          //           ],
-          //           onChanged: (value) {
-          //             if (value != null) {
-          //               widget.settingsManager.updateScalingMode(value);
-          //             }
-          //           },
-          //         ),
-          //       ),
-          //     ],
-          //   ),
-          // ),
         ],
       ),
     );
