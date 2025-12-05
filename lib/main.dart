@@ -50,7 +50,7 @@ void main() async {
     ProviderScope(
       overrides: [
         // Override the settingsManagerProvider to use the pre-initialized instance
-        settingsManagerProvider.overrideWithValue(settingsManager),
+        settingsManagerProvider.overrideWith((ref) => settingsManager),
       ],
       child: const SubmersibleJetskiApp(),
     ),
@@ -58,10 +58,7 @@ void main() async {
 }
 
 class SubmersibleJetskiApp extends ConsumerStatefulWidget {
-  const SubmersibleJetskiApp({
-    super.key,
-    this.autoStartMonitor = true,
-  });
+  const SubmersibleJetskiApp({super.key, this.autoStartMonitor = true});
 
   final bool autoStartMonitor;
 
@@ -137,11 +134,13 @@ class _SubmersibleJetskiAppState extends ConsumerState<SubmersibleJetskiApp>
       final position = await windowManager.getPosition();
       final isMaximized = await windowManager.isMaximized();
 
-      ref.read(settingsManagerProvider).updateWindowState(
-        size: size,
-        position: position,
-        maximized: isMaximized,
-      );
+      ref
+          .read(settingsManagerProvider)
+          .updateWindowState(
+            size: size,
+            position: position,
+            maximized: isMaximized,
+          );
     } catch (e) {
       // Window management not available on this platform
     }
@@ -154,9 +153,7 @@ class _SubmersibleJetskiAppState extends ConsumerState<SubmersibleJetskiApp>
     return MaterialApp(
       title: 'Submersible Jetski Dashboard',
       theme: theme,
-      home: MainNavigation(
-        autoStartMonitor: widget.autoStartMonitor,
-      ),
+      home: MainNavigation(autoStartMonitor: widget.autoStartMonitor),
       debugShowCheckedModeBanner: false,
     );
   }

@@ -162,21 +162,7 @@ class ConnectionFormNotifier extends StateNotifier<ConnectionFormState> {
 /// Provides reactive access to app settings
 final appSettingsProvider = StreamProvider<AppSettings>((ref) async* {
   final settingsManager = ref.watch(settingsManagerProvider);
-  await settingsManager.initialize();
-
-  // Create a stream that emits current settings and updates
   yield settingsManager.settings;
-
-  // Listen for changes using a listener and controller
-  final controller = StreamController<AppSettings>();
-
-  void onSettingsChanged() {
-    controller.add(settingsManager.settings);
-  }
-
-  settingsManager.addListener(onSettingsChanged);
-
-  yield* controller.stream;
 });
 
 /// Window Settings Provider

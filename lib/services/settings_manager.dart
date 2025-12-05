@@ -101,6 +101,7 @@ class SettingsManager extends ChangeNotifier {
     _settings = _settings.copyWith(
       plots: _settings.plots.copyWith(timeWindow: timeWindow),
     );
+    notifyListeners();
     _debouncedSave();
   }
 
@@ -108,6 +109,7 @@ class SettingsManager extends ChangeNotifier {
     _settings = _settings.copyWith(
       plots: _settings.plots.copyWith(messagePanelWidth: width),
     );
+    notifyListeners();
     _debouncedSave();
   }
 
@@ -126,6 +128,7 @@ class SettingsManager extends ChangeNotifier {
         selectedTabId: newTab.id,
       ),
     );
+    notifyListeners();
     _debouncedSave();
   }
 
@@ -147,6 +150,7 @@ class SettingsManager extends ChangeNotifier {
         selectedTabId: newSelectedId,
       ),
     );
+    notifyListeners();
     _debouncedSave();
   }
 
@@ -158,6 +162,7 @@ class SettingsManager extends ChangeNotifier {
     _settings = _settings.copyWith(
       plots: _settings.plots.copyWith(tabs: updatedTabs),
     );
+    notifyListeners();
     _debouncedSave();
   }
 
@@ -167,6 +172,7 @@ class SettingsManager extends ChangeNotifier {
     _settings = _settings.copyWith(
       plots: _settings.plots.copyWith(selectedTabId: tabId),
     );
+    notifyListeners();
     _debouncedSave();
   }
 
@@ -178,6 +184,7 @@ class SettingsManager extends ChangeNotifier {
     _settings = _settings.copyWith(
       plots: _settings.plots.copyWith(tabs: updatedTabs),
     );
+    notifyListeners();
     _debouncedSave();
   }
 

@@ -7,7 +7,7 @@ import '../interfaces/i_data_source.dart';
 import '../core/connection_status.dart';
 
 /// Settings Manager Provider
-final settingsManagerProvider = Provider<SettingsManager>((ref) {
+final settingsManagerProvider = ChangeNotifierProvider<SettingsManager>((ref) {
   return SettingsManager();
 });
 
@@ -28,9 +28,15 @@ final connectionManagerProvider = Provider<ConnectionManager>((ref) {
 /// This is the primary data repository for telemetry data
 final timeSeriesDataManagerProvider = Provider<TimeSeriesDataManager>((ref) {
   final tracker = ref.watch(mavlinkMessageTrackerProvider);
-  final settingsManager = ref.watch(settingsManagerProvider);
+  // Use read instead of watch to prevent rebuilding when settings change
+  // The manager listens to settings changes internally
+  final settingsManager = ref.read(settingsManagerProvider);
   final connectionManager = ref.watch(connectionManagerProvider);
-  final manager = TimeSeriesDataManager.injected(tracker, settingsManager, connectionManager);
+  final manager = TimeSeriesDataManager.injected(
+    tracker,
+    settingsManager,
+    connectionManager,
+  );
   ref.onDispose(() => manager.dispose());
   return manager;
 });
