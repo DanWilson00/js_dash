@@ -17,7 +17,8 @@
       "Bash(dir interface)",
       "Bash(Get-Content .gitmodules)",
       "Bash(git submodule:*)",
-      "Bash(git rm:*)"
+      "Bash(git rm:*)",
+      "Bash(cat:*)"
     ],
     "deny": []
   }

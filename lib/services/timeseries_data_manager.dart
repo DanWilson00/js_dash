@@ -17,8 +17,9 @@ class TimeSeriesDataManager implements IDataRepository, Disposable {
     this._settingsManager, [
     this._connectionManager,
   ]) {
-    if (_tracker != null) {
-      _messageSubscription = _tracker!.statsStream.listen((messageStats) {
+    final tracker = _tracker;
+    if (tracker != null) {
+      _messageSubscription = tracker.statsStream.listen((messageStats) {
         _processMessageUpdates(messageStats);
       });
     }
@@ -35,8 +36,8 @@ class TimeSeriesDataManager implements IDataRepository, Disposable {
   StreamSubscription? _messageSubscription;
   StreamSubscription? _dataSourceSubscription;
   StreamSubscription? _connectionStatusSubscription;
-  GenericMessageTracker? _tracker;
-  ConnectionManager? _connectionManager;
+  final GenericMessageTracker? _tracker;
+  final ConnectionManager? _connectionManager;
   bool _isTracking = false;
   bool _isPaused = false;
   bool _isInitialized = false;
@@ -70,9 +71,10 @@ class TimeSeriesDataManager implements IDataRepository, Disposable {
 
     // Note: _tracker should be injected, not created here
     // This method is kept for backward compatibility
-    _tracker?.startTracking();
-    if (_tracker != null) {
-      _messageSubscription = _tracker!.statsStream.listen((messageStats) {
+    final tracker = _tracker;
+    tracker?.startTracking();
+    if (tracker != null) {
+      _messageSubscription = tracker.statsStream.listen((messageStats) {
         _processMessageUpdates(messageStats);
       });
     }
@@ -120,17 +122,18 @@ class TimeSeriesDataManager implements IDataRepository, Disposable {
   Future<void> startListening() async {
     await initialize();
 
-    if (_connectionManager == null) return;
+    final connectionManager = _connectionManager;
+    if (connectionManager == null) return;
 
-    final currentDataSource = _connectionManager!.currentDataSource;
+    final currentDataSource = connectionManager.currentDataSource;
     if (currentDataSource != null) {
       await _subscribeToDataSource(currentDataSource);
     }
 
     // Listen for connection changes to update data source subscription
-    _connectionStatusSubscription = _connectionManager!.statusStream.listen((status) {
+    _connectionStatusSubscription = connectionManager.statusStream.listen((status) {
       if (status.isConnected) {
-        final newDataSource = _connectionManager!.currentDataSource;
+        final newDataSource = connectionManager.currentDataSource;
         if (newDataSource != null) {
           _subscribeToDataSource(newDataSource);
         }
@@ -175,8 +178,9 @@ class TimeSeriesDataManager implements IDataRepository, Disposable {
 
   /// Connect using configuration (convenience method)
   Future<bool> connectWith(dynamic config) async {
-    if (_connectionManager == null) return false;
-    return await _connectionManager!.connect(config);
+    final connectionManager = _connectionManager;
+    if (connectionManager == null) return false;
+    return await connectionManager.connect(config);
   }
 
   /// Disconnect (convenience method)

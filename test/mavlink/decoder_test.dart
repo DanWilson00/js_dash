@@ -73,7 +73,7 @@ void main() {
       decoder = MavlinkMessageDecoder(registry);
     });
 
-    MavlinkFrame _makeFrame(int msgId, Uint8List payload) {
+    MavlinkFrame makeFrame(int msgId, Uint8List payload) {
       return MavlinkFrame(
         version: MavlinkVersion.v1,
         payloadLength: payload.length,
@@ -101,7 +101,7 @@ void main() {
         0x03, // mavlink_version
       ]);
 
-      final frame = _makeFrame(0, payload);
+      final frame = makeFrame(0, payload);
       final message = decoder.decode(frame);
 
       expect(message, isNotNull);
@@ -126,7 +126,7 @@ void main() {
       data.setFloat32(24, 0.3, Endian.little); // yawspeed
 
       final payload = data.buffer.asUint8List();
-      final frame = _makeFrame(30, payload);
+      final frame = makeFrame(30, payload);
       final message = decoder.decode(frame);
 
       expect(message, isNotNull);
@@ -146,7 +146,7 @@ void main() {
       }
       // Rest is already 0 (null terminated)
 
-      final frame = _makeFrame(253, payload);
+      final frame = makeFrame(253, payload);
       final message = decoder.decode(frame);
 
       expect(message, isNotNull);
@@ -157,7 +157,7 @@ void main() {
 
     test('returns null for unknown message ID', () {
       final payload = Uint8List.fromList([0x00, 0x00, 0x00, 0x00]);
-      final frame = _makeFrame(999, payload);
+      final frame = makeFrame(999, payload);
       final message = decoder.decode(frame);
 
       expect(message, isNull);
@@ -166,7 +166,7 @@ void main() {
     test('handles truncated payload gracefully', () {
       // Only 4 bytes instead of 9 for HEARTBEAT
       final payload = Uint8List.fromList([0x78, 0x56, 0x34, 0x12]);
-      final frame = _makeFrame(0, payload);
+      final frame = makeFrame(0, payload);
       final message = decoder.decode(frame);
 
       expect(message, isNotNull);

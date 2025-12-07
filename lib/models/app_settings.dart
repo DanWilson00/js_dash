@@ -234,17 +234,22 @@ class ConnectionSettings {
   }
 
   factory ConnectionSettings.fromJson(Map<String, dynamic> json) {
-    // Migration: handle old settings with UDP fields
-    return ConnectionSettings(
-      serialPort: json['serialPort'] as String? ?? '/dev/ttyUSB0',
-      serialBaudRate: (json['serialBaudRate'] as num?)?.toInt() ?? 57600,
-      enableSpoofing: json['enableSpoofing'] as bool? ?? true,
-      spoofBaudRate: (json['spoofBaudRate'] as num?)?.toInt() ?? 57600,
-      spoofSystemId: (json['spoofSystemId'] as num?)?.toInt() ?? 1,
-      spoofComponentId: (json['spoofComponentId'] as num?)?.toInt() ?? 1,
-      autoStartMonitor: json['autoStartMonitor'] as bool? ?? true,
-      isPaused: json['isPaused'] as bool? ?? false,
-    );
+    // Try to use generated function, but handle missing fields for migration
+    try {
+      return _$ConnectionSettingsFromJson(json);
+    } catch (_) {
+      // Migration: handle old settings with missing fields
+      return ConnectionSettings(
+        serialPort: json['serialPort'] as String? ?? '/dev/ttyUSB0',
+        serialBaudRate: (json['serialBaudRate'] as num?)?.toInt() ?? 57600,
+        enableSpoofing: json['enableSpoofing'] as bool? ?? true,
+        spoofBaudRate: (json['spoofBaudRate'] as num?)?.toInt() ?? 57600,
+        spoofSystemId: (json['spoofSystemId'] as num?)?.toInt() ?? 1,
+        spoofComponentId: (json['spoofComponentId'] as num?)?.toInt() ?? 1,
+        autoStartMonitor: json['autoStartMonitor'] as bool? ?? true,
+        isPaused: json['isPaused'] as bool? ?? false,
+      );
+    }
   }
 
   Map<String, dynamic> toJson() => _$ConnectionSettingsToJson(this);
