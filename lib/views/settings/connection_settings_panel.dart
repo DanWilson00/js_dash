@@ -5,6 +5,7 @@ import '../../models/app_settings.dart';
 import '../../providers/action_providers.dart';
 import '../../providers/service_providers.dart';
 import '../../core/connection_config.dart';
+import '../../services/dialect_discovery.dart';
 
 class ConnectionSettingsPanel extends ConsumerStatefulWidget {
   const ConnectionSettingsPanel({super.key});
@@ -77,6 +78,58 @@ class _ConnectionSettingsPanelState extends ConsumerState<ConnectionSettingsPane
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // MAVLink Dialect Selection
+          Card(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.code, size: 20),
+                      const SizedBox(width: 8),
+                      Text(
+                        'MAVLink Protocol',
+                        style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                FutureBuilder<List<String>>(
+                  future: DialectDiscovery.getAvailableDialects(),
+                  builder: (context, snapshot) {
+                    final dialects = snapshot.data ?? ['common'];
+                    final currentDialect = connection.mavlinkDialect;
+
+                    return ListTile(
+                      dense: true,
+                      title: const Text('Dialect'),
+                      subtitle: const Text('MAVLink message definitions to use'),
+                      trailing: DropdownButton<String>(
+                        value: dialects.contains(currentDialect) ? currentDialect : dialects.first,
+                        items: dialects.map((dialect) => DropdownMenuItem(
+                          value: dialect,
+                          child: Text(dialect),
+                        )).toList(),
+                        onChanged: (value) async {
+                          if (value != null && value != currentDialect) {
+                            final connectionActions = ref.read(connectionActionsProvider);
+                            await connectionActions.changeDialect(value);
+                          }
+                        },
+                      ),
+                    );
+                  },
+                ),
+              ],
+            ),
+          ),
+
+          const SizedBox(height: 16),
+
           // Spoofing Enable/Disable
           Card(
             child: Column(

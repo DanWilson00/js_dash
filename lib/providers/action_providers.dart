@@ -1,3 +1,4 @@
+import 'package:flutter/services.dart' show rootBundle;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/connection_config.dart';
 import '../interfaces/i_connection_manager.dart';
@@ -130,6 +131,65 @@ class ConnectionActions {
         spoofComponentId: formState.spoofComponentId,
       );
     }
+  }
+
+  /// Change MAVLink dialect at runtime
+  ///
+  /// This safely handles dialect changes by:
+  /// 1. Disconnecting current connection
+  /// 2. Clearing existing data
+  /// 3. Loading new dialect JSON into registry
+  /// 4. Invalidating dependent providers
+  /// 5. Reconnecting if auto-start is enabled
+  Future<void> changeDialect(String newDialect) async {
+    final currentDialect = _settingsManager.settings.connection.mavlinkDialect;
+    if (newDialect == currentDialect) return;
+
+    _ref.read(isLoadingProvider.notifier).state = true;
+    _ref.read(errorStateProvider.notifier).state = null;
+
+    try {
+      // 1. Disconnect current connection
+      await _connectionManager.disconnect();
+      _ref.read(currentConnectionConfigProvider.notifier).state = null;
+
+      // 2. Clear existing data
+      _ref.read(timeSeriesDataManagerProvider).clearAllData();
+
+      // 3. Load new dialect JSON into registry
+      final jsonString = await rootBundle.loadString('assets/mavlink/$newDialect.json');
+      final registry = _ref.read(mavlinkRegistryProvider);
+      registry.loadFromJsonString(jsonString);
+
+      // 4. Update setting (this persists the choice)
+      _settingsManager.updateMavlinkDialect(newDialect);
+
+      // 5. Invalidate dependent providers to force recreation with new registry data
+      _ref.invalidate(messageTrackerProvider);
+      _ref.invalidate(connectionManagerProvider);
+
+      // 6. Reconnect if spoofing enabled and auto-start
+      final settings = _settingsManager.settings;
+      if (settings.connection.enableSpoofing && settings.connection.autoStartMonitor) {
+        // Small delay to allow providers to recreate
+        await Future.delayed(const Duration(milliseconds: 100));
+        await connectWithSpoofing();
+      }
+    } catch (e) {
+      _ref.read(errorStateProvider.notifier).state = 'Error changing dialect: $e';
+    } finally {
+      _ref.read(isLoadingProvider.notifier).state = false;
+    }
+  }
+
+  /// Connect with spoofing configuration from settings
+  Future<bool> connectWithSpoofing() async {
+    final settings = _settingsManager.settings.connection;
+    final config = SpoofConnectionConfig(
+      systemId: settings.spoofSystemId,
+      componentId: settings.spoofComponentId,
+    );
+    return await connectWith(config);
   }
 }
 

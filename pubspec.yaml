@@ -93,9 +93,9 @@ flutter:
   shaders:
     - shaders/grid_terrain.frag
 
-  # MAVLink dialect metadata files
+  # MAVLink dialect metadata files (auto-discovered from folder)
   assets:
-    - assets/mavlink_common.json
+    - assets/mavlink/
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images

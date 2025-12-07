@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show rootBundle;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:window_manager/window_manager.dart';
+import 'mavlink/mavlink.dart';
 import 'services/settings_manager.dart';
 import 'providers/service_providers.dart';
 import 'providers/ui_providers.dart';
@@ -12,6 +14,12 @@ void main() async {
   // Initialize settings manager
   final settingsManager = SettingsManager();
   await settingsManager.initialize();
+
+  // Load MAVLink metadata from selected dialect
+  final dialect = settingsManager.settings.connection.mavlinkDialect;
+  final jsonString = await rootBundle.loadString('assets/mavlink/$dialect.json');
+  final registry = MavlinkMetadataRegistry();
+  registry.loadFromJsonString(jsonString);
 
   // Initialize window management (desktop only)
   try {
@@ -51,6 +59,8 @@ void main() async {
       overrides: [
         // Override the settingsManagerProvider to use the pre-initialized instance
         settingsManagerProvider.overrideWith((ref) => settingsManager),
+        // Override the mavlinkRegistryProvider to use the pre-loaded registry
+        mavlinkRegistryProvider.overrideWithValue(registry),
       ],
       child: const SubmersibleJetskiApp(),
     ),

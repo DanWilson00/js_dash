@@ -62,6 +62,69 @@ The app handles MAVLink communication through:
 1. **Incoming**: IByteSource → MavlinkFrameParser → MavlinkMessageDecoder → MavlinkService → Application UI
 2. **Outgoing**: MavlinkFrameBuilder → IByteSource (for spoof testing)
 
+## Data Flow Architecture
+
+### Complete Data Path
+
+```
+IByteSource (spoof/serial)
+    │
+    ▼ byteStream (raw bytes)
+MavlinkFrameParser
+    │
+    ▼ stream (validated frames with CRC)
+MavlinkMessageDecoder
+    │
+    ▼ decode() → MavlinkMessage (with named fields)
+MavlinkService
+    │
+    ├──► GenericMessageTracker.trackMessage() [ALWAYS - pause independent]
+    │         │
+    │         ▼ statsStream (100ms interval updates)
+    │    TimeSeriesDataManager
+    │         │
+    │         ▼ dataStream (CircularBuffers)
+    │    UI Widgets (plots, gauges, telemetry display)
+    │
+    └──► messageStream [only when NOT paused]
+         │
+         ▼
+    UI Widgets (raw message display)
+```
+
+### Key Design Decisions
+
+1. **Single Tracking Point**: Messages are tracked ONLY in MavlinkService, not downstream services
+2. **Pause Independence**: Tracking continues even when paused (for accurate frequency stats)
+3. **100ms Stats Updates**: GenericMessageTracker emits stats every 100ms
+4. **5-Second Frequency Window**: Frequency calculated from timestamps in last 5 seconds
+5. **Circular Buffers**: TimeSeriesDataManager uses CircularBuffer for memory-bounded storage
+
+### Data Rates
+
+- **Spoof Source**: 10Hz fast telemetry (ATTITUDE, GLOBAL_POSITION_INT, VFR_HUD), 1Hz slow telemetry (SYS_STATUS), 1Hz heartbeat
+- **Stats Updates**: 100ms interval
+- **UI Updates**: Driven by dataStream emissions from TimeSeriesDataManager
+
+### Provider Structure
+
+The app uses Riverpod for dependency injection with this hierarchy:
+- `mavlinkRegistryProvider` - Metadata for message decoding
+- `mavlinkServiceProvider` - Central parsing and tracking
+- `messageTrackerProvider` - Message statistics calculation
+- `timeSeriesDataManagerProvider` - Time series storage in circular buffers
+- `connectionManagerProvider` - Connection lifecycle management
+- `connectionActionsProvider` / `dataActionsProvider` - UI action handlers
+
+### Pause State Synchronization
+
+When pause is triggered:
+1. `TimeSeriesDataManager.pause()` sets `_isPaused = true`
+2. It also calls `_connectionManager?.pause()` which pauses `MavlinkService`
+3. `MavlinkService._isPaused` stops emitting to `messageStream`
+4. However, `GenericMessageTracker.trackMessage()` continues (always tracks for frequency stats)
+5. `TimeSeriesDataManager._processMessageUpdates()` checks `_isPaused` and skips buffer updates
+
 ### Key Services
 - `MavlinkService` - Parses byte streams into decoded messages
 - `GenericMessageTracker` - Tracks message statistics
