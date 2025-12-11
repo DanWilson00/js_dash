@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:file_picker/file_picker.dart';
 import '../../models/app_settings.dart';
 import '../../providers/action_providers.dart';
 import '../../providers/service_providers.dart';
@@ -49,6 +50,104 @@ class _ConnectionSettingsPanelState extends ConsumerState<ConnectionSettingsPane
     setState(() {
       _availablePorts = SerialByteSource.getAvailablePorts();
     });
+  }
+
+  void _showRestartRequiredDialog(String message) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Restart Required'),
+        content: Text(message),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _importXmlDialect() async {
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['xml'],
+        dialogTitle: 'Select MAVLink XML Dialect',
+      );
+
+      if (result != null && result.files.single.path != null) {
+        final xmlPath = result.files.single.path!;
+        final connectionActions = ref.read(connectionActionsProvider);
+
+        // Show loading indicator
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Importing XML dialect...')),
+          );
+        }
+
+        final dialectName = await connectionActions.importXmlDialect(xmlPath);
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).hideCurrentSnackBar();
+          // Force rebuild to refresh dialect list
+          setState(() {});
+          _showRestartRequiredDialog(
+            'Dialect "$dialectName" imported successfully.\n\n'
+            'Please restart the app to use the new dialect.',
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).hideCurrentSnackBar();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to import dialect: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _reloadDialect(String dialectName) async {
+    try {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Reloading dialect from XML...')),
+        );
+      }
+
+      final connectionActions = ref.read(connectionActionsProvider);
+      await connectionActions.reloadUserDialect(dialectName);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).hideCurrentSnackBar();
+        // Force rebuild
+        setState(() {});
+        _showRestartRequiredDialog(
+          'Dialect "$dialectName" reloaded from XML.\n\n'
+          'Please restart the app for changes to take effect.',
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).hideCurrentSnackBar();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to reload dialect: $e')),
+        );
+      }
+    }
+  }
+
+  void _changeDialect(String newDialect) {
+    final connectionActions = ref.read(connectionActionsProvider);
+    final changed = connectionActions.changeDialect(newDialect);
+    if (changed) {
+      _showRestartRequiredDialog(
+        'Dialect changed to "$newDialect".\n\n'
+        'Please restart the app for changes to take effect.',
+      );
+    }
   }
 
   @override
@@ -101,28 +200,59 @@ class _ConnectionSettingsPanelState extends ConsumerState<ConnectionSettingsPane
                     ],
                   ),
                 ),
-                FutureBuilder<List<String>>(
-                  future: DialectDiscovery.getAvailableDialects(),
+                FutureBuilder<List<DialectInfo>>(
+                  future: DialectDiscovery.getAvailableDialectsInfo(),
                   builder: (context, snapshot) {
-                    final dialects = snapshot.data ?? ['common'];
+                    final dialects = snapshot.data ?? [const DialectInfo(name: 'common', isUserDialect: false)];
                     final currentDialect = connection.mavlinkDialect;
+                    final currentInfo = dialects.firstWhere(
+                      (d) => d.name == currentDialect,
+                      orElse: () => dialects.first,
+                    );
 
                     return ListTile(
                       dense: true,
                       title: const Text('Dialect'),
                       subtitle: const Text('MAVLink message definitions to use'),
-                      trailing: DropdownButton<String>(
-                        value: dialects.contains(currentDialect) ? currentDialect : dialects.first,
-                        items: dialects.map((dialect) => DropdownMenuItem(
-                          value: dialect,
-                          child: Text(dialect),
-                        )).toList(),
-                        onChanged: (value) async {
-                          if (value != null && value != currentDialect) {
-                            final connectionActions = ref.read(connectionActionsProvider);
-                            await connectionActions.changeDialect(value);
-                          }
-                        },
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          DropdownButton<String>(
+                            value: dialects.any((d) => d.name == currentDialect) ? currentDialect : dialects.first.name,
+                            items: dialects.map((info) => DropdownMenuItem(
+                              value: info.name,
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(info.name),
+                                  if (info.isUserDialect) ...[
+                                    const SizedBox(width: 4),
+                                    Icon(Icons.person, size: 14, color: Theme.of(context).colorScheme.primary),
+                                  ],
+                                ],
+                              ),
+                            )).toList(),
+                            onChanged: (value) {
+                              if (value != null && value != currentDialect) {
+                                _changeDialect(value);
+                              }
+                            },
+                          ),
+                          const SizedBox(width: 4),
+                          // Reload button for user dialects
+                          if (currentInfo.isUserDialect && currentInfo.xmlSourcePath != null)
+                            IconButton(
+                              icon: const Icon(Icons.refresh, size: 20),
+                              tooltip: 'Reload from XML source',
+                              onPressed: () => _reloadDialect(currentDialect),
+                            ),
+                          // Import XML button
+                          IconButton(
+                            icon: const Icon(Icons.add, size: 20),
+                            tooltip: 'Import XML dialect',
+                            onPressed: _importXmlDialect,
+                          ),
+                        ],
                       ),
                     );
                   },

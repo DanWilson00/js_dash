@@ -1,9 +1,8 @@
-import 'package:flutter/services.dart' show rootBundle;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/connection_config.dart';
 import '../interfaces/i_connection_manager.dart';
 import '../interfaces/i_data_repository.dart';
-import '../services/serial_byte_source.dart';
+import '../services/dialect_discovery.dart';
 import '../services/settings_manager.dart';
 import 'service_providers.dart';
 import 'ui_providers.dart';
@@ -14,17 +13,18 @@ import 'ui_providers.dart';
 /// Connection Actions Provider
 /// Handles connection-related operations
 final connectionActionsProvider = Provider<ConnectionActions>((ref) {
-  final connectionManager = ref.read(connectionManagerProvider);
   final settingsManager = ref.read(settingsManagerProvider);
-  return ConnectionActions(connectionManager, settingsManager, ref);
+  return ConnectionActions(settingsManager, ref);
 });
 
 class ConnectionActions {
-  final IConnectionManager _connectionManager;
   final SettingsManager _settingsManager;
   final Ref _ref;
 
-  ConnectionActions(this._connectionManager, this._settingsManager, this._ref);
+  ConnectionActions(this._settingsManager, this._ref);
+
+  /// Get the current connection manager (always fresh to avoid stale references after invalidation)
+  IConnectionManager get _connectionManager => _ref.read(connectionManagerProvider);
 
   /// Connect using the current form configuration
   Future<bool> connectWithCurrentConfig() async {
@@ -134,69 +134,16 @@ class ConnectionActions {
     }
   }
 
-  /// Change MAVLink dialect at runtime
+  /// Change MAVLink dialect
   ///
-  /// This safely handles dialect changes by:
-  /// 1. Disconnecting current connection
-  /// 2. Clearing existing data
-  /// 3. Loading new dialect JSON into registry
-  /// 4. Invalidating dependent providers
-  /// 5. Reconnecting if auto-start is enabled
-  Future<void> changeDialect(String newDialect) async {
+  /// Saves the dialect setting. Requires app restart to take effect.
+  /// Returns true if the dialect was changed (restart needed).
+  bool changeDialect(String newDialect) {
     final currentDialect = _settingsManager.settings.connection.mavlinkDialect;
-    if (newDialect == currentDialect) return;
+    if (newDialect == currentDialect) return false;
 
-    _ref.read(isLoadingProvider.notifier).state = true;
-    _ref.read(errorStateProvider.notifier).state = null;
-
-    try {
-      // 1. Disconnect current connection
-      await _connectionManager.disconnect();
-      _ref.read(currentConnectionConfigProvider.notifier).state = null;
-
-      // 2. Clear existing data
-      _ref.read(timeSeriesDataManagerProvider).clearAllData();
-
-      // 3. Load new dialect JSON into registry
-      final jsonString = await rootBundle.loadString('assets/mavlink/$newDialect.json');
-      final registry = _ref.read(mavlinkRegistryProvider);
-      registry.loadFromJsonString(jsonString);
-
-      // 4. Update setting (this persists the choice)
-      _settingsManager.updateMavlinkDialect(newDialect);
-
-      // 5. Invalidate dependent providers to force recreation with new registry data
-      _ref.invalidate(messageTrackerProvider);
-      _ref.invalidate(connectionManagerProvider);
-
-      // 6. Reconnect based on connection mode
-      final settings = _settingsManager.settings;
-      // Small delay to allow providers to recreate
-      await Future.delayed(const Duration(milliseconds: 100));
-
-      // Re-read the NEW connection manager after invalidation
-      final newConnectionManager = _ref.read(connectionManagerProvider);
-
-      if (settings.connection.enableSpoofing) {
-        await newConnectionManager.connect(SpoofConnectionConfig(
-          systemId: settings.connection.spoofSystemId,
-          componentId: settings.connection.spoofComponentId,
-        ));
-      } else if (settings.connection.serialPort.isNotEmpty) {
-        // Reconnect serial if port is valid and exists
-        final availablePorts = SerialByteSource.getAvailablePorts();
-        if (availablePorts.contains(settings.connection.serialPort)) {
-          await newConnectionManager.connect(SerialConnectionConfig(
-            port: settings.connection.serialPort,
-            baudRate: settings.connection.serialBaudRate,
-          ));
-        }
-      }
-    } catch (e) {
-      _ref.read(errorStateProvider.notifier).state = 'Error changing dialect: $e';
-    } finally {
-      _ref.read(isLoadingProvider.notifier).state = false;
-    }
+    _settingsManager.updateMavlinkDialect(newDialect);
+    return true; // Restart required
   }
 
   /// Connect with spoofing configuration from settings
@@ -207,6 +154,52 @@ class ConnectionActions {
       componentId: settings.spoofComponentId,
     );
     return await connectWith(config);
+  }
+
+  /// Import an XML dialect file
+  ///
+  /// Parses the XML file, generates JSON metadata, saves it to user dialects
+  /// folder, and sets it as the current dialect. Requires app restart.
+  /// Returns the imported dialect name.
+  Future<String> importXmlDialect(String xmlPath) async {
+    _ref.read(isLoadingProvider.notifier).state = true;
+    _ref.read(errorStateProvider.notifier).state = null;
+
+    try {
+      // Import and generate JSON from XML
+      final userDialectManager = DialectDiscovery.userDialectManager;
+      final dialectName = await userDialectManager.importXmlDialect(xmlPath);
+
+      // Set as current dialect (will be loaded on restart)
+      _settingsManager.updateMavlinkDialect(dialectName);
+
+      return dialectName;
+    } catch (e) {
+      _ref.read(errorStateProvider.notifier).state = 'Error importing dialect: $e';
+      rethrow;
+    } finally {
+      _ref.read(isLoadingProvider.notifier).state = false;
+    }
+  }
+
+  /// Reload a user dialect from its original XML source
+  ///
+  /// Re-parses the XML and regenerates the JSON. Requires app restart.
+  Future<void> reloadUserDialect(String dialectName) async {
+    _ref.read(isLoadingProvider.notifier).state = true;
+    _ref.read(errorStateProvider.notifier).state = null;
+
+    try {
+      // Reload from XML (regenerates JSON)
+      final userDialectManager = DialectDiscovery.userDialectManager;
+      await userDialectManager.reloadDialect(dialectName);
+      // Restart required for changes to take effect
+    } catch (e) {
+      _ref.read(errorStateProvider.notifier).state = 'Error reloading dialect: $e';
+      rethrow;
+    } finally {
+      _ref.read(isLoadingProvider.notifier).state = false;
+    }
   }
 }
 

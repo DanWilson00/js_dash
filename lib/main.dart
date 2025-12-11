@@ -3,6 +3,7 @@ import 'package:flutter/services.dart' show rootBundle;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:window_manager/window_manager.dart';
 import 'mavlink/mavlink.dart';
+import 'services/dialect_discovery.dart';
 import 'services/settings_manager.dart';
 import 'providers/service_providers.dart';
 import 'providers/ui_providers.dart';
@@ -16,8 +17,19 @@ void main() async {
   await settingsManager.initialize();
 
   // Load MAVLink metadata from selected dialect
+  // Check user dialects first, then fall back to bundled assets
   final dialect = settingsManager.settings.connection.mavlinkDialect;
-  final jsonString = await rootBundle.loadString('assets/mavlink/$dialect.json');
+  final userDialectManager = DialectDiscovery.userDialectManager;
+  String jsonString;
+
+  if (await userDialectManager.hasDialect(dialect)) {
+    // Load from user dialects folder
+    jsonString = await userDialectManager.loadDialect(dialect);
+  } else {
+    // Load from bundled assets
+    jsonString = await rootBundle.loadString('assets/mavlink/$dialect.json');
+  }
+
   final registry = MavlinkMetadataRegistry();
   registry.loadFromJsonString(jsonString);
 
