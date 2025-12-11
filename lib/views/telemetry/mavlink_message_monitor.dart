@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../providers/service_providers.dart';
 import '../../services/generic_message_tracker.dart';
+import 'statustext_log_panel.dart';
 
 class MavlinkMessageMonitor extends ConsumerStatefulWidget {
   const MavlinkMessageMonitor({
@@ -93,6 +94,7 @@ class _MavlinkMessageMonitorState extends ConsumerState<MavlinkMessageMonitor> {
                 ? _buildEmptyState()
                 : _buildMessageList(sortedMessages),
           ),
+          StatusTextLogPanel(uiScale: widget.uiScale),
         ],
       ),
     );

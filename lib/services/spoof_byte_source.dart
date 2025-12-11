@@ -18,6 +18,7 @@ class SpoofByteSource implements IByteSource {
   Timer? _fastTelemetryTimer;
   Timer? _slowTelemetryTimer;
   Timer? _heartbeatTimer;
+  Timer? _statusTextTimer;
 
   final StreamController<Uint8List> _bytesController =
       StreamController<Uint8List>.broadcast();
@@ -42,6 +43,9 @@ class SpoofByteSource implements IByteSource {
   // Dashboard simulation state
   double _rpm = 1000.0;
   double _rpmDirection = 1.0;
+
+  // Status text simulation state
+  int _statusTextIndex = 0;
 
   SpoofByteSource({
     required MavlinkMetadataRegistry registry,
@@ -80,6 +84,9 @@ class SpoofByteSource implements IByteSource {
       const Duration(seconds: 1),
       (_) => _generateHeartbeat(),
     );
+
+    // Status text messages at varying intervals (every 3-8 seconds)
+    _scheduleNextStatusText();
   }
 
   @override
@@ -87,9 +94,11 @@ class SpoofByteSource implements IByteSource {
     _fastTelemetryTimer?.cancel();
     _slowTelemetryTimer?.cancel();
     _heartbeatTimer?.cancel();
+    _statusTextTimer?.cancel();
     _fastTelemetryTimer = null;
     _slowTelemetryTimer = null;
     _heartbeatTimer = null;
+    _statusTextTimer = null;
     _isConnected = false;
   }
 
@@ -251,4 +260,49 @@ class SpoofByteSource implements IByteSource {
   double get currentSpeed => _groundSpeed;
   double get currentHeading => _heading;
   double get currentAltitude => _altitude;
+
+  void _scheduleNextStatusText() {
+    if (!_isConnected) return;
+
+    // Random delay between 3-8 seconds
+    final delaySeconds = 3 + (DateTime.now().millisecond % 6);
+    _statusTextTimer = Timer(
+      Duration(seconds: delaySeconds),
+      () {
+        _generateStatusText();
+        _scheduleNextStatusText();
+      },
+    );
+  }
+
+  void _generateStatusText() {
+    if (!_isConnected) return;
+
+    // Cycle through different status messages with varying severity
+    final messages = [
+      (6, 'System initialized'),                           // INFO
+      (6, 'GPS lock acquired'),                            // INFO
+      (5, 'Waypoint 1 reached'),                           // NOTICE
+      (4, 'Battery level at 30%'),                         // WARNING
+      (6, 'Motor temperature normal'),                     // INFO
+      (5, 'Entering autonomous mode'),                     // NOTICE
+      (4, 'Signal strength low'),                          // WARNING
+      (3, 'Compass calibration recommended'),              // ERROR
+      (6, 'Telemetry link stable'),                        // INFO
+      (4, 'Geofence boundary approaching'),                // WARNING
+      (2, 'Critical: Check motor 2'),                      // CRITICAL
+      (6, 'Altitude hold engaged'),                        // INFO
+      (5, 'Return to home initiated'),                     // NOTICE
+      (7, 'Debug: Loop time 2.3ms'),                       // DEBUG
+      (1, 'Alert: Obstacle detected'),                     // ALERT
+    ];
+
+    final (severity, text) = messages[_statusTextIndex % messages.length];
+    _statusTextIndex++;
+
+    _emitMessage('STATUSTEXT', {
+      'severity': severity,
+      'text': text,
+    });
+  }
 }
