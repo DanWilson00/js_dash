@@ -551,24 +551,29 @@ class _InteractivePlotState extends ConsumerState<InteractivePlot> {
                       }
                     },
                     touchTooltipData: LineTouchTooltipData(
+                      tooltipBorderRadius: BorderRadius.circular(8),
                       getTooltipColor: (spot) => Theme.of(
                         context,
-                      ).colorScheme.surface.withValues(alpha: 0.95),
+                      ).colorScheme.surfaceContainerHighest.withValues(alpha: 0.95),
                       tooltipBorder: BorderSide(
                         color: Theme.of(
                           context,
-                        ).colorScheme.outline.withValues(alpha: 0.5),
-                        width: 1,
+                        ).colorScheme.primary.withValues(alpha: 0.3),
+                        width: 1.5,
                       ),
                       tooltipPadding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 8,
+                        horizontal: 16,
+                        vertical: 10,
                       ),
                       maxContentWidth: 300,
                       fitInsideHorizontally: true,
                       fitInsideVertically: true,
                       getTooltipItems: (touchedSpots) {
-                        return touchedSpots.map((LineBarSpot spot) {
+                        // Sort by barIndex to match legend order
+                        final sortedSpots = List<LineBarSpot>.from(touchedSpots)
+                          ..sort((a, b) => a.barIndex.compareTo(b.barIndex));
+
+                        return sortedSpots.map((LineBarSpot spot) {
                           final barIndex = spot.barIndex;
                           if (barIndex >=
                               widget
@@ -594,14 +599,18 @@ class _InteractivePlotState extends ConsumerState<InteractivePlot> {
                           final fontSize =
                               14.0 * ref.read(settingsManagerProvider).appearance.uiScale;
 
+                          // Format with units if available
+                          final unitsSuffix = signal.units != null && signal.units!.isNotEmpty
+                              ? ' ${signal.units}'
+                              : '';
+
                           return LineTooltipItem(
-                            '${signal.effectiveDisplayName}: $displayValue',
+                            '${signal.effectiveDisplayName}: $displayValue$unitsSuffix',
                             TextStyle(
                               color: signal.color,
-                              fontWeight: FontWeight.bold,
-                              fontSize: fontSize,
-                              fontFamily:
-                                  'RobotoMono', // Use monospaced font for numbers
+                              fontWeight: FontWeight.w600,
+                              fontSize: fontSize * 0.85,
+                              fontFamily: 'RobotoMono',
                             ),
                           );
                         }).toList();
@@ -614,20 +623,20 @@ class _InteractivePlotState extends ConsumerState<InteractivePlot> {
                               FlLine(
                                 color: Theme.of(
                                   context,
-                                ).colorScheme.onSurface.withValues(alpha: 0.5),
-                                strokeWidth: 1,
-                                dashArray: [4, 4],
+                                ).colorScheme.primary.withValues(alpha: 0.4),
+                                strokeWidth: 1.5,
+                                dashArray: [6, 4],
                               ),
                               FlDotData(
                                 show: true,
                                 getDotPainter: (spot, percent, barData, index) {
                                   return FlDotCirclePainter(
-                                    radius: 4,
-                                    color: Theme.of(
+                                    radius: 6,
+                                    color: barData.color ?? Colors.blue,
+                                    strokeWidth: 2,
+                                    strokeColor: Theme.of(
                                       context,
                                     ).colorScheme.surface,
-                                    strokeWidth: 2,
-                                    strokeColor: barData.color!,
                                   );
                                 },
                               ),
@@ -706,7 +715,7 @@ class _InteractivePlotState extends ConsumerState<InteractivePlot> {
                   minY: _minY,
                   maxY: _maxY,
                   lineBarsData: _buildLineChartBars(),
-                  showingTooltipIndicators: _showingTooltipIndicators,
+                  showingTooltipIndicators: _dataManager.isPaused ? _showingTooltipIndicators : [],
                 ),
                 // Animations disabled for performance
                 duration: Duration.zero,

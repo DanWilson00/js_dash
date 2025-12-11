@@ -58,7 +58,9 @@ class PlotLegend extends StatelessWidget {
           ),
           const SizedBox(width: 4),
           Text(
-            signal.effectiveDisplayName,
+            signal.units != null && signal.units!.isNotEmpty
+                ? '${signal.effectiveDisplayName} ${signal.units}'
+                : signal.effectiveDisplayName,
             style: Theme.of(context).textTheme.bodySmall?.copyWith(
               fontWeight: FontWeight.w500,
             ),
@@ -217,7 +219,9 @@ class PlotLegendOverlay extends StatelessWidget {
             ),
             const SizedBox(width: 4),
             Text(
-              signal.effectiveDisplayName,
+              signal.units != null && signal.units!.isNotEmpty
+                  ? '${signal.effectiveDisplayName} ${signal.units}'
+                  : signal.effectiveDisplayName,
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
                 fontSize: 12,
                 fontWeight: FontWeight.w500,

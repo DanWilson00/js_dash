@@ -24,18 +24,22 @@ class StatusTextLogPanel extends ConsumerStatefulWidget {
 class _StatusTextLogPanelState extends ConsumerState<StatusTextLogPanel> {
   bool _isExpanded = false;
   int _lastSeenCount = 0;
+  double _expandedHeight = 180.0;
+
+  static const double _minExpandedHeight = 60.0;
+  static const double _maxExpandedHeight = 800.0;
 
   @override
   Widget build(BuildContext context) {
     final entries = ref.watch(statusTextProvider);
     final highestSeverity = _getHighestSeverity(entries);
     final hasUnread = !_isExpanded && entries.length > _lastSeenCount;
+    final scale = widget.uiScale;
 
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 200),
+    return Container(
       height: _isExpanded
-          ? widget.expandedHeight * widget.uiScale
-          : widget.collapsedHeight * widget.uiScale,
+          ? _expandedHeight * scale
+          : widget.collapsedHeight * scale,
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.surfaceContainerLow,
         border: Border(
@@ -47,12 +51,42 @@ class _StatusTextLogPanelState extends ConsumerState<StatusTextLogPanel> {
       ),
       child: Column(
         children: [
+          // Resize handle at top when expanded
+          if (_isExpanded) _buildResizeHandle(context),
           _buildHeader(context, entries.length, highestSeverity, hasUnread),
           if (_isExpanded)
             Expanded(
               child: _buildMessageList(context, entries),
             ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildResizeHandle(BuildContext context) {
+    return MouseRegion(
+      cursor: SystemMouseCursors.resizeRow,
+      child: GestureDetector(
+        onVerticalDragUpdate: (details) {
+          setState(() {
+            _expandedHeight = (_expandedHeight - details.delta.dy)
+                .clamp(_minExpandedHeight, _maxExpandedHeight);
+          });
+        },
+        child: Container(
+          height: 8 * widget.uiScale,
+          color: Colors.transparent,
+          child: Center(
+            child: Container(
+              width: 40 * widget.uiScale,
+              height: 3 * widget.uiScale,
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.5),
+                borderRadius: BorderRadius.circular(2 * widget.uiScale),
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }
