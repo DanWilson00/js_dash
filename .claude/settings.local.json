@@ -18,7 +18,8 @@
       "Bash(Get-Content .gitmodules)",
       "Bash(git submodule:*)",
       "Bash(git rm:*)",
-      "Bash(cat:*)"
+      "Bash(cat:*)",
+      "Bash(dir:*)"
     ],
     "deny": []
   }

@@ -7,6 +7,7 @@ import '../../providers/service_providers.dart';
 import '../../providers/ui_providers.dart';
 import '../../providers/action_providers.dart';
 import '../../core/connection_config.dart';
+import '../../services/serial_byte_source.dart';
 
 class MainNavigation extends ConsumerStatefulWidget {
   final bool autoStartMonitor;
@@ -47,8 +48,8 @@ class _MainNavigationState extends ConsumerState<MainNavigation> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadSettings();
 
-      // Auto-start spoofing if enabled
-      _autoStartSpoofingIfEnabled();
+      // Auto-start connection if configured
+      _autoStartConnectionIfEnabled();
     });
   }
 
@@ -64,13 +65,13 @@ class _MainNavigationState extends ConsumerState<MainNavigation> {
         settings.navigation.selectedPlotIndex;
   }
 
-  void _autoStartSpoofingIfEnabled() {
+  void _autoStartConnectionIfEnabled() {
     final settingsManager = ref.read(settingsManagerProvider);
     final settings = settingsManager.settings;
+    final connectionActions = ref.read(connectionActionsProvider);
 
     if (settings.connection.enableSpoofing) {
       // Auto-start spoofing if enabled in settings
-      final connectionActions = ref.read(connectionActionsProvider);
       connectionActions.connectWith(
         SpoofConnectionConfig(
           systemId: settings.connection.spoofSystemId,
@@ -78,6 +79,18 @@ class _MainNavigationState extends ConsumerState<MainNavigation> {
           baudRate: settings.connection.spoofBaudRate,
         ),
       );
+    } else if (settings.connection.serialPort.isNotEmpty) {
+      // Auto-start serial if spoofing disabled and port is configured
+      // Only connect if the port actually exists
+      final availablePorts = SerialByteSource.getAvailablePorts();
+      if (availablePorts.contains(settings.connection.serialPort)) {
+        connectionActions.connectWith(
+          SerialConnectionConfig(
+            port: settings.connection.serialPort,
+            baudRate: settings.connection.serialBaudRate,
+          ),
+        );
+      }
     }
   }
 

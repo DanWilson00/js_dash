@@ -83,8 +83,9 @@ class GenericMessageStats {
     }
 
     // Apply unit conversions for common cases
-    if (field.units != null) {
-      final units = field.units!;
+    if (field.units != null && field.units!.isNotEmpty) {
+      // Strip brackets from units (JSON has "[degE7]", we check "degE7")
+      final units = field.units!.replaceAll(RegExp(r'[\[\]]'), '');
 
       // Radians to degrees for display
       if (units == 'rad' && value is num) {

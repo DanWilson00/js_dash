@@ -6,6 +6,7 @@ import '../../providers/action_providers.dart';
 import '../../providers/service_providers.dart';
 import '../../core/connection_config.dart';
 import '../../services/dialect_discovery.dart';
+import '../../services/serial_byte_source.dart';
 
 class ConnectionSettingsPanel extends ConsumerStatefulWidget {
   const ConnectionSettingsPanel({super.key});
@@ -15,9 +16,9 @@ class ConnectionSettingsPanel extends ConsumerStatefulWidget {
 }
 
 class _ConnectionSettingsPanelState extends ConsumerState<ConnectionSettingsPanel> {
-  late TextEditingController _serialPortController;
   late TextEditingController _spoofSystemIdController;
   late TextEditingController _spoofComponentIdController;
+  List<String> _availablePorts = [];
 
   // Common baud rates for MAVLink and serial communication
   static const List<int> _baudRates = [
@@ -39,14 +40,19 @@ class _ConnectionSettingsPanelState extends ConsumerState<ConnectionSettingsPane
     super.initState();
     final settingsManager = ref.read(settingsManagerProvider);
     final connection = settingsManager.connection;
-    _serialPortController = TextEditingController(text: connection.serialPort);
     _spoofSystemIdController = TextEditingController(text: connection.spoofSystemId.toString());
     _spoofComponentIdController = TextEditingController(text: connection.spoofComponentId.toString());
+    _refreshPorts();
+  }
+
+  void _refreshPorts() {
+    setState(() {
+      _availablePorts = SerialByteSource.getAvailablePorts();
+    });
   }
 
   @override
   void dispose() {
-    _serialPortController.dispose();
     _spoofSystemIdController.dispose();
     _spoofComponentIdController.dispose();
     super.dispose();
@@ -54,9 +60,6 @@ class _ConnectionSettingsPanelState extends ConsumerState<ConnectionSettingsPane
 
   void _syncControllersIfNeeded(ConnectionSettings connection) {
     // Only update if different to avoid cursor jumping during user input
-    if (_serialPortController.text != connection.serialPort) {
-      _serialPortController.text = connection.serialPort;
-    }
     if (_spoofSystemIdController.text != connection.spoofSystemId.toString()) {
       _spoofSystemIdController.text = connection.spoofSystemId.toString();
     }
@@ -171,8 +174,9 @@ class _ConnectionSettingsPanelState extends ConsumerState<ConnectionSettingsPane
                     // Update the setting
                     settingsManager.updateConnectionMode(value);
 
-                    // Auto-start spoofing if enabled
+                    // Auto-start connection based on new mode
                     if (value) {
+                      // Spoofing enabled - connect to spoof
                       try {
                         final connectionActions = ref.read(connectionActionsProvider);
                         final conn = settingsManager.connection;
@@ -181,6 +185,21 @@ class _ConnectionSettingsPanelState extends ConsumerState<ConnectionSettingsPane
                           componentId: conn.spoofComponentId,
                           baudRate: conn.spoofBaudRate,
                         ));
+                      } catch (e) {
+                        // Silently handle auto-start failures
+                      }
+                    } else {
+                      // Spoofing disabled - connect to serial if port selected and exists
+                      try {
+                        final conn = settingsManager.connection;
+                        if (conn.serialPort.isNotEmpty &&
+                            _availablePorts.contains(conn.serialPort)) {
+                          final connectionActions = ref.read(connectionActionsProvider);
+                          await connectionActions.connectWith(SerialConnectionConfig(
+                            port: conn.serialPort,
+                            baudRate: conn.serialBaudRate,
+                          ));
+                        }
                       } catch (e) {
                         // Silently handle auto-start failures
                       }
@@ -217,26 +236,40 @@ class _ConnectionSettingsPanelState extends ConsumerState<ConnectionSettingsPane
                   ListTile(
                     dense: true,
                     title: const Text('Serial port'),
-                    subtitle: const Text('Serial port device path (e.g., /dev/ttyUSB0)'),
-                    trailing: SizedBox(
-                      width: 180,
-                      child: TextField(
-                        controller: _serialPortController,
-                        style: Theme.of(context).textTheme.bodySmall,
-                        decoration: const InputDecoration(
-                          isDense: true,
-                          border: OutlineInputBorder(),
-                          contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                    subtitle: Text(_availablePorts.isEmpty
+                        ? 'No serial ports found'
+                        : 'Select serial port device'),
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        SizedBox(
+                          width: 150,
+                          child: DropdownButton<String>(
+                            isExpanded: true,
+                            value: _availablePorts.contains(connection.serialPort)
+                                ? connection.serialPort
+                                : null,
+                            hint: const Text('Select port'),
+                            items: _availablePorts.map((port) => DropdownMenuItem(
+                              value: port,
+                              child: Text(port),
+                            )).toList(),
+                            onChanged: (value) {
+                              if (value != null) {
+                                settingsManager.updateSerialConnection(
+                                  value,
+                                  connection.serialBaudRate,
+                                );
+                              }
+                            },
+                          ),
                         ),
-                        onChanged: (value) {
-                          if (value.isNotEmpty) {
-                            settingsManager.updateSerialConnection(
-                              value,
-                              connection.serialBaudRate,
-                            );
-                          }
-                        },
-                      ),
+                        IconButton(
+                          icon: const Icon(Icons.refresh),
+                          tooltip: 'Refresh ports',
+                          onPressed: _refreshPorts,
+                        ),
+                      ],
                     ),
                   ),
                   ListTile(

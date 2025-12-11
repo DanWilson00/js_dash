@@ -89,15 +89,26 @@ class MavlinkMessageDecoder {
     Uint8List payload,
     MavlinkMessageMetadata metadata,
   ) {
+    // MAVLink v2 zero-trimming: pad payload with zeros to expected length
+    // Senders trim trailing zeros to save bandwidth, receivers must pad them back
+    Uint8List paddedPayload;
+    if (payload.length < metadata.encodedLength) {
+      paddedPayload = Uint8List(metadata.encodedLength);
+      paddedPayload.setRange(0, payload.length, payload);
+      // Remaining bytes are already zero (Uint8List default)
+    } else {
+      paddedPayload = payload;
+    }
+
     final values = <String, dynamic>{};
-    final data = ByteData.sublistView(payload);
+    final data = ByteData.sublistView(paddedPayload);
 
     for (final field in metadata.fields) {
-      // Skip if payload is too short (truncated extension fields)
-      if (field.offset >= payload.length) continue;
+      // Skip if payload is too short for this field (shouldn't happen after padding)
+      if (field.offset + field.size > paddedPayload.length) continue;
 
       try {
-        final value = _decodeField(data, field, payload.length);
+        final value = _decodeField(data, field, paddedPayload.length);
         values[field.name] = value;
       } catch (e) {
         // Skip fields that can't be decoded (truncated payload)
