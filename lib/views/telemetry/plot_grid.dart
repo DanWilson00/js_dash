@@ -289,7 +289,12 @@ class PlotGridManagerState extends ConsumerState<PlotGridManager> {
           updatedSignals = List.from(plot.yAxis.signals)
             ..removeAt(existingSignalIndex);
         } else {
-          // Add new signal
+          // Add new signal - get units from metadata
+          final registry = ref.read(mavlinkRegistryProvider);
+          final messageMetadata = registry.getMessageByName(messageType);
+          final fieldMetadata = messageMetadata?.getField(fieldName);
+          final units = fieldMetadata?.units;
+
           updatedSignals = List.from(plot.yAxis.signals)
             ..add(
               PlotSignalConfiguration(
@@ -297,6 +302,7 @@ class PlotGridManagerState extends ConsumerState<PlotGridManager> {
                 messageType: messageType,
                 fieldName: fieldName,
                 displayName: fieldName,
+                units: units,
                 color: SignalColorPalette.getNextColor(
                   plot.yAxis.signals.length,
                 ),

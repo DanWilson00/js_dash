@@ -248,10 +248,17 @@ class _MultiSignalSelectionDialogState extends ConsumerState<MultiSignalSelectio
           final signalColor = SignalColorPalette.getNextAvailableColor(usedColors.toList());
           usedColors.add(signalColor);
 
+          // Get units from metadata
+          final registry = ref.read(mavlinkRegistryProvider);
+          final messageMetadata = registry.getMessageByName(messageType);
+          final fieldMetadata = messageMetadata?.getField(fieldName);
+          final units = fieldMetadata?.units;
+
           final signal = PlotSignalConfiguration(
             id: '${messageType}_${fieldName}_${DateTime.now().millisecondsSinceEpoch}',
             messageType: messageType,
             fieldName: fieldName,
+            units: units,
             color: signalColor,
           );
           selectedSignals.add(signal);

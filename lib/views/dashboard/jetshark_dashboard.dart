@@ -39,14 +39,10 @@ class _JetsharkDashboardState extends ConsumerState<JetsharkDashboard>
   late SmoothValueInterpolator _leftWingInterpolator;
   late SmoothValueInterpolator _rightWingInterpolator;
 
-  // Data values (Raw Targets)
-  double _targetRpm = 0.0;
-  double _targetSpeed = 0.0;
-  double _targetPitch = 0.0;
-  double _targetRoll = 0.0;
-  double _targetYaw = 0.0;
-  double _targetLeftWing = 0.0;
-  double _targetRightWing = 0.0;
+  // Data values (Raw Targets) - used by HudSideIndicators
+  // Note: These remain at initial values; smoothed values come from interpolators
+  final double _targetLeftWing = 0.0;
+  final double _targetRightWing = 0.0;
 
   // Note: Smoothed values now handled by physics interpolators
 

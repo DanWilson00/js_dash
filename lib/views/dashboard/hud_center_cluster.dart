@@ -1,7 +1,6 @@
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
-import 'dashboard_config.dart';
 
 class HudCenterCluster extends StatelessWidget {
   final double pitch; // in degrees

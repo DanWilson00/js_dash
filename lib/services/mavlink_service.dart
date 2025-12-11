@@ -1,50 +1,81 @@
 import 'dart:async';
 import 'dart:typed_data';
-import 'package:dart_mavlink/mavlink.dart';
-import 'package:dart_mavlink/dialects/common.dart';
+
 import '../interfaces/i_byte_source.dart';
-import 'mavlink_data_provider.dart';
+import '../interfaces/i_data_source.dart';
+import '../mavlink/mavlink.dart';
+import 'generic_message_tracker.dart';
 import 'serial_byte_source.dart';
 
 /// MAVLink service that parses bytes from an IByteSource
 /// This service handles the MAVLink protocol parsing and message dispatch
-class MavlinkService extends MavlinkDataProvider {
+class MavlinkService implements IDataSource {
   final IByteSource _byteSource;
-  final MavlinkDialect _dialect;
+  final MavlinkMetadataRegistry _registry;
+  final GenericMessageTracker _tracker;
 
-  MavlinkParser? _parser;
+  late final MavlinkFrameParser _parser;
+  late final MavlinkMessageDecoder _decoder;
+
   StreamSubscription<Uint8List>? _bytesSubscription;
+  StreamSubscription<MavlinkFrame>? _frameSubscription;
 
-  final StreamController<MavlinkFrame> _frameController =
-      StreamController<MavlinkFrame>.broadcast();
+  final StreamController<MavlinkMessage> _messageController =
+      StreamController<MavlinkMessage>.broadcast();
   final StreamController<Uint8List> _rawDataController =
       StreamController<Uint8List>.broadcast();
 
+  bool _isPaused = false;
+
   MavlinkService({
     required IByteSource byteSource,
-    required super.tracker,
+    required MavlinkMetadataRegistry registry,
+    required GenericMessageTracker tracker,
   })  : _byteSource = byteSource,
-        _dialect = MavlinkDialectCommon();
-
-  Stream<MavlinkFrame> get frameStream => _frameController.stream;
-  Stream<Uint8List> get rawDataStream => _rawDataController.stream;
+        _registry = registry,
+        _tracker = tracker {
+    _parser = MavlinkFrameParser(_registry);
+    _decoder = MavlinkMessageDecoder(_registry);
+  }
 
   @override
-  Stream<dynamic> get messageStream =>
-      frameStream.map((frame) => frame.message);
+  Stream<MavlinkMessage> get messageStream => _messageController.stream;
+
+  Stream<Uint8List> get rawDataStream => _rawDataController.stream;
+
+  Stream<Map<String, GenericMessageStats>> get messageStatsStream =>
+      _tracker.statsStream;
+
+  @override
+  Stream<MavlinkMessage> streamByName(String name) {
+    return _messageController.stream.where((msg) => msg.name == name);
+  }
+
+  @override
+  Stream<MavlinkMessage> streamById(int id) {
+    return _messageController.stream.where((msg) => msg.id == id);
+  }
 
   @override
   bool get isConnected => _byteSource.isConnected;
 
   @override
-  bool get isPaused => false; // Pause handled at byte source level
+  bool get isPaused => _isPaused;
+
+  /// The metadata registry.
+  MavlinkMetadataRegistry get registry => _registry;
 
   @override
   Future<void> initialize() async {
-    _parser = MavlinkParser(_dialect);
-    _parser!.stream.listen((MavlinkFrame frame) {
-      _frameController.add(frame);
-      addMessage(frame.message);
+    // Set up frame processing
+    _frameSubscription = _parser.stream.listen((frame) {
+      final message = _decoder.decode(frame);
+      if (message != null) {
+        _tracker.trackMessage(message);
+        if (!_isPaused) {
+          _messageController.add(message);
+        }
+      }
     });
   }
 
@@ -53,14 +84,14 @@ class MavlinkService extends MavlinkDataProvider {
     await disconnect();
 
     // Ensure parser is initialized
-    if (_parser == null) {
+    if (_frameSubscription == null) {
       await initialize();
     }
 
     // Subscribe to byte stream
     _bytesSubscription = _byteSource.bytes.listen((data) {
       _rawDataController.add(data);
-      _parser?.parse(data);
+      _parser.parse(data);
     });
 
     // Connect the byte source
@@ -76,21 +107,22 @@ class MavlinkService extends MavlinkDataProvider {
 
   @override
   void pause() {
-    // Could implement pause at byte source level if needed
+    _isPaused = true;
   }
 
   @override
   void resume() {
-    // Could implement resume at byte source level if needed
+    _isPaused = false;
   }
 
   @override
   void dispose() {
     disconnect();
+    _frameSubscription?.cancel();
     _byteSource.dispose();
-    _frameController.close();
+    _parser.dispose();
+    _messageController.close();
     _rawDataController.close();
-    super.dispose();
   }
 
   /// Get available serial ports (convenience method)

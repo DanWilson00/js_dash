@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/connection_config.dart';
 import '../interfaces/i_connection_manager.dart';
 import '../interfaces/i_data_repository.dart';
+import '../services/dialect_discovery.dart';
 import '../services/settings_manager.dart';
 import 'service_providers.dart';
 import 'ui_providers.dart';
@@ -12,17 +13,18 @@ import 'ui_providers.dart';
 /// Connection Actions Provider
 /// Handles connection-related operations
 final connectionActionsProvider = Provider<ConnectionActions>((ref) {
-  final connectionManager = ref.read(connectionManagerProvider);
   final settingsManager = ref.read(settingsManagerProvider);
-  return ConnectionActions(connectionManager, settingsManager, ref);
+  return ConnectionActions(settingsManager, ref);
 });
 
 class ConnectionActions {
-  final IConnectionManager _connectionManager;
   final SettingsManager _settingsManager;
   final Ref _ref;
 
-  ConnectionActions(this._connectionManager, this._settingsManager, this._ref);
+  ConnectionActions(this._settingsManager, this._ref);
+
+  /// Get the current connection manager (always fresh to avoid stale references after invalidation)
+  IConnectionManager get _connectionManager => _ref.read(connectionManagerProvider);
 
   /// Connect using the current form configuration
   Future<bool> connectWithCurrentConfig() async {
@@ -129,6 +131,74 @@ class ConnectionActions {
         spoofSystemId: formState.spoofSystemId,
         spoofComponentId: formState.spoofComponentId,
       );
+    }
+  }
+
+  /// Change MAVLink dialect
+  ///
+  /// Saves the dialect setting. Requires app restart to take effect.
+  /// Returns true if the dialect was changed (restart needed).
+  bool changeDialect(String newDialect) {
+    final currentDialect = _settingsManager.settings.connection.mavlinkDialect;
+    if (newDialect == currentDialect) return false;
+
+    _settingsManager.updateMavlinkDialect(newDialect);
+    return true; // Restart required
+  }
+
+  /// Connect with spoofing configuration from settings
+  Future<bool> connectWithSpoofing() async {
+    final settings = _settingsManager.settings.connection;
+    final config = SpoofConnectionConfig(
+      systemId: settings.spoofSystemId,
+      componentId: settings.spoofComponentId,
+    );
+    return await connectWith(config);
+  }
+
+  /// Import an XML dialect file
+  ///
+  /// Parses the XML file, generates JSON metadata, saves it to user dialects
+  /// folder, and sets it as the current dialect. Requires app restart.
+  /// Returns the imported dialect name.
+  Future<String> importXmlDialect(String xmlPath) async {
+    _ref.read(isLoadingProvider.notifier).state = true;
+    _ref.read(errorStateProvider.notifier).state = null;
+
+    try {
+      // Import and generate JSON from XML
+      final userDialectManager = DialectDiscovery.userDialectManager;
+      final dialectName = await userDialectManager.importXmlDialect(xmlPath);
+
+      // Set as current dialect (will be loaded on restart)
+      _settingsManager.updateMavlinkDialect(dialectName);
+
+      return dialectName;
+    } catch (e) {
+      _ref.read(errorStateProvider.notifier).state = 'Error importing dialect: $e';
+      rethrow;
+    } finally {
+      _ref.read(isLoadingProvider.notifier).state = false;
+    }
+  }
+
+  /// Reload a user dialect from its original XML source
+  ///
+  /// Re-parses the XML and regenerates the JSON. Requires app restart.
+  Future<void> reloadUserDialect(String dialectName) async {
+    _ref.read(isLoadingProvider.notifier).state = true;
+    _ref.read(errorStateProvider.notifier).state = null;
+
+    try {
+      // Reload from XML (regenerates JSON)
+      final userDialectManager = DialectDiscovery.userDialectManager;
+      await userDialectManager.reloadDialect(dialectName);
+      // Restart required for changes to take effect
+    } catch (e) {
+      _ref.read(errorStateProvider.notifier).state = 'Error reloading dialect: $e';
+      rethrow;
+    } finally {
+      _ref.read(isLoadingProvider.notifier).state = false;
     }
   }
 }

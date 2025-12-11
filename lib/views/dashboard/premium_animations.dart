@@ -46,11 +46,10 @@ class _TeslaSpringCurve extends Curve {
 class PhysicsAnimationController {
   late AnimationController _controller;
   late Animation<double> _animation;
-  
-  double _currentValue = 0.0;
+
+  final double _currentValue = 0.0;
   double _targetValue = 0.0;
-  double _velocity = 0.0;
-  
+
   PhysicsAnimationController({
     required TickerProvider vsync,
     Duration duration = const Duration(milliseconds: 400),

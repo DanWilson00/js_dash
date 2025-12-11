@@ -206,6 +206,9 @@ class ConnectionSettings {
   final bool autoStartMonitor;
   final bool isPaused;
 
+  // MAVLink dialect to load (e.g., "common", "ardupilotmega")
+  final String mavlinkDialect;
+
   const ConnectionSettings({
     required this.serialPort,
     required this.serialBaudRate,
@@ -215,6 +218,7 @@ class ConnectionSettings {
     required this.spoofComponentId,
     required this.autoStartMonitor,
     required this.isPaused,
+    this.mavlinkDialect = 'common',
   });
 
   factory ConnectionSettings.defaults() {
@@ -230,21 +234,29 @@ class ConnectionSettings {
       // General defaults
       autoStartMonitor: true,
       isPaused: false,
+      // MAVLink dialect
+      mavlinkDialect: 'common',
     );
   }
 
   factory ConnectionSettings.fromJson(Map<String, dynamic> json) {
-    // Migration: handle old settings with UDP fields
-    return ConnectionSettings(
-      serialPort: json['serialPort'] as String? ?? '/dev/ttyUSB0',
-      serialBaudRate: (json['serialBaudRate'] as num?)?.toInt() ?? 57600,
-      enableSpoofing: json['enableSpoofing'] as bool? ?? true,
-      spoofBaudRate: (json['spoofBaudRate'] as num?)?.toInt() ?? 57600,
-      spoofSystemId: (json['spoofSystemId'] as num?)?.toInt() ?? 1,
-      spoofComponentId: (json['spoofComponentId'] as num?)?.toInt() ?? 1,
-      autoStartMonitor: json['autoStartMonitor'] as bool? ?? true,
-      isPaused: json['isPaused'] as bool? ?? false,
-    );
+    // Try to use generated function, but handle missing fields for migration
+    try {
+      return _$ConnectionSettingsFromJson(json);
+    } catch (_) {
+      // Migration: handle old settings with missing fields
+      return ConnectionSettings(
+        serialPort: json['serialPort'] as String? ?? '/dev/ttyUSB0',
+        serialBaudRate: (json['serialBaudRate'] as num?)?.toInt() ?? 57600,
+        enableSpoofing: json['enableSpoofing'] as bool? ?? true,
+        spoofBaudRate: (json['spoofBaudRate'] as num?)?.toInt() ?? 57600,
+        spoofSystemId: (json['spoofSystemId'] as num?)?.toInt() ?? 1,
+        spoofComponentId: (json['spoofComponentId'] as num?)?.toInt() ?? 1,
+        autoStartMonitor: json['autoStartMonitor'] as bool? ?? true,
+        isPaused: json['isPaused'] as bool? ?? false,
+        mavlinkDialect: json['mavlinkDialect'] as String? ?? 'common',
+      );
+    }
   }
 
   Map<String, dynamic> toJson() => _$ConnectionSettingsToJson(this);
@@ -258,6 +270,7 @@ class ConnectionSettings {
     int? spoofComponentId,
     bool? autoStartMonitor,
     bool? isPaused,
+    String? mavlinkDialect,
   }) {
     return ConnectionSettings(
       serialPort: serialPort ?? this.serialPort,
@@ -268,6 +281,7 @@ class ConnectionSettings {
       spoofComponentId: spoofComponentId ?? this.spoofComponentId,
       autoStartMonitor: autoStartMonitor ?? this.autoStartMonitor,
       isPaused: isPaused ?? this.isPaused,
+      mavlinkDialect: mavlinkDialect ?? this.mavlinkDialect,
     );
   }
 }

@@ -1,9 +1,10 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../services/mavlink_message_tracker.dart';
 
 import '../../providers/service_providers.dart';
+import '../../services/generic_message_tracker.dart';
+import 'statustext_log_panel.dart';
 
 class MavlinkMessageMonitor extends ConsumerStatefulWidget {
   const MavlinkMessageMonitor({
@@ -31,7 +32,7 @@ class MavlinkMessageMonitor extends ConsumerStatefulWidget {
 
 class _MavlinkMessageMonitorState extends ConsumerState<MavlinkMessageMonitor> {
   static const double _baseMonitorWidth = 350.0;
-  Map<String, MessageStats> _messageStats = {};
+  Map<String, GenericMessageStats> _messageStats = {};
   StreamSubscription? _statsSubscription;
   final Set<String> _expandedMessages = {};
 
@@ -93,6 +94,7 @@ class _MavlinkMessageMonitorState extends ConsumerState<MavlinkMessageMonitor> {
                 ? _buildEmptyState()
                 : _buildMessageList(sortedMessages),
           ),
+          StatusTextLogPanel(uiScale: widget.uiScale),
         ],
       ),
     );
@@ -138,7 +140,7 @@ class _MavlinkMessageMonitorState extends ConsumerState<MavlinkMessageMonitor> {
   }
 
   Widget _buildMessageList(
-    List<MapEntry<String, MessageStats>> sortedMessages,
+    List<MapEntry<String, GenericMessageStats>> sortedMessages,
   ) {
     return ListView.builder(
       itemCount: sortedMessages.length,
@@ -155,10 +157,11 @@ class _MavlinkMessageMonitorState extends ConsumerState<MavlinkMessageMonitor> {
 
   Widget _buildMessageTile(
     String messageName,
-    MessageStats stats,
+    GenericMessageStats stats,
     bool isExpanded,
   ) {
-    final fields = stats.getMessageFields();
+    final registry = ref.read(mavlinkRegistryProvider);
+    final fields = stats.getFormattedFields(registry);
 
     return Card(
       margin: EdgeInsets.symmetric(
@@ -168,6 +171,8 @@ class _MavlinkMessageMonitorState extends ConsumerState<MavlinkMessageMonitor> {
       child: Column(
         children: [
           InkWell(
+            splashColor: Colors.transparent,
+            highlightColor: Colors.transparent,
             onTap: () => _toggleExpanded(messageName),
             child: Padding(
               padding: EdgeInsets.all(12.0 * widget.uiScale),
@@ -307,10 +312,11 @@ class _MavlinkMessageMonitorState extends ConsumerState<MavlinkMessageMonitor> {
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  SizedBox(
-                    width: 100 * widget.uiScale,
+                  Flexible(
+                    flex: 2,
                     child: Text(
                       field.key,
+                      overflow: TextOverflow.ellipsis,
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
                         fontWeight: FontWeight.w500,
                         color: Theme.of(context).colorScheme.onSurfaceVariant,
@@ -322,26 +328,19 @@ class _MavlinkMessageMonitorState extends ConsumerState<MavlinkMessageMonitor> {
                     ),
                   ),
                   SizedBox(width: 8 * widget.uiScale),
-                  Expanded(
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            field.value.toString(),
-                            style: Theme.of(context).textTheme.bodySmall
-                                ?.copyWith(
-                                  fontFamily: 'monospace',
-                                  color: Theme.of(context).colorScheme.primary,
-                                  fontSize:
-                                      (Theme.of(
-                                            context,
-                                          ).textTheme.bodySmall?.fontSize ??
-                                          12) *
-                                      widget.uiScale,
-                                ),
-                          ),
-                        ),
-                      ],
+                  Flexible(
+                    flex: 3,
+                    child: Text(
+                      field.value.toString(),
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        fontFamily: 'monospace',
+                        color: Theme.of(context).colorScheme.primary,
+                        fontSize:
+                            (Theme.of(context).textTheme.bodySmall?.fontSize ??
+                                12) *
+                            widget.uiScale,
+                      ),
                     ),
                   ),
                 ],

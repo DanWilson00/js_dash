@@ -1,11 +1,13 @@
 import 'dart:async';
+
 import '../core/connection_config.dart';
 import '../core/connection_status.dart';
 import '../interfaces/disposable.dart';
-import 'mavlink_message_tracker.dart';
-
 import '../interfaces/i_connection_manager.dart';
 import '../interfaces/i_data_source.dart';
+import '../mavlink/mavlink.dart';
+
+import 'generic_message_tracker.dart';
 import 'mavlink_service.dart';
 import 'serial_byte_source.dart';
 import 'spoof_byte_source.dart';
@@ -14,9 +16,13 @@ import 'spoof_byte_source.dart';
 /// This service abstracts connection details from UI components and provides
 /// a unified interface for managing connections regardless of type
 class ConnectionManager implements IConnectionManager, Disposable {
-  ConnectionManager.injected(this._injectedTracker);
+  ConnectionManager.injected(
+    this._registry,
+    this._injectedTracker,
+  );
 
-  final MavlinkMessageTracker? _injectedTracker;
+  final MavlinkMetadataRegistry _registry;
+  final GenericMessageTracker? _injectedTracker;
 
   IDataSource? _currentDataSource;
   ConnectionConfig? _currentConfig;
@@ -133,7 +139,7 @@ class ConnectionManager implements IConnectionManager, Disposable {
 
   /// Create appropriate data source based on configuration type
   IDataSource _createDataSource(ConnectionConfig config) {
-    final tracker = _injectedTracker ?? MavlinkMessageTracker();
+    final tracker = _injectedTracker ?? GenericMessageTracker(_registry);
 
     return switch (config) {
       SerialConnectionConfig serialConfig => _createSerialService(serialConfig, tracker),
@@ -142,21 +148,30 @@ class ConnectionManager implements IConnectionManager, Disposable {
   }
 
   /// Create MAVLink service with serial byte source
-  IDataSource _createSerialService(SerialConnectionConfig config, MavlinkMessageTracker tracker) {
+  IDataSource _createSerialService(SerialConnectionConfig config, GenericMessageTracker tracker) {
     final byteSource = SerialByteSource(
       portName: config.port,
       baudRate: config.baudRate,
     );
-    return MavlinkService(byteSource: byteSource, tracker: tracker);
+    return MavlinkService(
+      byteSource: byteSource,
+      registry: _registry,
+      tracker: tracker,
+    );
   }
 
   /// Create MAVLink service with spoof byte source
-  IDataSource _createSpoofService(SpoofConnectionConfig config, MavlinkMessageTracker tracker) {
+  IDataSource _createSpoofService(SpoofConnectionConfig config, GenericMessageTracker tracker) {
     final byteSource = SpoofByteSource(
+      registry: _registry,
       systemId: config.systemId,
       componentId: config.componentId,
     );
-    return MavlinkService(byteSource: byteSource, tracker: tracker);
+    return MavlinkService(
+      byteSource: byteSource,
+      registry: _registry,
+      tracker: tracker,
+    );
   }
 
   /// Update connection state and notify listeners

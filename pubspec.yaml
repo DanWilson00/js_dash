@@ -31,10 +31,6 @@ dependencies:
   flutter:
     sdk: flutter
 
-  # The RUNTIME ENGINE for handling MAVLink communication
-  # This is used in your main application code.
-  dart_mavlink: ^0.1.0 # Use the latest version from pub.dev
-
   # Charting libraries for time-series plots
   fl_chart: 1.0.0
   
@@ -62,6 +58,15 @@ dependencies:
 
   # State management with Riverpod
   flutter_riverpod: ^2.5.1
+
+  # XML parsing for MAVLink dialect loading
+  xml: ^6.5.0
+
+  # File picker for selecting XML files
+  file_picker: ^8.0.0
+
+  # App data directory for storing user dialects
+  path_provider: ^2.1.5
 
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.
@@ -97,10 +102,9 @@ flutter:
   shaders:
     - shaders/grid_terrain.frag
 
-  # To add assets to your application, add an assets section, like this:
-  # assets:
-  #   - images/a_dot_burr.jpeg
-  #   - images/a_dot_ham.jpeg
+  # MAVLink dialect metadata files (auto-discovered from folder)
+  assets:
+    - assets/mavlink/
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images

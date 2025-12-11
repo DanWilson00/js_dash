@@ -90,6 +90,7 @@ ConnectionSettings _$ConnectionSettingsFromJson(Map<String, dynamic> json) =>
       spoofComponentId: (json['spoofComponentId'] as num).toInt(),
       autoStartMonitor: json['autoStartMonitor'] as bool,
       isPaused: json['isPaused'] as bool,
+      mavlinkDialect: json['mavlinkDialect'] as String? ?? 'common',
     );
 
 Map<String, dynamic> _$ConnectionSettingsToJson(ConnectionSettings instance) =>
@@ -102,6 +103,7 @@ Map<String, dynamic> _$ConnectionSettingsToJson(ConnectionSettings instance) =>
       'spoofComponentId': instance.spoofComponentId,
       'autoStartMonitor': instance.autoStartMonitor,
       'isPaused': instance.isPaused,
+      'mavlinkDialect': instance.mavlinkDialect,
     };
 
 NavigationSettings _$NavigationSettingsFromJson(Map<String, dynamic> json) =>

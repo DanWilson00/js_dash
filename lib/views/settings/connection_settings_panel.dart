@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:file_picker/file_picker.dart';
 import '../../models/app_settings.dart';
 import '../../providers/action_providers.dart';
 import '../../providers/service_providers.dart';
 import '../../core/connection_config.dart';
+import '../../services/dialect_discovery.dart';
+import '../../services/serial_byte_source.dart';
 
 class ConnectionSettingsPanel extends ConsumerStatefulWidget {
   const ConnectionSettingsPanel({super.key});
@@ -14,9 +17,9 @@ class ConnectionSettingsPanel extends ConsumerStatefulWidget {
 }
 
 class _ConnectionSettingsPanelState extends ConsumerState<ConnectionSettingsPanel> {
-  late TextEditingController _serialPortController;
   late TextEditingController _spoofSystemIdController;
   late TextEditingController _spoofComponentIdController;
+  List<String> _availablePorts = [];
 
   // Common baud rates for MAVLink and serial communication
   static const List<int> _baudRates = [
@@ -38,14 +41,117 @@ class _ConnectionSettingsPanelState extends ConsumerState<ConnectionSettingsPane
     super.initState();
     final settingsManager = ref.read(settingsManagerProvider);
     final connection = settingsManager.connection;
-    _serialPortController = TextEditingController(text: connection.serialPort);
     _spoofSystemIdController = TextEditingController(text: connection.spoofSystemId.toString());
     _spoofComponentIdController = TextEditingController(text: connection.spoofComponentId.toString());
+    _refreshPorts();
+  }
+
+  void _refreshPorts() {
+    setState(() {
+      _availablePorts = SerialByteSource.getAvailablePorts();
+    });
+  }
+
+  void _showRestartRequiredDialog(String message) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Restart Required'),
+        content: Text(message),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _importXmlDialect() async {
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['xml'],
+        dialogTitle: 'Select MAVLink XML Dialect',
+      );
+
+      if (result != null && result.files.single.path != null) {
+        final xmlPath = result.files.single.path!;
+        final connectionActions = ref.read(connectionActionsProvider);
+
+        // Show loading indicator
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Importing XML dialect...')),
+          );
+        }
+
+        final dialectName = await connectionActions.importXmlDialect(xmlPath);
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).hideCurrentSnackBar();
+          // Force rebuild to refresh dialect list
+          setState(() {});
+          _showRestartRequiredDialog(
+            'Dialect "$dialectName" imported successfully.\n\n'
+            'Please restart the app to use the new dialect.',
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).hideCurrentSnackBar();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to import dialect: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _reloadDialect(String dialectName) async {
+    try {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Reloading dialect from XML...')),
+        );
+      }
+
+      final connectionActions = ref.read(connectionActionsProvider);
+      await connectionActions.reloadUserDialect(dialectName);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).hideCurrentSnackBar();
+        // Force rebuild
+        setState(() {});
+        _showRestartRequiredDialog(
+          'Dialect "$dialectName" reloaded from XML.\n\n'
+          'Please restart the app for changes to take effect.',
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).hideCurrentSnackBar();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to reload dialect: $e')),
+        );
+      }
+    }
+  }
+
+  void _changeDialect(String newDialect) {
+    final connectionActions = ref.read(connectionActionsProvider);
+    final changed = connectionActions.changeDialect(newDialect);
+    if (changed) {
+      _showRestartRequiredDialog(
+        'Dialect changed to "$newDialect".\n\n'
+        'Please restart the app for changes to take effect.',
+      );
+    }
   }
 
   @override
   void dispose() {
-    _serialPortController.dispose();
     _spoofSystemIdController.dispose();
     _spoofComponentIdController.dispose();
     super.dispose();
@@ -53,9 +159,6 @@ class _ConnectionSettingsPanelState extends ConsumerState<ConnectionSettingsPane
 
   void _syncControllersIfNeeded(ConnectionSettings connection) {
     // Only update if different to avoid cursor jumping during user input
-    if (_serialPortController.text != connection.serialPort) {
-      _serialPortController.text = connection.serialPort;
-    }
     if (_spoofSystemIdController.text != connection.spoofSystemId.toString()) {
       _spoofSystemIdController.text = connection.spoofSystemId.toString();
     }
@@ -77,6 +180,89 @@ class _ConnectionSettingsPanelState extends ConsumerState<ConnectionSettingsPane
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // MAVLink Dialect Selection
+          Card(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.code, size: 20),
+                      const SizedBox(width: 8),
+                      Text(
+                        'MAVLink Protocol',
+                        style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                FutureBuilder<List<DialectInfo>>(
+                  future: DialectDiscovery.getAvailableDialectsInfo(),
+                  builder: (context, snapshot) {
+                    final dialects = snapshot.data ?? [const DialectInfo(name: 'common', isUserDialect: false)];
+                    final currentDialect = connection.mavlinkDialect;
+                    final currentInfo = dialects.firstWhere(
+                      (d) => d.name == currentDialect,
+                      orElse: () => dialects.first,
+                    );
+
+                    return ListTile(
+                      dense: true,
+                      title: const Text('Dialect'),
+                      subtitle: const Text('MAVLink message definitions to use'),
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          DropdownButton<String>(
+                            value: dialects.any((d) => d.name == currentDialect) ? currentDialect : dialects.first.name,
+                            items: dialects.map((info) => DropdownMenuItem(
+                              value: info.name,
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(info.name),
+                                  if (info.isUserDialect) ...[
+                                    const SizedBox(width: 4),
+                                    Icon(Icons.person, size: 14, color: Theme.of(context).colorScheme.primary),
+                                  ],
+                                ],
+                              ),
+                            )).toList(),
+                            onChanged: (value) {
+                              if (value != null && value != currentDialect) {
+                                _changeDialect(value);
+                              }
+                            },
+                          ),
+                          const SizedBox(width: 4),
+                          // Reload button for user dialects
+                          if (currentInfo.isUserDialect && currentInfo.xmlSourcePath != null)
+                            IconButton(
+                              icon: const Icon(Icons.refresh, size: 20),
+                              tooltip: 'Reload from XML source',
+                              onPressed: () => _reloadDialect(currentDialect),
+                            ),
+                          // Import XML button
+                          IconButton(
+                            icon: const Icon(Icons.add, size: 20),
+                            tooltip: 'Import XML dialect',
+                            onPressed: _importXmlDialect,
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+              ],
+            ),
+          ),
+
+          const SizedBox(height: 16),
+
           // Spoofing Enable/Disable
           Card(
             child: Column(
@@ -118,8 +304,9 @@ class _ConnectionSettingsPanelState extends ConsumerState<ConnectionSettingsPane
                     // Update the setting
                     settingsManager.updateConnectionMode(value);
 
-                    // Auto-start spoofing if enabled
+                    // Auto-start connection based on new mode
                     if (value) {
+                      // Spoofing enabled - connect to spoof
                       try {
                         final connectionActions = ref.read(connectionActionsProvider);
                         final conn = settingsManager.connection;
@@ -128,6 +315,21 @@ class _ConnectionSettingsPanelState extends ConsumerState<ConnectionSettingsPane
                           componentId: conn.spoofComponentId,
                           baudRate: conn.spoofBaudRate,
                         ));
+                      } catch (e) {
+                        // Silently handle auto-start failures
+                      }
+                    } else {
+                      // Spoofing disabled - connect to serial if port selected and exists
+                      try {
+                        final conn = settingsManager.connection;
+                        if (conn.serialPort.isNotEmpty &&
+                            _availablePorts.contains(conn.serialPort)) {
+                          final connectionActions = ref.read(connectionActionsProvider);
+                          await connectionActions.connectWith(SerialConnectionConfig(
+                            port: conn.serialPort,
+                            baudRate: conn.serialBaudRate,
+                          ));
+                        }
                       } catch (e) {
                         // Silently handle auto-start failures
                       }
@@ -164,26 +366,40 @@ class _ConnectionSettingsPanelState extends ConsumerState<ConnectionSettingsPane
                   ListTile(
                     dense: true,
                     title: const Text('Serial port'),
-                    subtitle: const Text('Serial port device path (e.g., /dev/ttyUSB0)'),
-                    trailing: SizedBox(
-                      width: 180,
-                      child: TextField(
-                        controller: _serialPortController,
-                        style: Theme.of(context).textTheme.bodySmall,
-                        decoration: const InputDecoration(
-                          isDense: true,
-                          border: OutlineInputBorder(),
-                          contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                    subtitle: Text(_availablePorts.isEmpty
+                        ? 'No serial ports found'
+                        : 'Select serial port device'),
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        SizedBox(
+                          width: 150,
+                          child: DropdownButton<String>(
+                            isExpanded: true,
+                            value: _availablePorts.contains(connection.serialPort)
+                                ? connection.serialPort
+                                : null,
+                            hint: const Text('Select port'),
+                            items: _availablePorts.map((port) => DropdownMenuItem(
+                              value: port,
+                              child: Text(port),
+                            )).toList(),
+                            onChanged: (value) {
+                              if (value != null) {
+                                settingsManager.updateSerialConnection(
+                                  value,
+                                  connection.serialBaudRate,
+                                );
+                              }
+                            },
+                          ),
                         ),
-                        onChanged: (value) {
-                          if (value.isNotEmpty) {
-                            settingsManager.updateSerialConnection(
-                              value,
-                              connection.serialBaudRate,
-                            );
-                          }
-                        },
-                      ),
+                        IconButton(
+                          icon: const Icon(Icons.refresh),
+                          tooltip: 'Refresh ports',
+                          onPressed: _refreshPorts,
+                        ),
+                      ],
                     ),
                   ),
                   ListTile(

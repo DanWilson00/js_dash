@@ -245,6 +245,15 @@ class SettingsManager extends ChangeNotifier {
     );
   }
 
+  /// Update MAVLink dialect setting
+  void updateMavlinkDialect(String dialect) {
+    if (_settings.connection.mavlinkDialect == dialect) return;
+
+    updateConnection(
+      _settings.connection.copyWith(mavlinkDialect: dialect),
+    );
+  }
+
   /// Update pause state
   void updatePauseState(bool isPaused) {
     updateConnection(_settings.connection.copyWith(isPaused: isPaused));
