@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/connection_config.dart';
 import '../interfaces/i_connection_manager.dart';
 import '../interfaces/i_data_repository.dart';
+import '../services/serial_byte_source.dart';
 import '../services/settings_manager.dart';
 import 'service_providers.dart';
 import 'ui_providers.dart';
@@ -168,12 +169,28 @@ class ConnectionActions {
       _ref.invalidate(messageTrackerProvider);
       _ref.invalidate(connectionManagerProvider);
 
-      // 6. Reconnect if spoofing enabled and auto-start
+      // 6. Reconnect based on connection mode
       final settings = _settingsManager.settings;
-      if (settings.connection.enableSpoofing && settings.connection.autoStartMonitor) {
-        // Small delay to allow providers to recreate
-        await Future.delayed(const Duration(milliseconds: 100));
-        await connectWithSpoofing();
+      // Small delay to allow providers to recreate
+      await Future.delayed(const Duration(milliseconds: 100));
+
+      // Re-read the NEW connection manager after invalidation
+      final newConnectionManager = _ref.read(connectionManagerProvider);
+
+      if (settings.connection.enableSpoofing) {
+        await newConnectionManager.connect(SpoofConnectionConfig(
+          systemId: settings.connection.spoofSystemId,
+          componentId: settings.connection.spoofComponentId,
+        ));
+      } else if (settings.connection.serialPort.isNotEmpty) {
+        // Reconnect serial if port is valid and exists
+        final availablePorts = SerialByteSource.getAvailablePorts();
+        if (availablePorts.contains(settings.connection.serialPort)) {
+          await newConnectionManager.connect(SerialConnectionConfig(
+            port: settings.connection.serialPort,
+            baudRate: settings.connection.serialBaudRate,
+          ));
+        }
       }
     } catch (e) {
       _ref.read(errorStateProvider.notifier).state = 'Error changing dialect: $e';

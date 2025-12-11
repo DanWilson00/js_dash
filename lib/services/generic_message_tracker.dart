@@ -175,6 +175,12 @@ class GenericMessageTracker {
 
   void _updateFrequencies() {
     final now = DateTime.now();
+    const staleThreshold = Duration(seconds: 10);
+
+    // Remove messages not received for 10+ seconds
+    _messageStats.removeWhere((name, stats) =>
+      now.difference(stats.lastReceived) > staleThreshold
+    );
 
     for (final stats in _messageStats.values) {
       final timeSinceLastMessage = now.difference(stats.lastReceived);

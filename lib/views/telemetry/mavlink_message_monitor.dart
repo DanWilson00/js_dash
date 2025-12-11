@@ -169,6 +169,8 @@ class _MavlinkMessageMonitorState extends ConsumerState<MavlinkMessageMonitor> {
       child: Column(
         children: [
           InkWell(
+            splashColor: Colors.transparent,
+            highlightColor: Colors.transparent,
             onTap: () => _toggleExpanded(messageName),
             child: Padding(
               padding: EdgeInsets.all(12.0 * widget.uiScale),
@@ -308,10 +310,11 @@ class _MavlinkMessageMonitorState extends ConsumerState<MavlinkMessageMonitor> {
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  SizedBox(
-                    width: 100 * widget.uiScale,
+                  Flexible(
+                    flex: 2,
                     child: Text(
                       field.key,
+                      overflow: TextOverflow.ellipsis,
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
                         fontWeight: FontWeight.w500,
                         color: Theme.of(context).colorScheme.onSurfaceVariant,
@@ -323,26 +326,19 @@ class _MavlinkMessageMonitorState extends ConsumerState<MavlinkMessageMonitor> {
                     ),
                   ),
                   SizedBox(width: 8 * widget.uiScale),
-                  Expanded(
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            field.value.toString(),
-                            style: Theme.of(context).textTheme.bodySmall
-                                ?.copyWith(
-                                  fontFamily: 'monospace',
-                                  color: Theme.of(context).colorScheme.primary,
-                                  fontSize:
-                                      (Theme.of(
-                                            context,
-                                          ).textTheme.bodySmall?.fontSize ??
-                                          12) *
-                                      widget.uiScale,
-                                ),
-                          ),
-                        ),
-                      ],
+                  Flexible(
+                    flex: 3,
+                    child: Text(
+                      field.value.toString(),
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        fontFamily: 'monospace',
+                        color: Theme.of(context).colorScheme.primary,
+                        fontSize:
+                            (Theme.of(context).textTheme.bodySmall?.fontSize ??
+                                12) *
+                            widget.uiScale,
+                      ),
                     ),
                   ),
                 ],
