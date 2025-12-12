@@ -174,8 +174,10 @@ class _RealtimeDataDisplayState extends ConsumerState<RealtimeDataDisplay> {
 
   void _stopEditing() {
     if (_editingTabId != null) {
-      if (_renameController.text.isNotEmpty) {
-        _renameTab(_editingTabId!, _renameController.text);
+      final trimmedText = _renameController.text.trim();
+      // Only save if the name is not empty/whitespace-only
+      if (trimmedText.isNotEmpty) {
+        _renameTab(_editingTabId!, trimmedText);
       }
       setState(() {
         _editingTabId = null;

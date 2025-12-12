@@ -82,7 +82,7 @@ void main() {
       expect(viewIndex, 0); // Default to first view
 
       // Test updating
-      container.read(selectedViewIndexProvider.notifier).state = 2;
+      container.read(selectedViewIndexProvider.notifier).set(2);
       final updatedIndex = container.read(selectedViewIndexProvider);
       expect(updatedIndex, 2);
     });
@@ -92,7 +92,7 @@ void main() {
       expect(plotIndex, 0); // Default to first plot
 
       // Test updating
-      container.read(selectedPlotIndexProvider.notifier).state = 1;
+      container.read(selectedPlotIndexProvider.notifier).set(1);
       final updatedIndex = container.read(selectedPlotIndexProvider);
       expect(updatedIndex, 1);
     });
@@ -149,10 +149,10 @@ void main() {
       expect(fields, isEmpty);
 
       // Test adding fields
-      container.read(selectedFieldsProvider.notifier).state = {
+      container.read(selectedFieldsProvider.notifier).set({
         'field1',
         'field2',
-      };
+      });
       final updatedFields = container.read(selectedFieldsProvider);
       expect(updatedFields, {'field1', 'field2'});
     });
@@ -163,9 +163,9 @@ void main() {
       expect(container.read(isPausedProvider), false);
 
       // Test updating states
-      container.read(errorStateProvider.notifier).state = 'Test error';
-      container.read(isLoadingProvider.notifier).state = true;
-      container.read(isPausedProvider.notifier).state = true;
+      container.read(errorStateProvider.notifier).set('Test error');
+      container.read(isLoadingProvider.notifier).set(true);
+      container.read(isPausedProvider.notifier).set(true);
 
       expect(container.read(errorStateProvider), 'Test error');
       expect(container.read(isLoadingProvider), true);

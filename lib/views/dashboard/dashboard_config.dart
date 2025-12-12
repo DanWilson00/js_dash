@@ -45,6 +45,11 @@ class DashboardConfig {
   // Speed Conversion
   static const double speedConversionFactor = 1.94384; // m/s to knots
 
+  // RPM Calculation
+  // RPM = rpmBaseValue + (throttle * rpmThrottleMultiplier)
+  static const double rpmBaseValue = 1000.0; // Idle RPM
+  static const double rpmThrottleMultiplier = 70.0; // RPM per throttle percentage
+
   // Branding Text
   static const String brandingText = 'JETSHARK';
 }

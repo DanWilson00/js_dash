@@ -10,31 +10,34 @@ import 'service_providers.dart';
 /// Maximum number of STATUSTEXT entries to keep in memory.
 const int _maxStatusTextEntries = 100;
 
-/// Provider for STATUSTEXT messages.
-final statusTextProvider =
-    StateNotifierProvider<StatusTextNotifier, List<StatusTextEntry>>((ref) {
-  final notifier = StatusTextNotifier(ref);
-  ref.onDispose(() => notifier.dispose());
-  return notifier;
-});
-
-/// StateNotifier that manages STATUSTEXT message entries.
-class StatusTextNotifier extends StateNotifier<List<StatusTextEntry>> {
-  StatusTextNotifier(this._ref) : super([]) {
-    _initialize();
-  }
-
-  final Ref _ref;
+/// Notifier that manages STATUSTEXT message entries.
+/// Migrated from StateNotifier to Notifier for Riverpod 3.x compatibility.
+class StatusTextNotifier extends Notifier<List<StatusTextEntry>> {
   StreamSubscription<ConnectionStatus>? _statusSubscription;
   StreamSubscription<MavlinkMessage>? _messageSubscription;
   MavlinkMetadataRegistry? _registry;
   bool _isSubscribedToMessages = false;
 
+  @override
+  List<StatusTextEntry> build() {
+    _initialize();
+
+    // Register cleanup on dispose
+    ref.onDispose(() {
+      _statusSubscription?.cancel();
+      _messageSubscription?.cancel();
+      _statusSubscription = null;
+      _messageSubscription = null;
+    });
+
+    return [];
+  }
+
   void _initialize() {
-    _registry = _ref.read(mavlinkRegistryProvider);
+    _registry = ref.read(mavlinkRegistryProvider);
 
     // Subscribe to connection status stream
-    final connectionManager = _ref.read(connectionManagerProvider);
+    final connectionManager = ref.read(connectionManagerProvider);
     _statusSubscription = connectionManager.statusStream.listen((status) {
       if (status.state == ConnectionState.connected) {
         _subscribeToStatusText();
@@ -52,7 +55,7 @@ class StatusTextNotifier extends StateNotifier<List<StatusTextEntry>> {
   void _subscribeToStatusText() {
     if (_isSubscribedToMessages) return;
 
-    final connectionManager = _ref.read(connectionManagerProvider);
+    final connectionManager = ref.read(connectionManagerProvider);
     final dataSource = connectionManager.currentDataSource;
 
     if (dataSource != null) {
@@ -109,13 +112,10 @@ class StatusTextNotifier extends StateNotifier<List<StatusTextEntry>> {
   void clear() {
     state = [];
   }
-
-  @override
-  void dispose() {
-    _statusSubscription?.cancel();
-    _messageSubscription?.cancel();
-    _statusSubscription = null;
-    _messageSubscription = null;
-    super.dispose();
-  }
 }
+
+/// Provider for STATUSTEXT messages.
+final statusTextProvider =
+    NotifierProvider<StatusTextNotifier, List<StatusTextEntry>>(
+  StatusTextNotifier.new,
+);

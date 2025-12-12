@@ -15,7 +15,9 @@ final mavlinkRegistryProvider = Provider<MavlinkMetadataRegistry>((ref) {
 });
 
 /// Settings Manager Provider
-final settingsManagerProvider = ChangeNotifierProvider<SettingsManager>((ref) {
+/// Note: SettingsManager is a ChangeNotifier but we expose it via a regular Provider.
+/// UI components should watch this and call notifyListeners() when settings change.
+final settingsManagerProvider = Provider<SettingsManager>((ref) {
   return SettingsManager();
 });
 

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' show pi;
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -76,10 +77,11 @@ class _JetsharkDashboardState extends ConsumerState<JetsharkDashboard>
     double? roll;
     double? yaw;
 
-    // Extract RPM
+    // Extract RPM from throttle using configured conversion
     final vfrHudThrottle = _getLatestValue(dataBuffers, 'VFR_HUD.throttle');
     if (vfrHudThrottle != null) {
-      rpm = 1000 + (vfrHudThrottle * 70);
+      rpm = DashboardConfig.rpmBaseValue +
+          (vfrHudThrottle * DashboardConfig.rpmThrottleMultiplier);
     }
 
     // Extract Speed
@@ -94,9 +96,9 @@ class _JetsharkDashboardState extends ConsumerState<JetsharkDashboard>
 
     if (roll != null && pitch != null) {
       // Convert radians to degrees for display
-      final rollDeg = roll * 180 / 3.14159;
-      final pitchDeg = pitch * 180 / 3.14159;
-      final yawDeg = (yaw ?? 0) * 180 / 3.14159;
+      final rollDeg = roll * 180 / pi;
+      final pitchDeg = pitch * 180 / pi;
+      final yawDeg = (yaw ?? 0) * 180 / pi;
 
       // Simulate wing positions based on roll/pitch
       leftWing = rollDeg;
