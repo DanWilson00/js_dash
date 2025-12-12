@@ -8,32 +8,71 @@ import 'service_providers.dart';
 /// UI-specific providers that handle state for different UI components
 /// These providers bridge between the service layer and UI widgets
 
-/// Navigation State Provider
-/// Manages which page/view is currently selected
-final selectedViewIndexProvider = StateProvider<int>((ref) {
-  final settingsManager = ref.read(settingsManagerProvider);
-  return settingsManager.settings.navigation.selectedViewIndex;
-});
+// =============================================================================
+// Navigation State
+// =============================================================================
 
-/// Plot Selection Provider
-/// Manages which plot is currently selected
-final selectedPlotIndexProvider = StateProvider<int>((ref) {
-  final settingsManager = ref.read(settingsManagerProvider);
-  return settingsManager.settings.navigation.selectedPlotIndex;
-});
+/// Notifier for selected view index
+class SelectedViewIndexNotifier extends Notifier<int> {
+  @override
+  int build() {
+    final settingsManager = ref.read(settingsManagerProvider);
+    return settingsManager.settings.navigation.selectedViewIndex;
+  }
 
-/// Connection Configuration Provider
-/// Manages the current connection configuration being edited
-final currentConnectionConfigProvider = StateProvider<ConnectionConfig?>(
-  (ref) => null,
+  void set(int index) {
+    state = index;
+  }
+}
+
+/// Navigation State Provider - Manages which page/view is currently selected
+final selectedViewIndexProvider =
+    NotifierProvider<SelectedViewIndexNotifier, int>(
+  SelectedViewIndexNotifier.new,
 );
 
-/// Connection Form State Provider
-/// Manages the state of connection form fields
-final connectionFormProvider =
-    StateNotifierProvider<ConnectionFormNotifier, ConnectionFormState>((ref) {
-      return ConnectionFormNotifier();
-    });
+/// Notifier for selected plot index
+class SelectedPlotIndexNotifier extends Notifier<int> {
+  @override
+  int build() {
+    final settingsManager = ref.read(settingsManagerProvider);
+    return settingsManager.settings.navigation.selectedPlotIndex;
+  }
+
+  void set(int index) {
+    state = index;
+  }
+}
+
+/// Plot Selection Provider - Manages which plot is currently selected
+final selectedPlotIndexProvider =
+    NotifierProvider<SelectedPlotIndexNotifier, int>(
+  SelectedPlotIndexNotifier.new,
+);
+
+// =============================================================================
+// Connection Configuration
+// =============================================================================
+
+/// Notifier for current connection config
+class CurrentConnectionConfigNotifier extends Notifier<ConnectionConfig?> {
+  @override
+  ConnectionConfig? build() => null;
+
+  void set(ConnectionConfig? config) {
+    state = config;
+  }
+}
+
+/// Connection Configuration Provider - Manages the current connection config
+final currentConnectionConfigProvider =
+    NotifierProvider<CurrentConnectionConfigNotifier, ConnectionConfig?>(
+  CurrentConnectionConfigNotifier.new,
+);
+
+// =============================================================================
+// Connection Form State
+// =============================================================================
 
 /// Connection form state
 class ConnectionFormState {
@@ -92,9 +131,10 @@ class ConnectionFormState {
   }
 }
 
-/// Connection form state notifier
-class ConnectionFormNotifier extends StateNotifier<ConnectionFormState> {
-  ConnectionFormNotifier() : super(const ConnectionFormState());
+/// Connection form state notifier (migrated from StateNotifier to Notifier)
+class ConnectionFormNotifier extends Notifier<ConnectionFormState> {
+  @override
+  ConnectionFormState build() => const ConnectionFormState();
 
   void updateSerialPort(String port) {
     state = state.copyWith(serialPort: port);
@@ -131,8 +171,7 @@ class ConnectionFormNotifier extends StateNotifier<ConnectionFormState> {
 
     if (state.enableSpoofing) {
       // Spoof validation
-      isValid =
-          state.spoofSystemId > 0 &&
+      isValid = state.spoofSystemId > 0 &&
           state.spoofComponentId > 0 &&
           state.spoofBaudRate > 0;
     } else {
@@ -157,15 +196,23 @@ class ConnectionFormNotifier extends StateNotifier<ConnectionFormState> {
   }
 }
 
-/// Settings State Provider
-/// Provides reactive access to app settings
+/// Connection Form State Provider
+final connectionFormProvider =
+    NotifierProvider<ConnectionFormNotifier, ConnectionFormState>(
+  ConnectionFormNotifier.new,
+);
+
+// =============================================================================
+// Settings Providers
+// =============================================================================
+
+/// Settings State Provider - Provides reactive access to app settings
 final appSettingsProvider = StreamProvider<AppSettings>((ref) async* {
   final settingsManager = ref.watch(settingsManagerProvider);
   yield settingsManager.settings;
 });
 
 /// Window Settings Provider
-/// Manages window size, position, etc.
 final windowSettingsProvider = Provider<WindowSettings>((ref) {
   final settings = ref.watch(appSettingsProvider);
   return settings.when(
@@ -176,7 +223,6 @@ final windowSettingsProvider = Provider<WindowSettings>((ref) {
 });
 
 /// Plot Settings Provider
-/// Manages plot configuration and layout
 final plotSettingsProvider = Provider<PlotSettings>((ref) {
   final settings = ref.watch(appSettingsProvider);
   return settings.when(
@@ -187,7 +233,6 @@ final plotSettingsProvider = Provider<PlotSettings>((ref) {
 });
 
 /// Performance Settings Provider
-/// Manages performance and optimization settings
 final performanceSettingsProvider = Provider<PerformanceSettings>((ref) {
   final settings = ref.watch(appSettingsProvider);
   return settings.when(
@@ -198,7 +243,6 @@ final performanceSettingsProvider = Provider<PerformanceSettings>((ref) {
 });
 
 /// Map Settings Provider
-/// Manages map display and interaction settings
 final mapSettingsProvider = Provider<MapSettings>((ref) {
   final settings = ref.watch(appSettingsProvider);
   return settings.when(
@@ -209,9 +253,7 @@ final mapSettingsProvider = Provider<MapSettings>((ref) {
 });
 
 /// Theme Provider
-/// Could be extended for theme management
 final themeProvider = Provider<ThemeData>((ref) {
-  // For now, return default dark theme suitable for dashboard
   return ThemeData.dark().copyWith(
     colorScheme: ColorScheme.fromSeed(
       seedColor: Colors.blue,
@@ -221,12 +263,53 @@ final themeProvider = Provider<ThemeData>((ref) {
   );
 });
 
-/// Field Selection Provider
-/// Manages which fields are selected for plotting
-final selectedFieldsProvider = StateProvider<Set<String>>((ref) => <String>{});
+// =============================================================================
+// Field Selection
+// =============================================================================
+
+/// Notifier for selected fields
+class SelectedFieldsNotifier extends Notifier<Set<String>> {
+  @override
+  Set<String> build() => <String>{};
+
+  void set(Set<String> fields) {
+    state = fields;
+  }
+
+  void add(String field) {
+    state = {...state, field};
+  }
+
+  void remove(String field) {
+    state = {...state}..remove(field);
+  }
+
+  void toggle(String field) {
+    if (state.contains(field)) {
+      remove(field);
+    } else {
+      add(field);
+    }
+  }
+
+  void clear() {
+    state = <String>{};
+  }
+}
+
+/// Field Selection Provider - Manages which fields are selected for plotting
+final selectedFieldsProvider =
+    NotifierProvider<SelectedFieldsNotifier, Set<String>>(
+  SelectedFieldsNotifier.new,
+);
+
+// =============================================================================
+// Plot Configuration (Family Provider)
+// =============================================================================
 
 /// Plot Configuration Provider for specific plot index
-final plotConfigurationProvider = StateProvider.family<PlotConfiguration?, int>(
+/// Uses a simple Provider.family since this is derived from other state
+final plotConfigurationProvider = Provider.family<PlotConfiguration?, int>(
   (ref, plotIndex) {
     final plotSettings = ref.watch(plotSettingsProvider);
     // Find current tab
@@ -242,14 +325,59 @@ final plotConfigurationProvider = StateProvider.family<PlotConfiguration?, int>(
   },
 );
 
-/// Pause State Provider
-/// Manages global pause state for data collection
-final isPausedProvider = StateProvider<bool>((ref) => false);
+// =============================================================================
+// Global UI State
+// =============================================================================
 
-/// Error State Provider
-/// Manages global error state and messages
-final errorStateProvider = StateProvider<String?>((ref) => null);
+/// Notifier for pause state
+class IsPausedNotifier extends Notifier<bool> {
+  @override
+  bool build() => false;
 
-/// Loading State Provider
-/// Manages global loading state
-final isLoadingProvider = StateProvider<bool>((ref) => false);
+  void set(bool value) {
+    state = value;
+  }
+
+  void toggle() {
+    state = !state;
+  }
+}
+
+/// Pause State Provider - Manages global pause state for data collection
+final isPausedProvider = NotifierProvider<IsPausedNotifier, bool>(
+  IsPausedNotifier.new,
+);
+
+/// Notifier for error state
+class ErrorStateNotifier extends Notifier<String?> {
+  @override
+  String? build() => null;
+
+  void set(String? error) {
+    state = error;
+  }
+
+  void clear() {
+    state = null;
+  }
+}
+
+/// Error State Provider - Manages global error state and messages
+final errorStateProvider = NotifierProvider<ErrorStateNotifier, String?>(
+  ErrorStateNotifier.new,
+);
+
+/// Notifier for loading state
+class IsLoadingNotifier extends Notifier<bool> {
+  @override
+  bool build() => false;
+
+  void set(bool value) {
+    state = value;
+  }
+}
+
+/// Loading State Provider - Manages global loading state
+final isLoadingProvider = NotifierProvider<IsLoadingNotifier, bool>(
+  IsLoadingNotifier.new,
+);

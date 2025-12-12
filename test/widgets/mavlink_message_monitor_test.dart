@@ -1,15 +1,35 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:js_dash/mavlink/mavlink.dart';
+import 'package:js_dash/models/statustext_entry.dart';
 import 'package:js_dash/views/telemetry/mavlink_message_monitor.dart';
 import 'package:js_dash/services/generic_message_tracker.dart';
+import 'package:js_dash/services/settings_manager.dart';
+import 'package:js_dash/services/timeseries_data_manager.dart';
 import 'package:js_dash/providers/service_providers.dart';
+import 'package:js_dash/providers/statustext_provider.dart';
+
+/// Test notifier that provides empty status text without requiring connection manager
+class _TestStatusTextNotifier extends Notifier<List<StatusTextEntry>>
+    implements StatusTextNotifier {
+  @override
+  List<StatusTextEntry> build() => [];
+
+  @override
+  void clear() {
+    state = [];
+  }
+}
 
 void main() {
   group('MavlinkMessageMonitor Widget', () {
     late MavlinkMetadataRegistry registry;
     late GenericMessageTracker tracker;
+    late SettingsManager settingsManager;
+    late TimeSeriesDataManager dataManager;
 
     setUp(() {
       registry = MavlinkMetadataRegistry();
@@ -31,19 +51,28 @@ void main() {
 ''');
       tracker = GenericMessageTracker(registry);
       tracker.startTracking();
+      settingsManager = SettingsManager();
+      dataManager = TimeSeriesDataManager.injected(tracker, settingsManager);
     });
 
     tearDown(() {
       tracker.stopTracking();
+      dataManager.dispose();
     });
+
+    /// Get provider overrides for testing
+    getTestOverrides() => [
+          mavlinkRegistryProvider.overrideWith((ref) => registry),
+          messageTrackerProvider.overrideWith((ref) => tracker),
+          timeSeriesDataManagerProvider.overrideWith((ref) => dataManager),
+          // Override the notifier directly for testing
+          statusTextProvider.overrideWith(_TestStatusTextNotifier.new),
+        ];
 
     testWidgets('should build without error', (WidgetTester tester) async {
       await tester.pumpWidget(
         ProviderScope(
-          overrides: [
-            mavlinkRegistryProvider.overrideWith((ref) => registry),
-            messageTrackerProvider.overrideWith((ref) => tracker),
-          ],
+          overrides: getTestOverrides(),
           child: MaterialApp(
             home: Scaffold(body: MavlinkMessageMonitor(autoStart: false)),
           ),
@@ -57,10 +86,7 @@ void main() {
     testWidgets('should show header with title', (WidgetTester tester) async {
       await tester.pumpWidget(
         ProviderScope(
-          overrides: [
-            mavlinkRegistryProvider.overrideWith((ref) => registry),
-            messageTrackerProvider.overrideWith((ref) => tracker),
-          ],
+          overrides: getTestOverrides(),
           child: MaterialApp(
             home: Scaffold(
               body: MavlinkMessageMonitor(
@@ -90,10 +116,7 @@ void main() {
     ) async {
       await tester.pumpWidget(
         ProviderScope(
-          overrides: [
-            mavlinkRegistryProvider.overrideWith((ref) => registry),
-            messageTrackerProvider.overrideWith((ref) => tracker),
-          ],
+          overrides: getTestOverrides(),
           child: MaterialApp(
             home: Scaffold(body: MavlinkMessageMonitor(autoStart: false)),
           ),
@@ -112,10 +135,7 @@ void main() {
     testWidgets('should have container widgets', (WidgetTester tester) async {
       await tester.pumpWidget(
         ProviderScope(
-          overrides: [
-            mavlinkRegistryProvider.overrideWith((ref) => registry),
-            messageTrackerProvider.overrideWith((ref) => tracker),
-          ],
+          overrides: getTestOverrides(),
           child: MaterialApp(
             home: Scaffold(body: MavlinkMessageMonitor(autoStart: false)),
           ),
@@ -133,10 +153,7 @@ void main() {
     ) async {
       await tester.pumpWidget(
         ProviderScope(
-          overrides: [
-            mavlinkRegistryProvider.overrideWith((ref) => registry),
-            messageTrackerProvider.overrideWith((ref) => tracker),
-          ],
+          overrides: getTestOverrides(),
           child: MaterialApp(
             home: Scaffold(
               body: MavlinkMessageMonitor(
@@ -164,10 +181,7 @@ void main() {
     ) async {
       await tester.pumpWidget(
         ProviderScope(
-          overrides: [
-            mavlinkRegistryProvider.overrideWith((ref) => registry),
-            messageTrackerProvider.overrideWith((ref) => tracker),
-          ],
+          overrides: getTestOverrides(),
           child: MaterialApp(
             home: Scaffold(
               body: MavlinkMessageMonitor(

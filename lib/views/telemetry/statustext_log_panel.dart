@@ -53,7 +53,13 @@ class _StatusTextLogPanelState extends ConsumerState<StatusTextLogPanel> {
         children: [
           // Resize handle at top when expanded
           if (_isExpanded) _buildResizeHandle(context),
-          _buildHeader(context, entries.length, highestSeverity, hasUnread),
+          // Use Expanded for header when collapsed to avoid overflow from border
+          if (_isExpanded)
+            _buildHeader(context, entries.length, highestSeverity, hasUnread)
+          else
+            Expanded(
+              child: _buildHeader(context, entries.length, highestSeverity, hasUnread),
+            ),
           if (_isExpanded)
             Expanded(
               child: _buildMessageList(context, entries),

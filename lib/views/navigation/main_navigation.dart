@@ -59,10 +59,10 @@ class _MainNavigationState extends ConsumerState<MainNavigation> {
 
     final settingsManager = ref.read(settingsManagerProvider);
     final settings = settingsManager.settings;
-    ref.read(selectedViewIndexProvider.notifier).state =
-        settings.navigation.selectedViewIndex;
-    ref.read(selectedPlotIndexProvider.notifier).state =
-        settings.navigation.selectedPlotIndex;
+    ref.read(selectedViewIndexProvider.notifier).set(
+        settings.navigation.selectedViewIndex);
+    ref.read(selectedPlotIndexProvider.notifier).set(
+        settings.navigation.selectedPlotIndex);
   }
 
   void _autoStartConnectionIfEnabled() {

@@ -47,9 +47,24 @@ class MavlinkMetadataRegistry {
   }
 
   /// Load metadata from a JSON string.
+  ///
+  /// Throws [FormatException] if the JSON is malformed.
+  /// Throws [TypeError] if the JSON structure doesn't match expected format.
   void loadFromJsonString(String jsonString) {
-    final json = jsonDecode(jsonString) as Map<String, dynamic>;
-    _loadFromJson(json);
+    try {
+      final json = jsonDecode(jsonString) as Map<String, dynamic>;
+      _loadFromJson(json);
+    } on FormatException catch (e) {
+      throw FormatException(
+        'Invalid MAVLink metadata JSON: ${e.message}',
+        e.source,
+        e.offset,
+      );
+    } on TypeError catch (e) {
+      throw FormatException(
+        'MAVLink metadata JSON has unexpected structure: $e',
+      );
+    }
   }
 
   /// Load metadata from parsed JSON.

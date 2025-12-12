@@ -31,8 +31,8 @@ class ConnectionActions {
     final formState = _ref.read(connectionFormProvider);
     if (!formState.isValid) return false;
 
-    _ref.read(isLoadingProvider.notifier).state = true;
-    _ref.read(errorStateProvider.notifier).state = null;
+    _ref.read(isLoadingProvider.notifier).set(true);
+    _ref.read(errorStateProvider.notifier).set(null);
 
     try {
       final config = formState.createConnectionConfig();
@@ -41,32 +41,32 @@ class ConnectionActions {
       if (success) {
         // Save successful connection settings
         await _saveConnectionSettings(formState);
-        _ref.read(currentConnectionConfigProvider.notifier).state = config;
+        _ref.read(currentConnectionConfigProvider.notifier).set(config);
       } else {
-        _ref.read(errorStateProvider.notifier).state = 'Failed to connect';
+        _ref.read(errorStateProvider.notifier).set('Failed to connect');
       }
 
       return success;
     } catch (e) {
-      _ref.read(errorStateProvider.notifier).state = 'Connection error: $e';
+      _ref.read(errorStateProvider.notifier).set('Connection error: $e');
       return false;
     } finally {
-      _ref.read(isLoadingProvider.notifier).state = false;
+      _ref.read(isLoadingProvider.notifier).set(false);
     }
   }
 
   /// Disconnect from current connection
   Future<void> disconnect() async {
-    _ref.read(isLoadingProvider.notifier).state = true;
-    _ref.read(errorStateProvider.notifier).state = null;
+    _ref.read(isLoadingProvider.notifier).set(true);
+    _ref.read(errorStateProvider.notifier).set(null);
 
     try {
       await _connectionManager.disconnect();
-      _ref.read(currentConnectionConfigProvider.notifier).state = null;
+      _ref.read(currentConnectionConfigProvider.notifier).set(null);
     } catch (e) {
-      _ref.read(errorStateProvider.notifier).state = 'Disconnect error: $e';
+      _ref.read(errorStateProvider.notifier).set('Disconnect error: $e');
     } finally {
-      _ref.read(isLoadingProvider.notifier).state = false;
+      _ref.read(isLoadingProvider.notifier).set(false);
     }
   }
 
@@ -74,9 +74,9 @@ class ConnectionActions {
   void pause() {
     try {
       _connectionManager.pause();
-      _ref.read(isPausedProvider.notifier).state = true;
+      _ref.read(isPausedProvider.notifier).set(true);
     } catch (e) {
-      _ref.read(errorStateProvider.notifier).state = 'Pause error: $e';
+      _ref.read(errorStateProvider.notifier).set('Pause error: $e');
     }
   }
 
@@ -84,32 +84,32 @@ class ConnectionActions {
   void resume() {
     try {
       _connectionManager.resume();
-      _ref.read(isPausedProvider.notifier).state = false;
+      _ref.read(isPausedProvider.notifier).set(false);
     } catch (e) {
-      _ref.read(errorStateProvider.notifier).state = 'Resume error: $e';
+      _ref.read(errorStateProvider.notifier).set('Resume error: $e');
     }
   }
 
   /// Connect with specific configuration
   Future<bool> connectWith(ConnectionConfig config) async {
-    _ref.read(isLoadingProvider.notifier).state = true;
-    _ref.read(errorStateProvider.notifier).state = null;
+    _ref.read(isLoadingProvider.notifier).set(true);
+    _ref.read(errorStateProvider.notifier).set(null);
 
     try {
       final success = await _connectionManager.connect(config);
       
       if (success) {
-        _ref.read(currentConnectionConfigProvider.notifier).state = config;
+        _ref.read(currentConnectionConfigProvider.notifier).set(config);
       } else {
-        _ref.read(errorStateProvider.notifier).state = 'Failed to connect';
+        _ref.read(errorStateProvider.notifier).set('Failed to connect');
       }
 
       return success;
     } catch (e) {
-      _ref.read(errorStateProvider.notifier).state = 'Connection error: $e';
+      _ref.read(errorStateProvider.notifier).set('Connection error: $e');
       return false;
     } finally {
-      _ref.read(isLoadingProvider.notifier).state = false;
+      _ref.read(isLoadingProvider.notifier).set(false);
     }
   }
 
@@ -162,8 +162,8 @@ class ConnectionActions {
   /// folder, and sets it as the current dialect. Requires app restart.
   /// Returns the imported dialect name.
   Future<String> importXmlDialect(String xmlPath) async {
-    _ref.read(isLoadingProvider.notifier).state = true;
-    _ref.read(errorStateProvider.notifier).state = null;
+    _ref.read(isLoadingProvider.notifier).set(true);
+    _ref.read(errorStateProvider.notifier).set(null);
 
     try {
       // Import and generate JSON from XML
@@ -175,10 +175,10 @@ class ConnectionActions {
 
       return dialectName;
     } catch (e) {
-      _ref.read(errorStateProvider.notifier).state = 'Error importing dialect: $e';
+      _ref.read(errorStateProvider.notifier).set('Error importing dialect: $e');
       rethrow;
     } finally {
-      _ref.read(isLoadingProvider.notifier).state = false;
+      _ref.read(isLoadingProvider.notifier).set(false);
     }
   }
 
@@ -186,8 +186,8 @@ class ConnectionActions {
   ///
   /// Re-parses the XML and regenerates the JSON. Requires app restart.
   Future<void> reloadUserDialect(String dialectName) async {
-    _ref.read(isLoadingProvider.notifier).state = true;
-    _ref.read(errorStateProvider.notifier).state = null;
+    _ref.read(isLoadingProvider.notifier).set(true);
+    _ref.read(errorStateProvider.notifier).set(null);
 
     try {
       // Reload from XML (regenerates JSON)
@@ -195,10 +195,10 @@ class ConnectionActions {
       await userDialectManager.reloadDialect(dialectName);
       // Restart required for changes to take effect
     } catch (e) {
-      _ref.read(errorStateProvider.notifier).state = 'Error reloading dialect: $e';
+      _ref.read(errorStateProvider.notifier).set('Error reloading dialect: $e');
       rethrow;
     } finally {
-      _ref.read(isLoadingProvider.notifier).state = false;
+      _ref.read(isLoadingProvider.notifier).set(false);
     }
   }
 }
@@ -220,9 +220,9 @@ class DataActions {
   void clearAllData() {
     try {
       _repository.clearAllData();
-      _ref.read(errorStateProvider.notifier).state = null;
+      _ref.read(errorStateProvider.notifier).set(null);
     } catch (e) {
-      _ref.read(errorStateProvider.notifier).state = 'Error clearing data: $e';
+      _ref.read(errorStateProvider.notifier).set('Error clearing data: $e');
     }
   }
 
@@ -230,9 +230,9 @@ class DataActions {
   void pauseDataCollection() {
     try {
       _repository.pause();
-      _ref.read(isPausedProvider.notifier).state = true;
+      _ref.read(isPausedProvider.notifier).set(true);
     } catch (e) {
-      _ref.read(errorStateProvider.notifier).state = 'Error pausing data: $e';
+      _ref.read(errorStateProvider.notifier).set('Error pausing data: $e');
     }
   }
 
@@ -240,9 +240,9 @@ class DataActions {
   void resumeDataCollection() {
     try {
       _repository.resume();
-      _ref.read(isPausedProvider.notifier).state = false;
+      _ref.read(isPausedProvider.notifier).set(false);
     } catch (e) {
-      _ref.read(errorStateProvider.notifier).state = 'Error resuming data: $e';
+      _ref.read(errorStateProvider.notifier).set('Error resuming data: $e');
     }
   }
 
@@ -251,7 +251,7 @@ class DataActions {
     try {
       return _repository.getFieldData(messageType, fieldName);
     } catch (e) {
-      _ref.read(errorStateProvider.notifier).state = 'Error getting field data: $e';
+      _ref.read(errorStateProvider.notifier).set('Error getting field data: $e');
       return [];
     }
   }
@@ -267,17 +267,17 @@ class DataActions {
       newSelection.add(fieldName);
     }
     
-    _ref.read(selectedFieldsProvider.notifier).state = newSelection;
+    _ref.read(selectedFieldsProvider.notifier).set(newSelection);
   }
 
   /// Select multiple fields
   void selectFields(Set<String> fields) {
-    _ref.read(selectedFieldsProvider.notifier).state = fields;
+    _ref.read(selectedFieldsProvider.notifier).set(fields);
   }
 
   /// Clear field selection
   void clearFieldSelection() {
-    _ref.read(selectedFieldsProvider.notifier).state = <String>{};
+    _ref.read(selectedFieldsProvider.notifier).clear();
   }
 }
 
@@ -296,28 +296,28 @@ class NavigationActions {
 
   /// Navigate to specific view
   void navigateToView(int viewIndex) {
-    _ref.read(selectedViewIndexProvider.notifier).state = viewIndex;
+    _ref.read(selectedViewIndexProvider.notifier).set(viewIndex);
     _settingsManager.updateSelectedViewIndex(viewIndex);
   }
 
   /// Select specific plot
   void selectPlot(int plotIndex) {
-    _ref.read(selectedPlotIndexProvider.notifier).state = plotIndex;
+    _ref.read(selectedPlotIndexProvider.notifier).set(plotIndex);
     _settingsManager.updateSelectedPlotInNavigation(plotIndex);
   }
 
   /// Clear any error state
   void clearError() {
-    _ref.read(errorStateProvider.notifier).state = null;
+    _ref.read(errorStateProvider.notifier).set(null);
   }
 
   /// Show error message
   void showError(String error) {
-    _ref.read(errorStateProvider.notifier).state = error;
+    _ref.read(errorStateProvider.notifier).set(error);
   }
 
   /// Set loading state
   void setLoading(bool loading) {
-    _ref.read(isLoadingProvider.notifier).state = loading;
+    _ref.read(isLoadingProvider.notifier).set(loading);
   }
 }

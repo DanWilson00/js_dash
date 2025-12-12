@@ -14,6 +14,8 @@ class _ShaderBackgroundState extends State<ShaderBackground>
   ui.FragmentProgram? _program;
   late Ticker _ticker;
   double _time = 0.0;
+  String? _errorMessage;
+  bool _isLoading = true;
 
   @override
   void initState() {
@@ -32,11 +34,21 @@ class _ShaderBackgroundState extends State<ShaderBackground>
       final program = await ui.FragmentProgram.fromAsset(
         'shaders/grid_terrain.frag',
       );
-      setState(() {
-        _program = program;
-      });
+      if (mounted) {
+        setState(() {
+          _program = program;
+          _isLoading = false;
+          _errorMessage = null;
+        });
+      }
     } catch (e) {
       debugPrint('Error loading shader: $e');
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+          _errorMessage = 'Shader unavailable';
+        });
+      }
     }
   }
 
@@ -48,8 +60,26 @@ class _ShaderBackgroundState extends State<ShaderBackground>
 
   @override
   Widget build(BuildContext context) {
-    if (_program == null) {
+    // Show loading state
+    if (_isLoading) {
       return Container(color: Colors.black);
+    }
+
+    // Show fallback gradient if shader failed to load
+    if (_program == null || _errorMessage != null) {
+      return Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              Color(0xFF0a0a1a),
+              Color(0xFF1a1a2e),
+              Color(0xFF16213e),
+            ],
+          ),
+        ),
+      );
     }
 
     return CustomPaint(

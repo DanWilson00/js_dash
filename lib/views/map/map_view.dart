@@ -12,6 +12,10 @@ import '../../providers/ui_providers.dart';
 class MapView extends ConsumerStatefulWidget {
   const MapView({super.key});
 
+  // Map configuration constants
+  static const double minZoomLevel = 5.0;
+  static const double maxZoomLevel = 18.0;
+
   @override
   ConsumerState<MapView> createState() => _MapViewState();
 }
@@ -82,13 +86,28 @@ class _MapViewState extends ConsumerState<MapView> {
         latBuffer.points.isNotEmpty &&
         lonBuffer != null &&
         lonBuffer.points.isNotEmpty) {
-      final lat = latBuffer.points.last.value;
-      final lon = lonBuffer.points.last.value;
+      final latRaw = latBuffer.points.last.value;
+      final lonRaw = lonBuffer.points.last.value;
       final heading = headingBuffer != null && headingBuffer.points.isNotEmpty
           ? headingBuffer.points.last.value
           : null;
 
-      final newLocation = LatLng(lat / 1e7, lon / 1e7);
+      // Convert from MAVLink format (degE7) to degrees with validation
+      final lat = latRaw / 1e7;
+      final lon = lonRaw / 1e7;
+
+      // Validate GPS coordinates are within valid ranges
+      if (lat < -90 || lat > 90 || lon < -180 || lon > 180) {
+        // Invalid coordinates - skip update
+        return;
+      }
+
+      // Skip if coordinates are exactly zero (likely uninitialized GPS)
+      if (lat == 0 && lon == 0) {
+        return;
+      }
+
+      final newLocation = LatLng(lat, lon);
 
       setState(() {
         _vehicleLocation = newLocation;
@@ -162,8 +181,8 @@ class _MapViewState extends ConsumerState<MapView> {
             options: MapOptions(
               initialCenter: defaultCenter,
               initialZoom: mapSettings.zoomLevel,
-              minZoom: 5.0,
-              maxZoom: 18.0,
+              minZoom: MapView.minZoomLevel,
+              maxZoom: MapView.maxZoomLevel,
               interactionOptions: const InteractionOptions(
                 flags: InteractiveFlag.all,
               ),

@@ -57,13 +57,13 @@ dependencies:
   flutter_libserialport: ^0.5.0
 
   # State management with Riverpod
-  flutter_riverpod: ^2.5.1
+  flutter_riverpod: ^3.0.0
 
   # XML parsing for MAVLink dialect loading
   xml: ^6.5.0
 
   # File picker for selecting XML files
-  file_picker: ^8.0.0
+  file_picker: ^10.0.0
 
   # App data directory for storing user dialects
   path_provider: ^2.1.5

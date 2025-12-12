@@ -1,3 +1,0 @@
-[submodule "interface/mavlink"]
-	path = interface/mavlink
-	url = git@bitbucket.org:DBW00/mavlink-arduino.git
