@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-/// Configuration for the Jetshark Dashboard layout and appearance
+/// Configuration for the Dashboard layout and appearance
 class DashboardConfig {
   // Layout Configuration
   static const double leftWingFlex = 2.0;
@@ -50,6 +50,6 @@ class DashboardConfig {
   static const double rpmBaseValue = 1000.0; // Idle RPM
   static const double rpmThrottleMultiplier = 70.0; // RPM per throttle percentage
 
-  // Branding Text
-  static const String brandingText = 'JETSHARK';
+  // Branding Text (empty to hide)
+  static const String brandingText = '';
 }

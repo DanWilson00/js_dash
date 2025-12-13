@@ -45,7 +45,7 @@ void main() async {
         size: windowSettings.size,
         position: windowSettings.position,
         maximized: windowSettings.maximized,
-        title: 'Jetshark Dashboard',
+        title: 'MAVLink Dashboard',
       );
     } catch (e) {
       // Window management initialization failed

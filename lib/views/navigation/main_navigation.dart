@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart' hide ConnectionState;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../telemetry/realtime_data_display.dart';
-import '../dashboard/jetshark_dashboard.dart';
+import '../dashboard/main_dashboard.dart';
 import '../map/map_view.dart';
 import '../../providers/service_providers.dart';
 import '../../providers/ui_providers.dart';
@@ -116,7 +116,7 @@ class _MainNavigationState extends ConsumerState<MainNavigation> {
     return IndexedStack(
       index: selectedIndex,
       children: const [
-        JetsharkDashboard(),
+        MainDashboard(),
         RealtimeDataDisplay(),
         MapView(),
       ],
