@@ -73,6 +73,9 @@ dependencies:
   cupertino_icons: ^1.0.8
   dashboard: ^0.0.4
 
+  # Web platform APIs (for web serial and platform detection)
+  web: ^1.1.0
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

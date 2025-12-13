@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart' hide ConnectionState;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../telemetry/realtime_data_display.dart';
-import '../dashboard/jetshark_dashboard.dart';
+import '../dashboard/main_dashboard.dart';
 import '../map/map_view.dart';
 import '../../providers/service_providers.dart';
 import '../../providers/ui_providers.dart';
 import '../../providers/action_providers.dart';
 import '../../core/connection_config.dart';
-import '../../services/serial_byte_source.dart';
+import '../../services/serial/serial_service.dart';
 
 class MainNavigation extends ConsumerStatefulWidget {
   final bool autoStartMonitor;
@@ -82,8 +82,9 @@ class _MainNavigationState extends ConsumerState<MainNavigation> {
     } else if (settings.connection.serialPort.isNotEmpty) {
       // Auto-start serial if spoofing disabled and port is configured
       // Only connect if the port actually exists
-      final availablePorts = SerialByteSource.getAvailablePorts();
-      if (availablePorts.contains(settings.connection.serialPort)) {
+      final availablePorts = getAvailableSerialPorts();
+      final portExists = availablePorts.any((p) => p.portName == settings.connection.serialPort);
+      if (portExists) {
         connectionActions.connectWith(
           SerialConnectionConfig(
             port: settings.connection.serialPort,
@@ -115,7 +116,7 @@ class _MainNavigationState extends ConsumerState<MainNavigation> {
     return IndexedStack(
       index: selectedIndex,
       children: const [
-        JetsharkDashboard(),
+        MainDashboard(),
         RealtimeDataDisplay(),
         MapView(),
       ],

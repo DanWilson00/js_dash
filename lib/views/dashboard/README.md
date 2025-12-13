@@ -1,19 +1,18 @@
-# Modular Jetshark Dashboard
+# Modular Dashboard
 
-The Jetshark Dashboard has been refactored into modular, configurable components while maintaining **identical** look, feel, and functionality.
+The Dashboard has been refactored into modular, configurable components while maintaining **identical** look, feel, and functionality.
 
 ## File Structure
 
 ```
 lib/views/dashboard/
 ├── dashboard_config.dart         # Single configuration point
-├── jetshark_dashboard.dart       # Main dashboard assembly
+├── main_dashboard.dart           # Main dashboard assembly
 ├── ambient_lighting.dart         # Background lighting effects
-├── jetshark_branding.dart        # Top branding component
+├── dashboard_branding.dart       # Top branding component
 ├── rpm_gauge.dart               # Central RPM gauge with speed
 ├── wing_indicator.dart          # Wing position indicators
 ├── hud_display.dart            # Alternative HUD display
-└── jetshark_dashboard_original.dart  # Backup of original
 ```
 
 ## Configuration
@@ -26,7 +25,7 @@ All dashboard configuration is centralized in `dashboard_config.dart`:
 - **Branding**: Height, font size, letter spacing calculations
 
 ### Visual Configuration
-- **Colors**: Background, gradients, branding colors
+- **Colors**: Background, gradients, accent colors
 - **Animation durations**: RPM (800ms), startup (1500ms), pulse (3000ms)
 - **Update settings**: 50ms intervals, 8% smoothing factor
 
@@ -37,14 +36,14 @@ All dashboard configuration is centralized in `dashboard_config.dart`:
 
 ## Component Structure
 
-### Main Dashboard (`jetshark_dashboard.dart`)
+### Main Dashboard (`main_dashboard.dart`)
 - Assembles all components
 - Manages data updates and animations
 - Maintains exact original functionality
 
 ### Individual Components
 1. **AmbientLighting**: Subtle background pulse effects
-2. **JetsharkBranding**: Top "JETSHARK" text with responsive sizing
+2. **DashboardBranding**: Top branding text with responsive sizing
 3. **RPMGauge**: Central circular gauge with speed display
 4. **WingIndicator**: Left/right wing position with curved track
 

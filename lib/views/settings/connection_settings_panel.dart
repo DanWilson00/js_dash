@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -7,7 +9,9 @@ import '../../providers/action_providers.dart';
 import '../../providers/service_providers.dart';
 import '../../core/connection_config.dart';
 import '../../services/dialect_discovery.dart';
-import '../../services/serial_byte_source.dart';
+import '../../services/platform/platform_capabilities.dart';
+import '../../services/serial/serial_service.dart';
+import '../../services/storage/user_dialect_manager.dart';
 
 class ConnectionSettingsPanel extends ConsumerStatefulWidget {
   const ConnectionSettingsPanel({super.key});
@@ -19,7 +23,10 @@ class ConnectionSettingsPanel extends ConsumerStatefulWidget {
 class _ConnectionSettingsPanelState extends ConsumerState<ConnectionSettingsPanel> {
   late TextEditingController _spoofSystemIdController;
   late TextEditingController _spoofComponentIdController;
-  List<String> _availablePorts = [];
+  List<SerialPortInfo> _availablePorts = [];
+  SerialPortInfo? _webSerialPort;
+  final _platform = PlatformCapabilities.instance;
+  final _userDialectManager = UserDialectManager();
 
   // Common baud rates for MAVLink and serial communication
   static const List<int> _baudRates = [
@@ -48,8 +55,56 @@ class _ConnectionSettingsPanelState extends ConsumerState<ConnectionSettingsPane
 
   void _refreshPorts() {
     setState(() {
-      _availablePorts = SerialByteSource.getAvailablePorts();
+      _availablePorts = getAvailableSerialPorts();
     });
+  }
+
+  Future<void> _requestWebSerialPort() async {
+    try {
+      final portInfo = await requestSerialPort();
+      if (portInfo != null) {
+        setState(() {
+          _webSerialPort = portInfo;
+        });
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Serial port selected successfully')),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to request serial port: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _connectWebSerial() async {
+    if (_webSerialPort == null) {
+      // Request port first
+      await _requestWebSerialPort();
+      if (_webSerialPort == null) return;
+    }
+
+    final settingsManager = ref.read(settingsManagerProvider);
+    final connection = settingsManager.connection;
+
+    try {
+      final connectionActions = ref.read(connectionActionsProvider);
+      await connectionActions.connectWith(WebSerialConnectionConfig(
+        baudRate: connection.serialBaudRate,
+        vendorId: _webSerialPort?.vendorId,
+        productId: _webSerialPort?.productId,
+      ));
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to connect: $e')),
+        );
+      }
+    }
   }
 
   void _showRestartRequiredDialog(String message) {
@@ -69,6 +124,12 @@ class _ConnectionSettingsPanelState extends ConsumerState<ConnectionSettingsPane
   }
 
   Future<void> _importXmlDialect() async {
+    // Use web-specific import on web platform
+    if (_platform.isWeb) {
+      await _importXmlDialectWeb();
+      return;
+    }
+
     try {
       final result = await FilePicker.platform.pickFiles(
         type: FileType.custom,
@@ -107,6 +168,131 @@ class _ConnectionSettingsPanelState extends ConsumerState<ConnectionSettingsPane
         );
       }
     }
+  }
+
+  Future<void> _importXmlDialectWeb() async {
+    // Show instruction dialog
+    final proceed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Import XML Dialect'),
+        content: const Text(
+          'Select your main dialect XML file AND any files it includes '
+          '(like common.xml).\n\n'
+          'Hold Ctrl (or Cmd on Mac) to select multiple files.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Select Files'),
+          ),
+        ],
+      ),
+    );
+
+    if (proceed != true || !mounted) return;
+
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['xml'],
+        allowMultiple: true,
+        withData: true,
+      );
+
+      if (result == null || result.files.isEmpty || !mounted) return;
+
+      // Build file map from selected files
+      final files = <String, String>{};
+      for (final file in result.files) {
+        if (file.bytes != null) {
+          files[file.name] = utf8.decode(file.bytes!);
+        }
+      }
+
+      if (files.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No valid XML files selected')),
+        );
+        return;
+      }
+
+      // Determine main file
+      String mainFile;
+      if (files.length == 1) {
+        mainFile = files.keys.first;
+      } else {
+        // Ask user which file is the main dialect
+        final selected = await _selectMainFile(files.keys.toList());
+        if (selected == null || !mounted) return;
+        mainFile = selected;
+      }
+
+      // Show loading indicator
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Importing XML dialect...')),
+      );
+
+      // Import using web dialect manager
+      final (dialectName, missingIncludes) = await _userDialectManager.importFromXmlMap(
+        files,
+        mainFile,
+      );
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).hideCurrentSnackBar();
+        setState(() {});
+
+        String message = 'Dialect "$dialectName" imported successfully.\n\n'
+            'Please restart the app to use the new dialect.';
+
+        if (missingIncludes.isNotEmpty) {
+          message += '\n\nWarning: Some included files were not found:\n'
+              '${missingIncludes.join(", ")}';
+        }
+
+        _showRestartRequiredDialog(message);
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).hideCurrentSnackBar();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to import dialect: $e')),
+        );
+      }
+    }
+  }
+
+  Future<String?> _selectMainFile(List<String> fileNames) async {
+    return showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Select Main Dialect'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Which file is your main dialect?'),
+            const SizedBox(height: 16),
+            ...fileNames.map((name) => ListTile(
+              dense: true,
+              title: Text(name),
+              onTap: () => Navigator.pop(ctx, name),
+            )),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _reloadDialect(String dialectName) async {
@@ -247,11 +433,12 @@ class _ConnectionSettingsPanelState extends ConsumerState<ConnectionSettingsPane
                               onPressed: () => _reloadDialect(currentDialect),
                             ),
                           // Import XML button
-                          IconButton(
-                            icon: const Icon(Icons.add, size: 20),
-                            tooltip: 'Import XML dialect',
-                            onPressed: _importXmlDialect,
-                          ),
+                          if (_userDialectManager.isSupported)
+                            IconButton(
+                              icon: const Icon(Icons.add, size: 20),
+                              tooltip: 'Import XML dialect',
+                              onPressed: _importXmlDialect,
+                            ),
                         ],
                       ),
                     );
@@ -322,8 +509,8 @@ class _ConnectionSettingsPanelState extends ConsumerState<ConnectionSettingsPane
                       // Spoofing disabled - connect to serial if port selected and exists
                       try {
                         final conn = settingsManager.connection;
-                        if (conn.serialPort.isNotEmpty &&
-                            _availablePorts.contains(conn.serialPort)) {
+                        final portExists = _availablePorts.any((p) => p.portName == conn.serialPort);
+                        if (conn.serialPort.isNotEmpty && portExists) {
                           final connectionActions = ref.read(connectionActionsProvider);
                           await connectionActions.connectWith(SerialConnectionConfig(
                             port: conn.serialPort,
@@ -360,70 +547,128 @@ class _ConnectionSettingsPanelState extends ConsumerState<ConnectionSettingsPane
                             fontWeight: FontWeight.bold,
                           ),
                         ),
-                      ],
-                    ),
-                  ),
-                  ListTile(
-                    dense: true,
-                    title: const Text('Serial port'),
-                    subtitle: Text(_availablePorts.isEmpty
-                        ? 'No serial ports found'
-                        : 'Select serial port device'),
-                    trailing: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        SizedBox(
-                          width: 150,
-                          child: DropdownButton<String>(
-                            isExpanded: true,
-                            value: _availablePorts.contains(connection.serialPort)
-                                ? connection.serialPort
-                                : null,
-                            hint: const Text('Select port'),
-                            items: _availablePorts.map((port) => DropdownMenuItem(
-                              value: port,
-                              child: Text(port),
-                            )).toList(),
-                            onChanged: (value) {
-                              if (value != null) {
-                                settingsManager.updateSerialConnection(
-                                  value,
-                                  connection.serialBaudRate,
-                                );
-                              }
-                            },
+                        if (_platform.isWeb) ...[
+                          const Spacer(),
+                          Chip(
+                            label: Text(
+                              _platform.supportsWebSerial ? 'Web Serial' : 'Not Supported',
+                              style: const TextStyle(fontSize: 10),
+                            ),
+                            backgroundColor: _platform.supportsWebSerial
+                                ? Colors.green.withValues(alpha: 0.2)
+                                : Colors.orange.withValues(alpha: 0.2),
+                            padding: EdgeInsets.zero,
+                            visualDensity: VisualDensity.compact,
                           ),
-                        ),
-                        IconButton(
-                          icon: const Icon(Icons.refresh),
-                          tooltip: 'Refresh ports',
-                          onPressed: _refreshPorts,
-                        ),
+                        ],
                       ],
                     ),
                   ),
-                  ListTile(
-                    dense: true,
-                    title: const Text('Baud rate'),
-                    subtitle: const Text('Serial communication speed'),
-                    trailing: DropdownButton<int>(
-                      value: _baudRates.contains(connection.serialBaudRate)
-                          ? connection.serialBaudRate
-                          : _baudRates.first,
-                      items: _baudRates.map((baudRate) => DropdownMenuItem(
-                        value: baudRate,
-                        child: Text('$baudRate bps'),
-                      )).toList(),
-                      onChanged: (value) {
-                        if (value != null) {
-                          settingsManager.updateSerialConnection(
-                            connection.serialPort,
-                            value,
-                          );
-                        }
-                      },
+                  // Web Serial UI (Chrome/Edge)
+                  if (_platform.isWeb && _platform.supportsWebSerial) ...[
+                    ListTile(
+                      dense: true,
+                      title: const Text('Serial port'),
+                      subtitle: Text(_webSerialPort != null
+                          ? 'Port selected (VID: ${_webSerialPort!.vendorId ?? "N/A"})'
+                          : 'Click to request serial port access'),
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          ElevatedButton.icon(
+                            onPressed: _requestWebSerialPort,
+                            icon: const Icon(Icons.usb, size: 18),
+                            label: Text(_webSerialPort == null ? 'Select Port' : 'Change Port'),
+                          ),
+                          if (_webSerialPort != null) ...[
+                            const SizedBox(width: 8),
+                            ElevatedButton(
+                              onPressed: _connectWebSerial,
+                              child: const Text('Connect'),
+                            ),
+                          ],
+                        ],
+                      ),
                     ),
-                  ),
+                  ]
+                  // Web without Serial support (Firefox/Safari)
+                  else if (_platform.isWeb && !_platform.supportsWebSerial) ...[
+                    const ListTile(
+                      dense: true,
+                      leading: Icon(Icons.warning_amber, color: Colors.orange),
+                      title: Text('Serial not available'),
+                      subtitle: Text(
+                        'Web Serial API is not supported in this browser. '
+                        'Use Chrome or Edge for serial connection, or enable spoofing for demo mode.',
+                      ),
+                    ),
+                  ]
+                  // Desktop Serial UI
+                  else ...[
+                    ListTile(
+                      dense: true,
+                      title: const Text('Serial port'),
+                      subtitle: Text(_availablePorts.isEmpty
+                          ? 'No serial ports found'
+                          : 'Select serial port device'),
+                      trailing: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          SizedBox(
+                            width: 150,
+                            child: DropdownButton<String>(
+                              isExpanded: true,
+                              value: _availablePorts.any((p) => p.portName == connection.serialPort)
+                                  ? connection.serialPort
+                                  : null,
+                              hint: const Text('Select port'),
+                              items: _availablePorts.map((portInfo) => DropdownMenuItem(
+                                value: portInfo.portName,
+                                child: Text(portInfo.description ?? portInfo.portName),
+                              )).toList(),
+                              onChanged: (value) {
+                                if (value != null) {
+                                  settingsManager.updateSerialConnection(
+                                    value,
+                                    connection.serialBaudRate,
+                                  );
+                                }
+                              },
+                            ),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.refresh),
+                            tooltip: 'Refresh ports',
+                            onPressed: _refreshPorts,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                  // Baud rate (shown for both desktop and web serial)
+                  if (!_platform.isWeb || _platform.supportsWebSerial)
+                    ListTile(
+                      dense: true,
+                      title: const Text('Baud rate'),
+                      subtitle: const Text('Serial communication speed'),
+                      trailing: DropdownButton<int>(
+                        value: _baudRates.contains(connection.serialBaudRate)
+                            ? connection.serialBaudRate
+                            : _baudRates.first,
+                        items: _baudRates.map((baudRate) => DropdownMenuItem(
+                          value: baudRate,
+                          child: Text('$baudRate bps'),
+                        )).toList(),
+                        onChanged: (value) {
+                          if (value != null) {
+                            settingsManager.updateSerialConnection(
+                              connection.serialPort,
+                              value,
+                            );
+                          }
+                        },
+                      ),
+                    ),
                 ],
               ),
             ),

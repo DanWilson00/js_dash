@@ -57,6 +57,34 @@ class SpoofConnectionConfig extends ConnectionConfig {
   int get hashCode => systemId.hashCode ^ componentId.hashCode ^ baudRate.hashCode;
 }
 
+/// Web Serial connection configuration (for Chrome/Edge browsers)
+class WebSerialConnectionConfig extends ConnectionConfig {
+  final int baudRate;
+  final int? vendorId;
+  final int? productId;
+
+  const WebSerialConnectionConfig({
+    required this.baudRate,
+    this.vendorId,
+    this.productId,
+  });
+
+  @override
+  String toString() => 'WebSerial(@$baudRate)';
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is WebSerialConnectionConfig &&
+          runtimeType == other.runtimeType &&
+          baudRate == other.baudRate &&
+          vendorId == other.vendorId &&
+          productId == other.productId;
+
+  @override
+  int get hashCode => baudRate.hashCode ^ vendorId.hashCode ^ productId.hashCode;
+}
+
 /// Extension methods for easy configuration creation
 extension ConnectionConfigFactory on ConnectionConfig {
   static ConnectionConfig serial({required String port, required int baudRate}) =>
@@ -67,5 +95,12 @@ extension ConnectionConfigFactory on ConnectionConfig {
         systemId: systemId,
         componentId: componentId,
         baudRate: baudRate,
+      );
+
+  static ConnectionConfig webSerial({required int baudRate, int? vendorId, int? productId}) =>
+      WebSerialConnectionConfig(
+        baudRate: baudRate,
+        vendorId: vendorId,
+        productId: productId,
       );
 }

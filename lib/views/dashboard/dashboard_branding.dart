@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 import 'dashboard_config.dart';
 
-/// Jetshark branding component for the top of the dashboard
-class JetsharkBranding extends StatelessWidget {
+/// Branding component for the top of the dashboard
+class DashboardBranding extends StatelessWidget {
   final double screenWidth;
   final double screenHeight;
 
-  const JetsharkBranding({
+  const DashboardBranding({
     super.key,
     required this.screenWidth,
     required this.screenHeight,

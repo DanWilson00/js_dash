@@ -121,6 +121,104 @@ class _ParsedDialect {
 
 /// MAVLink XML parser that generates JSON metadata.
 class MavlinkXmlParser {
+  /// Parse XML from an in-memory file map.
+  ///
+  /// This method is platform-independent and works on web.
+  /// [files] maps filename (e.g., "common.xml") to XML content.
+  /// [mainFile] is the entry point dialect file name.
+  ///
+  /// Returns a record containing the JSON string and list of any missing includes.
+  Future<(String json, List<String> missingIncludes)> parseFromFileMap(
+    Map<String, String> files,
+    String mainFile,
+  ) async {
+    final xmlContent = files[mainFile];
+    if (xmlContent == null) {
+      throw Exception('Main file not found in map: $mainFile');
+    }
+
+    final dialectName = mainFile.replaceAll('.xml', '');
+    final parsedFiles = <String>{};
+    final missingIncludes = <String>[];
+
+    final dialect = _parseFromMapRecursive(
+      files,
+      mainFile,
+      parsedFiles,
+      missingIncludes,
+    );
+
+    return (_generateJson(dialect, dialectName), missingIncludes);
+  }
+
+  _ParsedDialect _parseFromMapRecursive(
+    Map<String, String> files,
+    String fileName,
+    Set<String> parsedFiles,
+    List<String> missingIncludes,
+  ) {
+    // Prevent infinite loops
+    if (parsedFiles.contains(fileName)) {
+      return _ParsedDialect(messages: {}, enums: {});
+    }
+    parsedFiles.add(fileName);
+
+    final xmlString = files[fileName];
+    if (xmlString == null) {
+      missingIncludes.add(fileName);
+      return _ParsedDialect(messages: {}, enums: {});
+    }
+
+    final document = XmlDocument.parse(xmlString);
+    final mavlinkElement = document.rootElement;
+
+    if (mavlinkElement.name.local != 'mavlink') {
+      throw Exception('Invalid MAVLink XML in $fileName: root element must be <mavlink>');
+    }
+
+    // Parse this file's content
+    final messages = <int, _MessageDef>{};
+    final enums = <String, _EnumDef>{};
+
+    // Parse enums
+    for (final enumsElement in mavlinkElement.findAllElements('enums')) {
+      for (final enumElement in enumsElement.findAllElements('enum')) {
+        final enumDef = _parseEnum(enumElement);
+        enums[enumDef.name] = enumDef;
+      }
+    }
+
+    // Parse messages
+    for (final messagesElement in mavlinkElement.findAllElements('messages')) {
+      for (final messageElement in messagesElement.findAllElements('message')) {
+        final messageDef = _parseMessage(messageElement);
+        messages[messageDef.id] = messageDef;
+      }
+    }
+
+    final dialect = _ParsedDialect(messages: messages, enums: enums);
+
+    // Process includes from the file map
+    for (final includeElement in mavlinkElement.findAllElements('include')) {
+      final includeFile = includeElement.innerText.trim();
+      if (includeFile.isNotEmpty) {
+        // Normalize include path - extract just the filename
+        final normalizedName = includeFile.split('/').last.split('\\').last;
+
+        final includedDialect = _parseFromMapRecursive(
+          files,
+          normalizedName,
+          parsedFiles,
+          missingIncludes,
+        );
+        // Merge included dialect (current file takes precedence)
+        dialect.merge(includedDialect);
+      }
+    }
+
+    return dialect;
+  }
+
   /// Parse an XML file and generate JSON metadata string.
   ///
   /// Recursively resolves `<include>` tags relative to the XML file's directory.

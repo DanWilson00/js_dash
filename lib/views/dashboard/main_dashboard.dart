@@ -11,15 +11,15 @@ import 'hud_side_indicators.dart';
 import 'shader_background.dart';
 import 'premium_animations.dart';
 
-/// Modular Jetshark Dashboard - Fighter Jet HUD Redesign
-class JetsharkDashboard extends ConsumerStatefulWidget {
-  const JetsharkDashboard({super.key});
+/// Modular Dashboard - Fighter Jet HUD Redesign
+class MainDashboard extends ConsumerStatefulWidget {
+  const MainDashboard({super.key});
 
   @override
-  ConsumerState<JetsharkDashboard> createState() => _JetsharkDashboardState();
+  ConsumerState<MainDashboard> createState() => _MainDashboardState();
 }
 
-class _JetsharkDashboardState extends ConsumerState<JetsharkDashboard>
+class _MainDashboardState extends ConsumerState<MainDashboard>
     with TickerProviderStateMixin {
   StreamSubscription? _dataSubscription;
 

@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart' show rootBundle;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:window_manager/window_manager.dart';
 import 'mavlink/mavlink.dart';
 import 'services/dialect_discovery.dart';
 import 'services/settings_manager.dart';
+import 'services/window/window_service.dart';
 import 'providers/service_providers.dart';
 import 'providers/ui_providers.dart';
 import 'views/navigation/main_navigation.dart';
@@ -34,36 +34,23 @@ void main() async {
   registry.loadFromJsonString(jsonString);
 
   // Initialize window management (desktop only)
-  try {
-    await windowManager.ensureInitialized();
+  final windowService = WindowService.instance;
+  if (windowService.isAvailable) {
+    try {
+      await windowService.initialize();
 
-    // Configure window with saved settings
-    final windowSettings = settingsManager.window;
-    WindowOptions windowOptions = WindowOptions(
-      size: windowSettings.size,
-      center: windowSettings.position == null,
-      backgroundColor: Colors.transparent,
-      title: 'Jetshark Dashboard',
-      titleBarStyle: TitleBarStyle.normal,
-    );
-
-    await windowManager.waitUntilReadyToShow(windowOptions, () async {
-      await windowManager.show();
-      await windowManager.focus();
-
-      // Restore window position if available
-      if (windowSettings.position != null) {
-        await windowManager.setPosition(windowSettings.position!);
-      }
-
-      // Restore maximized state
-      if (windowSettings.maximized) {
-        await windowManager.maximize();
-      }
-    });
-  } catch (e) {
-    // Window management not available on this platform
-    debugPrint('Window management not available: $e');
+      // Configure window with saved settings
+      final windowSettings = settingsManager.window;
+      await windowService.setupWindow(
+        size: windowSettings.size,
+        position: windowSettings.position,
+        maximized: windowSettings.maximized,
+        title: 'MAVLink Dashboard',
+      );
+    } catch (e) {
+      // Window management initialization failed
+      debugPrint('Window management not available: $e');
+    }
   }
 
   runApp(
@@ -90,27 +77,33 @@ class SubmersibleJetskiApp extends ConsumerStatefulWidget {
 }
 
 class _SubmersibleJetskiAppState extends ConsumerState<SubmersibleJetskiApp>
-    with WindowListener {
+    with WindowEventMixin {
+  final _windowService = WindowService.instance;
+
   @override
   void initState() {
     super.initState();
 
     // Add window listener for desktop platforms
-    try {
-      windowManager.addListener(this);
-      windowManager.setPreventClose(true);
-    } catch (e) {
-      // Window management not available on this platform
-      debugPrint('Window listener not available: $e');
+    if (_windowService.isAvailable) {
+      try {
+        _windowService.addListener(this);
+        _windowService.setPreventClose(true);
+      } catch (e) {
+        // Window management not available on this platform
+        debugPrint('Window listener not available: $e');
+      }
     }
   }
 
   @override
   void dispose() {
-    try {
-      windowManager.removeListener(this);
-    } catch (e) {
-      // Window management not available on this platform
+    if (_windowService.isAvailable) {
+      try {
+        _windowService.removeListener(this);
+      } catch (e) {
+        // Window management not available on this platform
+      }
     }
     super.dispose();
   }
@@ -128,7 +121,7 @@ class _SubmersibleJetskiAppState extends ConsumerState<SubmersibleJetskiApp>
   @override
   void onWindowClose() async {
     // Hide window immediately to prevent perceived hang
-    await windowManager.hide();
+    await _windowService.hide();
 
     try {
       await _saveWindowState();
@@ -136,7 +129,7 @@ class _SubmersibleJetskiAppState extends ConsumerState<SubmersibleJetskiApp>
     } catch (e) {
       debugPrint('Error saving state on close: $e');
     } finally {
-      await windowManager.destroy();
+      await _windowService.destroy();
     }
   }
 
@@ -151,10 +144,12 @@ class _SubmersibleJetskiAppState extends ConsumerState<SubmersibleJetskiApp>
   }
 
   Future<void> _saveWindowState() async {
+    if (!_windowService.isAvailable) return;
+
     try {
-      final size = await windowManager.getSize();
-      final position = await windowManager.getPosition();
-      final isMaximized = await windowManager.isMaximized();
+      final size = await _windowService.getSize();
+      final position = await _windowService.getPosition();
+      final isMaximized = await _windowService.isMaximized();
 
       ref
           .read(settingsManagerProvider)
