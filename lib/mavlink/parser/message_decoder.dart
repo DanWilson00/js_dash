@@ -110,7 +110,6 @@ class MavlinkMessageDecoder {
       // Skip fields that weren't present in the original payload
       // This handles truncated payloads while still allowing MAVLink v2
       // zero-trimming (where trailing zeros are intentionally omitted)
-      final fieldEnd = field.offset + (field.isArray ? field.size * field.arrayLength : field.size);
       if (field.offset >= originalLength) continue;
 
       try {
