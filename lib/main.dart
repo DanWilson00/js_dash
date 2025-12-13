@@ -45,7 +45,7 @@ void main() async {
         size: windowSettings.size,
         position: windowSettings.position,
         maximized: windowSettings.maximized,
-        title: 'MAVLink Dashboard',
+        title: 'MAVLink Dash',
       );
     } catch (e) {
       // Window management initialization failed
@@ -168,7 +168,7 @@ class _SubmersibleJetskiAppState extends ConsumerState<SubmersibleJetskiApp>
     final theme = ref.watch(themeProvider);
 
     return MaterialApp(
-      title: 'Submersible Jetski Dashboard',
+      title: 'MAVLink Dash',
       theme: theme,
       home: MainNavigation(autoStartMonitor: widget.autoStartMonitor),
       debugShowCheckedModeBanner: false,

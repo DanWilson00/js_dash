@@ -1,6 +1,6 @@
 {
-    "name": "js_dash",
-    "short_name": "js_dash",
+    "name": "MAVLink Dash",
+    "short_name": "MAVLink Dash",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",
