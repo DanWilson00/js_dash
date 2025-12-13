@@ -20,7 +20,10 @@
       "Bash(git rm:*)",
       "Bash(cat:*)",
       "Bash(dir:*)",
-      "Bash(flutter pub deps:*)"
+      "Bash(flutter pub deps:*)",
+      "WebFetch(domain:pub.dev)",
+      "WebFetch(domain:github.com)",
+      "Bash(flutter build:*)"
     ],
     "deny": []
   }

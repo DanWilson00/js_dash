@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -62,12 +60,12 @@ void main() {
 
     /// Get provider overrides for testing
     getTestOverrides() => [
-          mavlinkRegistryProvider.overrideWith((ref) => registry),
-          messageTrackerProvider.overrideWith((ref) => tracker),
-          timeSeriesDataManagerProvider.overrideWith((ref) => dataManager),
-          // Override the notifier directly for testing
-          statusTextProvider.overrideWith(_TestStatusTextNotifier.new),
-        ];
+      mavlinkRegistryProvider.overrideWith((ref) => registry),
+      messageTrackerProvider.overrideWith((ref) => tracker),
+      timeSeriesDataManagerProvider.overrideWith((ref) => dataManager),
+      // Override the notifier directly for testing
+      statusTextProvider.overrideWith(_TestStatusTextNotifier.new),
+    ];
 
     testWidgets('should build without error', (WidgetTester tester) async {
       await tester.pumpWidget(

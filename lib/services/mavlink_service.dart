@@ -5,7 +5,6 @@ import '../interfaces/i_byte_source.dart';
 import '../interfaces/i_data_source.dart';
 import '../mavlink/mavlink.dart';
 import 'generic_message_tracker.dart';
-import 'serial_byte_source.dart';
 
 /// MAVLink service that parses bytes from an IByteSource
 /// This service handles the MAVLink protocol parsing and message dispatch
@@ -123,10 +122,5 @@ class MavlinkService implements IDataSource {
     _parser.dispose();
     _messageController.close();
     _rawDataController.close();
-  }
-
-  /// Get available serial ports (convenience method)
-  static List<String> getAvailableSerialPorts() {
-    return SerialByteSource.getAvailablePorts();
   }
 }

@@ -5,8 +5,15 @@ import '../interfaces/i_data_source.dart';
 import '../mavlink/mavlink.dart';
 import '../services/connection_manager.dart';
 import '../services/generic_message_tracker.dart';
+import '../services/platform/platform_capabilities.dart';
 import '../services/settings_manager.dart';
 import '../services/timeseries_data_manager.dart';
+
+/// Platform Capabilities Provider
+/// Provides platform detection for conditional features
+final platformCapabilitiesProvider = Provider<PlatformCapabilities>((ref) {
+  return PlatformCapabilities.instance;
+});
 
 /// MAVLink Metadata Registry Provider
 /// This must be initialized before use by loading the JSON file

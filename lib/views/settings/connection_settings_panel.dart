@@ -7,7 +7,7 @@ import '../../providers/action_providers.dart';
 import '../../providers/service_providers.dart';
 import '../../core/connection_config.dart';
 import '../../services/dialect_discovery.dart';
-import '../../services/serial_byte_source.dart';
+import '../../services/serial/serial_service.dart';
 
 class ConnectionSettingsPanel extends ConsumerStatefulWidget {
   const ConnectionSettingsPanel({super.key});
@@ -19,7 +19,7 @@ class ConnectionSettingsPanel extends ConsumerStatefulWidget {
 class _ConnectionSettingsPanelState extends ConsumerState<ConnectionSettingsPanel> {
   late TextEditingController _spoofSystemIdController;
   late TextEditingController _spoofComponentIdController;
-  List<String> _availablePorts = [];
+  List<SerialPortInfo> _availablePorts = [];
 
   // Common baud rates for MAVLink and serial communication
   static const List<int> _baudRates = [
@@ -48,7 +48,7 @@ class _ConnectionSettingsPanelState extends ConsumerState<ConnectionSettingsPane
 
   void _refreshPorts() {
     setState(() {
-      _availablePorts = SerialByteSource.getAvailablePorts();
+      _availablePorts = getAvailableSerialPorts();
     });
   }
 
@@ -322,8 +322,8 @@ class _ConnectionSettingsPanelState extends ConsumerState<ConnectionSettingsPane
                       // Spoofing disabled - connect to serial if port selected and exists
                       try {
                         final conn = settingsManager.connection;
-                        if (conn.serialPort.isNotEmpty &&
-                            _availablePorts.contains(conn.serialPort)) {
+                        final portExists = _availablePorts.any((p) => p.portName == conn.serialPort);
+                        if (conn.serialPort.isNotEmpty && portExists) {
                           final connectionActions = ref.read(connectionActionsProvider);
                           await connectionActions.connectWith(SerialConnectionConfig(
                             port: conn.serialPort,
@@ -376,13 +376,13 @@ class _ConnectionSettingsPanelState extends ConsumerState<ConnectionSettingsPane
                           width: 150,
                           child: DropdownButton<String>(
                             isExpanded: true,
-                            value: _availablePorts.contains(connection.serialPort)
+                            value: _availablePorts.any((p) => p.portName == connection.serialPort)
                                 ? connection.serialPort
                                 : null,
                             hint: const Text('Select port'),
-                            items: _availablePorts.map((port) => DropdownMenuItem(
-                              value: port,
-                              child: Text(port),
+                            items: _availablePorts.map((portInfo) => DropdownMenuItem(
+                              value: portInfo.portName,
+                              child: Text(portInfo.description ?? portInfo.portName),
                             )).toList(),
                             onChanged: (value) {
                               if (value != null) {

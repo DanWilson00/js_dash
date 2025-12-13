@@ -9,7 +9,7 @@ import '../mavlink/mavlink.dart';
 
 import 'generic_message_tracker.dart';
 import 'mavlink_service.dart';
-import 'serial_byte_source.dart';
+import 'serial/serial_service.dart';
 import 'spoof_byte_source.dart';
 
 /// Central connection manager that handles different MAVLink data sources
@@ -143,16 +143,28 @@ class ConnectionManager implements IConnectionManager, Disposable {
 
     return switch (config) {
       SerialConnectionConfig serialConfig => _createSerialService(serialConfig, tracker),
+      WebSerialConnectionConfig webSerialConfig => _createWebSerialService(webSerialConfig, tracker),
       SpoofConnectionConfig spoofConfig => _createSpoofService(spoofConfig, tracker),
     };
   }
 
-  /// Create MAVLink service with serial byte source
+  /// Create MAVLink service with native serial byte source (desktop)
   IDataSource _createSerialService(SerialConnectionConfig config, GenericMessageTracker tracker) {
     final byteSource = SerialByteSource(
       portName: config.port,
       baudRate: config.baudRate,
     );
+    return MavlinkService(
+      byteSource: byteSource,
+      registry: _registry,
+      tracker: tracker,
+    );
+  }
+
+  /// Create MAVLink service with web serial byte source (Chrome/Edge)
+  IDataSource _createWebSerialService(WebSerialConnectionConfig config, GenericMessageTracker tracker) {
+    // createWebSerialByteSource uses the port that was previously requested via requestSerialPort()
+    final byteSource = createWebSerialByteSource(baudRate: config.baudRate);
     return MavlinkService(
       byteSource: byteSource,
       registry: _registry,
@@ -214,9 +226,12 @@ class ConnectionManager implements IConnectionManager, Disposable {
   }
 
   /// Get available serial ports (convenience method)
-  static List<String> getAvailableSerialPorts() {
-    return MavlinkService.getAvailableSerialPorts();
+  static List<SerialPortInfo> getAvailableSerialPortInfos() {
+    return getAvailableSerialPorts();
   }
+
+  /// Check if serial is supported on this platform
+  static bool get serialSupported => isSerialSupported;
 
   /// Create connection configurations (convenience methods)
   static ConnectionConfig createSerialConfig({
