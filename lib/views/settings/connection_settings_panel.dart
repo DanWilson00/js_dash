@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -122,6 +124,12 @@ class _ConnectionSettingsPanelState extends ConsumerState<ConnectionSettingsPane
   }
 
   Future<void> _importXmlDialect() async {
+    // Use web-specific import on web platform
+    if (_platform.isWeb) {
+      await _importXmlDialectWeb();
+      return;
+    }
+
     try {
       final result = await FilePicker.platform.pickFiles(
         type: FileType.custom,
@@ -160,6 +168,131 @@ class _ConnectionSettingsPanelState extends ConsumerState<ConnectionSettingsPane
         );
       }
     }
+  }
+
+  Future<void> _importXmlDialectWeb() async {
+    // Show instruction dialog
+    final proceed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Import XML Dialect'),
+        content: const Text(
+          'Select your main dialect XML file AND any files it includes '
+          '(like common.xml).\n\n'
+          'Hold Ctrl (or Cmd on Mac) to select multiple files.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Select Files'),
+          ),
+        ],
+      ),
+    );
+
+    if (proceed != true || !mounted) return;
+
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['xml'],
+        allowMultiple: true,
+        withData: true,
+      );
+
+      if (result == null || result.files.isEmpty || !mounted) return;
+
+      // Build file map from selected files
+      final files = <String, String>{};
+      for (final file in result.files) {
+        if (file.bytes != null) {
+          files[file.name] = utf8.decode(file.bytes!);
+        }
+      }
+
+      if (files.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No valid XML files selected')),
+        );
+        return;
+      }
+
+      // Determine main file
+      String mainFile;
+      if (files.length == 1) {
+        mainFile = files.keys.first;
+      } else {
+        // Ask user which file is the main dialect
+        final selected = await _selectMainFile(files.keys.toList());
+        if (selected == null || !mounted) return;
+        mainFile = selected;
+      }
+
+      // Show loading indicator
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Importing XML dialect...')),
+      );
+
+      // Import using web dialect manager
+      final (dialectName, missingIncludes) = await _userDialectManager.importFromXmlMap(
+        files,
+        mainFile,
+      );
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).hideCurrentSnackBar();
+        setState(() {});
+
+        String message = 'Dialect "$dialectName" imported successfully.\n\n'
+            'Please restart the app to use the new dialect.';
+
+        if (missingIncludes.isNotEmpty) {
+          message += '\n\nWarning: Some included files were not found:\n'
+              '${missingIncludes.join(", ")}';
+        }
+
+        _showRestartRequiredDialog(message);
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).hideCurrentSnackBar();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to import dialect: $e')),
+        );
+      }
+    }
+  }
+
+  Future<String?> _selectMainFile(List<String> fileNames) async {
+    return showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Select Main Dialect'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Which file is your main dialect?'),
+            const SizedBox(height: 16),
+            ...fileNames.map((name) => ListTile(
+              dense: true,
+              title: Text(name),
+              onTap: () => Navigator.pop(ctx, name),
+            )),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _reloadDialect(String dialectName) async {
@@ -299,24 +432,12 @@ class _ConnectionSettingsPanelState extends ConsumerState<ConnectionSettingsPane
                               tooltip: 'Reload from XML source',
                               onPressed: () => _reloadDialect(currentDialect),
                             ),
-                          // Import XML button (desktop only)
+                          // Import XML button
                           if (_userDialectManager.isSupported)
                             IconButton(
                               icon: const Icon(Icons.add, size: 20),
                               tooltip: 'Import XML dialect',
                               onPressed: _importXmlDialect,
-                            )
-                          else
-                            IconButton(
-                              icon: Icon(Icons.add, size: 20, color: Colors.grey.withValues(alpha: 0.5)),
-                              tooltip: 'XML import not available on web',
-                              onPressed: () {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    content: Text('XML dialect import is not available on web. Use bundled dialects.'),
-                                  ),
-                                );
-                              },
                             ),
                         ],
                       ),

@@ -78,4 +78,14 @@ class UserDialectManager {
 
   /// Clear the cached manifest (no-op on web).
   void clearCache() {}
+
+  /// Import XML dialect from a map of file contents (throws on stub).
+  Future<(String dialectName, List<String> missingIncludes)> importFromXmlMap(
+    Map<String, String> files,
+    String mainFile,
+  ) async {
+    throw UnsupportedError(
+      'XML dialect import is not supported on this platform.',
+    );
+  }
 }

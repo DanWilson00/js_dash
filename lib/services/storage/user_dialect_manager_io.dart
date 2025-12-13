@@ -217,4 +217,35 @@ class UserDialectManager {
     _manifest = null;
     _dialectsDir = null;
   }
+
+  /// Import XML dialect from a map of file contents.
+  ///
+  /// On desktop, this saves the JSON to the dialects folder.
+  Future<(String dialectName, List<String> missingIncludes)> importFromXmlMap(
+    Map<String, String> files,
+    String mainFile,
+  ) async {
+    final parser = MavlinkXmlParser();
+    final (jsonString, missingIncludes) = await parser.parseFromFileMap(files, mainFile);
+
+    final dialectName = mainFile.replaceAll('.xml', '');
+
+    // Save JSON to user dialects folder
+    final dir = await dialectsDirectory;
+    final jsonPath = '${dir.path}${Platform.pathSeparator}$dialectName.json';
+    final jsonFile = File(jsonPath);
+    await jsonFile.writeAsString(jsonString);
+
+    // Update manifest
+    final manifest = await _loadManifest();
+    manifest[dialectName] = UserDialectInfo(
+      name: dialectName,
+      jsonPath: jsonPath,
+      xmlSourcePath: null, // No single source path for map-based import
+      importedAt: DateTime.now(),
+    );
+    await _saveManifest();
+
+    return (dialectName, missingIncludes);
+  }
 }
