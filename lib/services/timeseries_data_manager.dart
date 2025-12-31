@@ -44,6 +44,14 @@ class TimeSeriesDataManager implements IDataRepository, Disposable {
   // Performance optimizations
   static const int maxFieldCount = 500; // Limit field discovery to prevent unbounded growth
 
+  // Throttle emissions to max 60Hz (16ms) to reduce UI rebuilds
+  Timer? _emitThrottleTimer;
+  bool _hasPendingEmit = false;
+  static const Duration _emitThrottleInterval = Duration(milliseconds: 16);
+
+  // Track last cleanup time instead of modulo check
+  DateTime? _lastCleanupTime;
+
   @override
   Stream<Map<String, CircularBuffer>> get dataStream => _dataController.stream;
 
@@ -159,7 +167,6 @@ class TimeSeriesDataManager implements IDataRepository, Disposable {
 
     final now = DateTime.now();
     bool hasNewData = false;
-    final updatedBuffers = <String, CircularBuffer>{};
 
     for (final entry in messageStats.entries) {
       final messageName = entry.key;
@@ -181,20 +188,31 @@ class TimeSeriesDataManager implements IDataRepository, Disposable {
           if (value != null) {
             _dataBuffers.putIfAbsent(fieldKey, () => CircularBuffer(_currentBufferSize));
             _dataBuffers[fieldKey]!.add(TimeSeriesPoint(now, value));
-            updatedBuffers[fieldKey] = _dataBuffers[fieldKey]!;
             hasNewData = true;
           }
         }
       }
     }
 
-    // Clean up old data less frequently
-    if (now.millisecondsSinceEpoch % 5000 < 200) { // Every ~5 seconds
+    // Clean up old data every ~5 seconds (using tracked time instead of modulo)
+    if (_lastCleanupTime == null || now.difference(_lastCleanupTime!) > const Duration(seconds: 5)) {
       _cleanupOldData(now);
+      _lastCleanupTime = now;
     }
 
-    if (hasNewData && !_dataController.isClosed) {
+    // Throttle emissions to 60Hz max to reduce UI rebuilds
+    if (hasNewData) {
+      _hasPendingEmit = true;
+      _emitThrottleTimer ??= Timer(_emitThrottleInterval, _emitThrottledData);
+    }
+  }
+
+  /// Emit throttled data to reduce UI rebuild frequency
+  void _emitThrottledData() {
+    _emitThrottleTimer = null;
+    if (_hasPendingEmit && !_dataController.isClosed) {
       _dataController.add(Map.from(_dataBuffers));
+      _hasPendingEmit = false;
     }
   }
 
@@ -286,6 +304,8 @@ class TimeSeriesDataManager implements IDataRepository, Disposable {
   void dispose() {
     _connectionStatusSubscription?.cancel();
     _connectionStatusSubscription = null;
+    _emitThrottleTimer?.cancel();
+    _emitThrottleTimer = null;
     stopTracking();
     _dataBuffers.clear();
     if (!_dataController.isClosed) {

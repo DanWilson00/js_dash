@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:collection';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
@@ -31,7 +32,7 @@ class _MapViewState extends ConsumerState<MapView> {
   double? _vehicleHeading;
 
   // Path tracking
-  final List<LatLng> _vehiclePath = [];
+  final ListQueue<LatLng> _vehiclePath = ListQueue<LatLng>();
 
   // Map ready state
   bool _mapReady = false;
@@ -116,7 +117,7 @@ class _MapViewState extends ConsumerState<MapView> {
         // Limit path length based on settings
         final mapSettings = ref.read(mapSettingsProvider);
         if (_vehiclePath.length > mapSettings.maxPathPoints) {
-          _vehiclePath.removeAt(0);
+          _vehiclePath.removeFirst();
         }
 
         // Update heading if available
@@ -242,7 +243,7 @@ class _MapViewState extends ConsumerState<MapView> {
                 PolylineLayer(
                   polylines: [
                     Polyline(
-                      points: _vehiclePath,
+                      points: _vehiclePath.toList(growable: false),
                       strokeWidth: 3.0,
                       color: Colors.blue.withValues(alpha: 0.7),
                     ),
@@ -382,9 +383,7 @@ class _MapViewState extends ConsumerState<MapView> {
                     color: mapSettings.showPath ? Colors.blue : Colors.white,
                   ),
                   onPressed: () {
-                    settingsManager.updateMapShowPath(
-                      !mapSettings.showPath,
-                    );
+                    settingsManager.updateMapShowPath(!mapSettings.showPath);
                   },
                   tooltip: mapSettings.showPath ? 'Hide Path' : 'Show Path',
                 ),
@@ -543,13 +542,11 @@ class _MapViewState extends ConsumerState<MapView> {
                 ),
                 TextButton(
                   onPressed: () {
-                    settingsManager.updateMapMaxPathPoints(
-                      tempMaxPathPoints,
-                    );
+                    settingsManager.updateMapMaxPathPoints(tempMaxPathPoints);
                     // Trim existing path if it's too long
                     setState(() {
                       while (_vehiclePath.length > tempMaxPathPoints) {
-                        _vehiclePath.removeAt(0);
+                        _vehiclePath.removeFirst();
                       }
                     });
                     Navigator.of(context).pop();

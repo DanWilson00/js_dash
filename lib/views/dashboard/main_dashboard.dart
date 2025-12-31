@@ -11,6 +11,41 @@ import 'hud_side_indicators.dart';
 import 'shader_background.dart';
 import 'premium_animations.dart';
 
+/// Pre-allocated colors to avoid creating new Color objects every frame.
+/// Using const colors eliminates memory allocation pressure in animation loops.
+class _DashboardColors {
+  // Glass/transparency effects
+  static const glassHighlight = Color(0x26FFFFFF); // white @ 0.15 alpha
+  static const glassMid = Color(0x0DFFFFFF); // white @ 0.05 alpha
+  static const glassLow = Color(0x05FFFFFF); // white @ 0.02 alpha
+  static const glassBorder = Color(0x33FFFFFF); // white @ 0.2 alpha
+
+  // Text colors
+  static const textPrimary = Color(0xF2FFFFFF); // white @ 0.95 alpha
+  static const textSecondary = Color(0xCCFFFFFF); // white @ 0.8 alpha
+  static const textMuted = Color(0x99FFFFFF); // white @ 0.6 alpha
+  static const textSubtle = Color(0x80FFFFFF); // white @ 0.5 alpha
+
+  // Shadow/glow colors
+  static const shadowDark = Color(0x4D000000); // black @ 0.3 alpha
+  static const glowCyan = Color(0xFF00D9FF); // cyan (no alpha for Shadow)
+  static const glowCyanSubtle = Color(0x1A00D9FF); // cyan @ 0.1 alpha
+}
+
+/// Pre-allocated gradients for glass effects
+const _glassGradient = LinearGradient(
+  begin: Alignment(-0.5, -1),
+  end: Alignment(0.5, 1),
+  colors: [
+    _DashboardColors.glassHighlight,
+    _DashboardColors.glassMid,
+    _DashboardColors.glassLow,
+  ],
+);
+
+/// Pre-allocated blur filter to avoid recreation
+final _blurFilter = ui.ImageFilter.blur(sigmaX: 12, sigmaY: 12);
+
 /// Modular Dashboard - Fighter Jet HUD Redesign
 class MainDashboard extends ConsumerStatefulWidget {
   const MainDashboard({super.key});
@@ -55,10 +90,13 @@ class _MainDashboardState extends ConsumerState<MainDashboard>
     _startDataListening();
 
     // Setup enhanced smooth data animation loop (60fps)
-    _smoothDataController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 16),
-    )..addListener(_updatePhysicsBasedData)..repeat();
+    _smoothDataController =
+        AnimationController(
+            vsync: this,
+            duration: const Duration(milliseconds: 16),
+          )
+          ..addListener(_updatePhysicsBasedData)
+          ..repeat();
   }
 
   void _startDataListening() {
@@ -80,7 +118,8 @@ class _MainDashboardState extends ConsumerState<MainDashboard>
     // Extract RPM from throttle using configured conversion
     final vfrHudThrottle = _getLatestValue(dataBuffers, 'VFR_HUD.throttle');
     if (vfrHudThrottle != null) {
-      rpm = DashboardConfig.rpmBaseValue +
+      rpm =
+          DashboardConfig.rpmBaseValue +
           (vfrHudThrottle * DashboardConfig.rpmThrottleMultiplier);
     }
 
@@ -114,7 +153,9 @@ class _MainDashboardState extends ConsumerState<MainDashboard>
       // Update physics interpolator targets instead of direct setState
       if (rpm != null) _rpmInterpolator.setTarget(rpm);
       if (speed != null) {
-        _speedInterpolator.setTarget(speed * DashboardConfig.speedConversionFactor);
+        _speedInterpolator.setTarget(
+          speed * DashboardConfig.speedConversionFactor,
+        );
       }
       if (leftWing != null) _leftWingInterpolator.setTarget(leftWing);
       if (rightWing != null) _rightWingInterpolator.setTarget(rightWing);
@@ -144,7 +185,6 @@ class _MainDashboardState extends ConsumerState<MainDashboard>
       curve: PremiumAnimations.teslaPhysicsSpring,
     );
 
-
     // Initialize staggered system for element reveals
     _staggeredSystem = StaggeredAnimationSystem(
       vsync: this,
@@ -171,15 +211,16 @@ class _MainDashboardState extends ConsumerState<MainDashboard>
 
   void _updatePhysicsBasedData() {
     // Update all physics interpolators for smooth Tesla-style transitions
-    setState(() {
-      _rpmInterpolator.update();
-      _speedInterpolator.update();
-      _pitchInterpolator.update();
-      _rollInterpolator.update();
-      _yawInterpolator.update();
-      _leftWingInterpolator.update();
-      _rightWingInterpolator.update();
-    });
+    // NOTE: No setState() here! The AnimatedBuilder widgets listen to
+    // _smoothDataController directly and rebuild only when needed.
+    // This eliminates 60 full-tree rebuilds per second.
+    _rpmInterpolator.update();
+    _speedInterpolator.update();
+    _pitchInterpolator.update();
+    _rollInterpolator.update();
+    _yawInterpolator.update();
+    _leftWingInterpolator.update();
+    _rightWingInterpolator.update();
   }
 
   // Getter methods for smooth values
@@ -213,8 +254,9 @@ class _MainDashboardState extends ConsumerState<MainDashboard>
               fit: StackFit.expand,
               children: [
                 // 1. Background Layer - GLSL Shader
-                const Positioned.fill(child: ShaderBackground()),
-
+                const Positioned.fill(
+                  child: RepaintBoundary(child: ShaderBackground()),
+                ),
 
                 // 2. Center Cluster (Attitude + RPM) with staggered animation
                 Positioned.fill(
@@ -226,13 +268,20 @@ class _MainDashboardState extends ConsumerState<MainDashboard>
                         scale: 0.9 + (0.1 * animation.value),
                         child: Opacity(
                           opacity: animation.value,
-                          child: Padding(
-                            padding: const EdgeInsets.all(40.0),
-                            child: HudCenterCluster(
-                              pitch: _smoothPitch,
-                              roll: _smoothRoll,
-                              yaw: _smoothYaw,
-                              rpm: _smoothRpm,
+                          // Inner AnimatedBuilder for smooth data updates (60fps)
+                          // Only rebuilds HudCenterCluster, not the entire tree
+                          child: AnimatedBuilder(
+                            animation: _smoothDataController,
+                            builder: (context, _) => Padding(
+                              padding: const EdgeInsets.all(40.0),
+                              child: RepaintBoundary(
+                                child: HudCenterCluster(
+                                  pitch: _smoothPitch,
+                                  roll: _smoothRoll,
+                                  yaw: _smoothYaw,
+                                  rpm: _smoothRpm,
+                                ),
+                              ),
                             ),
                           ),
                         ),
@@ -255,11 +304,15 @@ class _MainDashboardState extends ConsumerState<MainDashboard>
                         scale: 0.95 + (0.05 * animation.value),
                         child: Opacity(
                           opacity: animation.value,
-                          child: HudSideIndicators(
-                            leftWingAngle: _smoothLeftWing,
-                            rightWingAngle: _smoothRightWing,
-                            targetLeftWingAngle: _targetLeftWing,
-                            targetRightWingAngle: _targetRightWing,
+                          // Inner AnimatedBuilder for smooth data updates (60fps)
+                          child: AnimatedBuilder(
+                            animation: _smoothDataController,
+                            builder: (context, _) => HudSideIndicators(
+                              leftWingAngle: _smoothLeftWing,
+                              rightWingAngle: _smoothRightWing,
+                              targetLeftWingAngle: _targetLeftWing,
+                              targetRightWingAngle: _targetRightWing,
+                            ),
                           ),
                         ),
                       );
@@ -286,27 +339,19 @@ class _MainDashboardState extends ConsumerState<MainDashboard>
                             ),
                             decoration: BoxDecoration(
                               borderRadius: BorderRadius.circular(20),
-                              gradient: LinearGradient(
-                                begin: const Alignment(-0.5, -1),
-                                end: const Alignment(0.5, 1),
-                                colors: [
-                                  Colors.white.withValues(alpha: 0.15),
-                                  Colors.white.withValues(alpha: 0.05),
-                                  Colors.white.withValues(alpha: 0.02),
-                                ],
-                              ),
+                              gradient: _glassGradient,
                               border: Border.all(
-                                color: Colors.white.withValues(alpha: 0.2),
+                                color: _DashboardColors.glassBorder,
                                 width: 1.5,
                               ),
-                              boxShadow: [
+                              boxShadow: const [
                                 BoxShadow(
-                                  color: Colors.black.withValues(alpha: 0.3),
+                                  color: _DashboardColors.shadowDark,
                                   blurRadius: 20,
-                                  offset: const Offset(0, 10),
+                                  offset: Offset(0, 10),
                                 ),
                                 BoxShadow(
-                                  color: const Color(0xFF00D9FF).withValues(alpha: 0.1),
+                                  color: _DashboardColors.glowCyanSubtle,
                                   blurRadius: 30,
                                   spreadRadius: -5,
                                 ),
@@ -315,36 +360,40 @@ class _MainDashboardState extends ConsumerState<MainDashboard>
                             child: ClipRRect(
                               borderRadius: BorderRadius.circular(20),
                               child: BackdropFilter(
-                                filter: ui.ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+                                filter: _blurFilter,
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.end,
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
-                                    Text(
-                                      _smoothSpeed.toStringAsFixed(1),
-                                      style: TextStyle(
-                                        color: Colors.white.withValues(alpha: 0.95),
-                                        fontSize: 52,
-                                        fontWeight: FontWeight.w200,
-                                        fontFamily: 'SF Pro Display',
-                                        letterSpacing: -1.0,
-                                        shadows: const [
-                                          Shadow(
-                                            blurRadius: 15,
-                                            color: Color(0xFF00D9FF),
-                                          ),
-                                          Shadow(
-                                            blurRadius: 30,
-                                            color: Color(0xFF00D9FF),
-                                          ),
-                                        ],
+                                    // Inner AnimatedBuilder for smooth speed updates (60fps)
+                                    AnimatedBuilder(
+                                      animation: _smoothDataController,
+                                      builder: (context, _) => Text(
+                                        _smoothSpeed.toStringAsFixed(1),
+                                        style: const TextStyle(
+                                          color: _DashboardColors.textPrimary,
+                                          fontSize: 52,
+                                          fontWeight: FontWeight.w200,
+                                          fontFamily: 'SF Pro Display',
+                                          letterSpacing: -1.0,
+                                          shadows: [
+                                            Shadow(
+                                              blurRadius: 15,
+                                              color: _DashboardColors.glowCyan,
+                                            ),
+                                            Shadow(
+                                              blurRadius: 30,
+                                              color: _DashboardColors.glowCyan,
+                                            ),
+                                          ],
+                                        ),
                                       ),
                                     ),
                                     const SizedBox(height: 4),
-                                    Text(
+                                    const Text(
                                       'KNOTS',
                                       style: TextStyle(
-                                        color: Colors.white.withValues(alpha: 0.6),
+                                        color: _DashboardColors.textMuted,
                                         fontSize: 11,
                                         letterSpacing: 2.0,
                                         fontWeight: FontWeight.w400,
@@ -377,27 +426,31 @@ class _MainDashboardState extends ConsumerState<MainDashboard>
                           child: Column(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              Text(
-                                _smoothRpm.toStringAsFixed(0),
-                                style: TextStyle(
-                                  color: Colors.white.withValues(alpha: 0.8),
-                                  fontSize: 36,
-                                  fontWeight: FontWeight.w200,
-                                  fontFamily: 'SF Pro Display',
-                                  letterSpacing: -1.0,
-                                  shadows: const [
-                                    Shadow(
-                                      blurRadius: 8,
-                                      color: Color(0xFF00D9FF),
-                                    ),
-                                  ],
+                              // Inner AnimatedBuilder for smooth RPM updates (60fps)
+                              AnimatedBuilder(
+                                animation: _smoothDataController,
+                                builder: (context, _) => Text(
+                                  _smoothRpm.toStringAsFixed(0),
+                                  style: const TextStyle(
+                                    color: _DashboardColors.textSecondary,
+                                    fontSize: 36,
+                                    fontWeight: FontWeight.w200,
+                                    fontFamily: 'SF Pro Display',
+                                    letterSpacing: -1.0,
+                                    shadows: [
+                                      Shadow(
+                                        blurRadius: 8,
+                                        color: _DashboardColors.glowCyan,
+                                      ),
+                                    ],
+                                  ),
                                 ),
                               ),
                               const SizedBox(height: 2),
-                              Text(
+                              const Text(
                                 'RPM',
                                 style: TextStyle(
-                                  color: Colors.white.withValues(alpha: 0.5),
+                                  color: _DashboardColors.textSubtle,
                                   fontSize: 11,
                                   letterSpacing: 2.0,
                                   fontWeight: FontWeight.w300,

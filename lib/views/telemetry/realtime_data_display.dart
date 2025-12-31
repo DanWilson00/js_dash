@@ -35,7 +35,6 @@ class _RealtimeDataDisplayState extends ConsumerState<RealtimeDataDisplay> {
 
   // Current telemetry data (kept for message tracking functionality)
   late bool _isPaused;
-  StreamSubscription? _dataStreamSubscription;
   late double _messagePanelWidth;
   bool _isEditMode = false;
   Timer? _panelWidthSaveTimer;
@@ -62,15 +61,12 @@ class _RealtimeDataDisplayState extends ConsumerState<RealtimeDataDisplay> {
   void didChangeDependencies() {
     super.didChangeDependencies();
 
-    // Set up data stream subscription using TimeSeriesDataManager
-    final dataManager = ref.read(timeSeriesDataManagerProvider);
-    _dataStreamSubscription = dataManager.dataStream.listen((_) {
-      if (mounted) {
-        setState(() {}); // Trigger rebuild to update connection status
-      }
-    });
+    // NOTE: Removed dataStream subscription that called empty setState() at 10+Hz
+    // Connection status is already watched via ref.watch(isConnectedProvider) in _buildStatusIndicator
+    // and settings are watched via ref.watch(settingsManagerProvider) in build()
 
     // Sync data manager with current pause state
+    final dataManager = ref.read(timeSeriesDataManagerProvider);
     if (_isPaused) {
       dataManager.pause();
     } else {
@@ -93,7 +89,6 @@ class _RealtimeDataDisplayState extends ConsumerState<RealtimeDataDisplay> {
   @override
   void dispose() {
     _panelWidthSaveTimer?.cancel();
-    _dataStreamSubscription?.cancel();
     _renameController.dispose();
     _renameFocusNode.dispose();
     super.dispose();

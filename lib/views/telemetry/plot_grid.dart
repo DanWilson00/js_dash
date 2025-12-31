@@ -28,6 +28,10 @@ class PlotGridManagerState extends ConsumerState<PlotGridManager> {
 
   late DashboardItemController _itemController;
 
+  // Grid configuration
+  static const int kSlotCount = 96; // 4x resolution (was 24)
+  static const int kScaleFactor = 4;
+
   @override
   void initState() {
     super.initState();
@@ -49,11 +53,34 @@ class PlotGridManagerState extends ConsumerState<PlotGridManager> {
     _showPropertiesPanel = plotSettings.propertiesPanelVisible;
 
     // Restore selected plot index (global setting, might need per-tab later)
-    // For now, just select the first plot if available
     if (_plots.isNotEmpty) {
       _selectedPlotId = _plots.first.id;
     } else {
       _selectedPlotId = null;
+    }
+
+    // MIGRATION: Check for old low-res layouts and scale them up
+    bool needsSave = false;
+    for (var i = 0; i < _plots.length; i++) {
+      // Check if layout version is old (default 1)
+      if (_plots[i].layoutData.layoutVersion < 2) {
+        // Upgrade to version 2: Scale coordinates by kScaleFactor
+        _plots[i] = _plots[i].copyWith(
+          layoutData: _plots[i].layoutData.copyWith(
+            x: _plots[i].layoutData.x * kScaleFactor,
+            y: _plots[i].layoutData.y * kScaleFactor,
+            width: _plots[i].layoutData.width * kScaleFactor,
+            height: _plots[i].layoutData.height * kScaleFactor,
+            layoutVersion: 2,
+          ),
+        );
+        needsSave = true;
+      }
+    }
+
+    if (needsSave) {
+      // Save the migrated layouts immediately
+      Future.microtask(() => _saveToSettings());
     }
   }
 
@@ -90,7 +117,14 @@ class PlotGridManagerState extends ConsumerState<PlotGridManager> {
     final newPlot = PlotConfiguration(
       id: newId,
       timeWindow: timeWindowOption.duration,
-      layoutData: const PlotLayoutData(x: 0, y: 0, width: 8, height: 6),
+      // Default size scaled up for high resolution (was 8x6)
+      layoutData: const PlotLayoutData(
+        x: 0,
+        y: 0,
+        width: 8 * kScaleFactor,
+        height: 6 * kScaleFactor,
+        layoutVersion: 2,
+      ),
     );
 
     _plots.add(newPlot);
@@ -117,12 +151,15 @@ class PlotGridManagerState extends ConsumerState<PlotGridManager> {
       for (final item in items) {
         final index = _plots.indexWhere((p) => p.id == item.identifier);
         if (index != -1) {
+          // Keep the existing version when updating layout from dashboard interaction
+          // (assuming dashboard interactions are in the current resolution)
           _plots[index] = _plots[index].copyWith(
             layoutData: PlotLayoutData(
               x: item.layoutData.startX,
               y: item.layoutData.startY,
               width: item.layoutData.width,
               height: item.layoutData.height,
+              layoutVersion: _plots[index].layoutData.layoutVersion,
             ),
           );
         }
@@ -420,7 +457,7 @@ class PlotGridManagerState extends ConsumerState<PlotGridManager> {
         Expanded(
           child: Dashboard(
             dashboardItemController: _itemController,
-            slotCount: 24,
+            slotCount: kSlotCount,
             editModeSettings: EditModeSettings(
               paintBackgroundLines: false,
               fillEditingBackground: false,

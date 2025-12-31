@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_riverpod/legacy.dart'; // For ChangeNotifierProvider
 
 import '../core/connection_status.dart';
 import '../interfaces/i_data_source.dart';
@@ -22,9 +23,9 @@ final mavlinkRegistryProvider = Provider<MavlinkMetadataRegistry>((ref) {
 });
 
 /// Settings Manager Provider
-/// Note: SettingsManager is a ChangeNotifier but we expose it via a regular Provider.
-/// UI components should watch this and call notifyListeners() when settings change.
-final settingsManagerProvider = Provider<SettingsManager>((ref) {
+/// SettingsManager is a ChangeNotifier - using ChangeNotifierProvider so
+/// Riverpod properly rebuilds widgets when notifyListeners() is called.
+final settingsManagerProvider = ChangeNotifierProvider<SettingsManager>((ref) {
   return SettingsManager();
 });
 

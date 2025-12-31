@@ -13,7 +13,8 @@ class _ShaderBackgroundState extends State<ShaderBackground>
     with SingleTickerProviderStateMixin {
   ui.FragmentProgram? _program;
   late Ticker _ticker;
-  double _time = 0.0;
+  // Use ValueNotifier to trigger repaints without widget rebuilds
+  final ValueNotifier<double> _timeNotifier = ValueNotifier<double>(0.0);
   String? _errorMessage;
   bool _isLoading = true;
 
@@ -22,9 +23,9 @@ class _ShaderBackgroundState extends State<ShaderBackground>
     super.initState();
     _loadShader();
     _ticker = createTicker((elapsed) {
-      setState(() {
-        _time = elapsed.inMilliseconds / 1000.0;
-      });
+      // Update notifier value - this triggers repaint via CustomPainter's repaint parameter
+      // WITHOUT rebuilding the widget tree (no setState!)
+      _timeNotifier.value = elapsed.inMilliseconds / 1000.0;
     });
     _ticker.start();
   }
@@ -55,6 +56,7 @@ class _ShaderBackgroundState extends State<ShaderBackground>
   @override
   void dispose() {
     _ticker.dispose();
+    _timeNotifier.dispose();
     super.dispose();
   }
 
@@ -82,18 +84,24 @@ class _ShaderBackgroundState extends State<ShaderBackground>
       );
     }
 
-    return CustomPaint(
-      painter: ShaderPainter(program: _program!, time: _time),
-      size: Size.infinite,
+    // RepaintBoundary isolates shader repaints from parent widget tree
+    return RepaintBoundary(
+      child: CustomPaint(
+        painter: ShaderPainter(program: _program!, timeNotifier: _timeNotifier),
+        // Pass timeNotifier as repaint listenable - triggers repaint when value changes
+        // without rebuilding the widget
+        size: Size.infinite,
+      ),
     );
   }
 }
 
 class ShaderPainter extends CustomPainter {
   final ui.FragmentProgram program;
-  final double time;
+  final ValueNotifier<double> timeNotifier;
 
-  ShaderPainter({required this.program, required this.time});
+  ShaderPainter({required this.program, required this.timeNotifier})
+      : super(repaint: timeNotifier); // Repaint when notifier changes
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -105,7 +113,7 @@ class ShaderPainter extends CustomPainter {
 
     shader.setFloat(0, size.width);
     shader.setFloat(1, size.height);
-    shader.setFloat(2, time);
+    shader.setFloat(2, timeNotifier.value);
 
     final paint = Paint()..shader = shader;
     canvas.drawRect(Offset.zero & size, paint);
@@ -113,6 +121,7 @@ class ShaderPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant ShaderPainter oldDelegate) {
-    return oldDelegate.time != time || oldDelegate.program != program;
+    // Only repaint if program changes - time changes handled by repaint listenable
+    return oldDelegate.program != program;
   }
 }
