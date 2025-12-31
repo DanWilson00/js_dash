@@ -35,9 +35,9 @@ void main() {
       expect(dataManager, isA<TimeSeriesDataManager>());
     });
 
-    test('should provide settings manager', () {
-      final settingsManager = container.read(settingsManagerProvider);
-      expect(settingsManager, isA<SettingsManager>());
+    test('should provide settings', () {
+      final settings = container.read(settingsProvider.notifier);
+      expect(settings, isA<Settings>());
     });
 
     test('should provide connection status stream', () {

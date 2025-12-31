@@ -1,5 +1,4 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_riverpod/legacy.dart'; // For ChangeNotifierProvider
 
 import '../core/connection_status.dart';
 import '../interfaces/i_data_source.dart';
@@ -9,6 +8,9 @@ import '../services/generic_message_tracker.dart';
 import '../services/platform/platform_capabilities.dart';
 import '../services/settings_manager.dart';
 import '../services/timeseries_data_manager.dart';
+
+// Re-export settingsProvider from settings_manager.dart (generated)
+export '../services/settings_manager.dart' show settingsProvider, Settings;
 
 /// Platform Capabilities Provider
 /// Provides platform detection for conditional features
@@ -20,13 +22,6 @@ final platformCapabilitiesProvider = Provider<PlatformCapabilities>((ref) {
 /// This must be initialized before use by loading the JSON file
 final mavlinkRegistryProvider = Provider<MavlinkMetadataRegistry>((ref) {
   return MavlinkMetadataRegistry();
-});
-
-/// Settings Manager Provider
-/// SettingsManager is a ChangeNotifier - using ChangeNotifierProvider so
-/// Riverpod properly rebuilds widgets when notifyListeners() is called.
-final settingsManagerProvider = ChangeNotifierProvider<SettingsManager>((ref) {
-  return SettingsManager();
 });
 
 /// Generic Message Tracker Provider
@@ -48,13 +43,12 @@ final connectionManagerProvider = Provider<ConnectionManager>((ref) {
 /// This is the primary data repository for telemetry data
 final timeSeriesDataManagerProvider = Provider<TimeSeriesDataManager>((ref) {
   final tracker = ref.watch(messageTrackerProvider);
-  // Use read instead of watch to prevent rebuilding when settings change
-  // The manager listens to settings changes internally
-  final settingsManager = ref.read(settingsManagerProvider);
+  // Get settings notifier for reading performance settings
+  final settings = ref.read(settingsProvider.notifier);
   final connectionManager = ref.watch(connectionManagerProvider);
   final manager = TimeSeriesDataManager.injected(
     tracker,
-    settingsManager,
+    settings,
     connectionManager,
   );
   ref.onDispose(() => manager.dispose());

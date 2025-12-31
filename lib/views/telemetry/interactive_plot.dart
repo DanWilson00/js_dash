@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:fl_chart/fl_chart.dart';
+import '../../models/app_settings.dart';
 import '../../models/plot_configuration.dart';
 import '../../core/timeseries_point.dart';
 
@@ -183,7 +184,8 @@ class _InteractivePlotState extends ConsumerState<InteractivePlot> {
 
   void _scheduleUpdate() {
     _pendingUpdate = true;
-    final performance = ref.read(settingsManagerProvider).performance;
+    final settings = ref.read(settingsProvider).value ?? AppSettings.defaults();
+    final performance = settings.performance;
 
     if (_updateTimer == null || !_updateTimer!.isActive) {
       final updateInterval = Duration(milliseconds: performance.updateInterval);
@@ -213,7 +215,7 @@ class _InteractivePlotState extends ConsumerState<InteractivePlot> {
       allData: _getAllDataForSignals(widget.configuration.yAxis.visibleSignals),
       timeWindow: timeWindow,
       scalingMode: widget.configuration.yAxis.scalingMode,
-      performance: ref.read(settingsManagerProvider).performance,
+      performance: (ref.read(settingsProvider).value ?? AppSettings.defaults()).performance,
       absoluteEpoch: _absoluteEpoch,
       lastDataTimestamps: Map.from(_lastDataTimestamps),
     );
@@ -605,8 +607,7 @@ class _InteractivePlotState extends ConsumerState<InteractivePlot> {
 
                             final fontSize =
                                 14.0 *
-                                ref
-                                    .read(settingsManagerProvider)
+                                (ref.read(settingsProvider).value ?? AppSettings.defaults())
                                     .appearance
                                     .uiScale;
 

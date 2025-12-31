@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../models/app_settings.dart';
 import '../../providers/service_providers.dart';
 
 class DisplaySettingsPanel extends ConsumerWidget {
@@ -7,8 +8,8 @@ class DisplaySettingsPanel extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final settingsManager = ref.watch(settingsManagerProvider);
-    final appearance = settingsManager.appearance;
+    final settings = ref.watch(settingsProvider).value ?? AppSettings.defaults();
+    final appearance = settings.appearance;
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
@@ -55,7 +56,7 @@ class DisplaySettingsPanel extends ConsumerWidget {
                         divisions: 8,
                         label: '${(appearance.uiScale * 100).round()}%',
                         onChanged: (value) {
-                          settingsManager.updateAppearance(
+                          ref.read(settingsProvider.notifier).updateAppearance(
                             appearance.copyWith(uiScale: value),
                           );
                         },

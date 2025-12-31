@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:dashboard/dashboard.dart';
+import '../../models/app_settings.dart';
 import '../../models/plot_configuration.dart';
 import '../../providers/service_providers.dart';
 import 'interactive_plot.dart';
@@ -40,7 +41,8 @@ class PlotGridManagerState extends ConsumerState<PlotGridManager> {
   }
 
   void _loadFromSettings() {
-    final plotSettings = ref.read(settingsManagerProvider).plots;
+    final settings = ref.read(settingsProvider).value ?? AppSettings.defaults();
+    final plotSettings = settings.plots;
 
     // Find the tab by ID
     final tab = plotSettings.tabs.firstWhere(
@@ -108,7 +110,8 @@ class PlotGridManagerState extends ConsumerState<PlotGridManager> {
     final newId = 'plot_${DateTime.now().millisecondsSinceEpoch}';
 
     // Get current time window from settings
-    final timeWindowLabel = ref.read(settingsManagerProvider).plots.timeWindow;
+    final settings = ref.read(settingsProvider).value ?? AppSettings.defaults();
+    final timeWindowLabel = settings.plots.timeWindow;
     final timeWindowOption = TimeWindowOption.availableWindows.firstWhere(
       (w) => w.label == timeWindowLabel,
       orElse: () => TimeWindowOption.getDefault(),
@@ -143,7 +146,7 @@ class PlotGridManagerState extends ConsumerState<PlotGridManager> {
   }
 
   void _saveToSettings() {
-    ref.read(settingsManagerProvider).updatePlotsInTab(widget.tabId, _plots);
+    ref.read(settingsProvider.notifier).updatePlotsInTab(widget.tabId, _plots);
   }
 
   void _updateLayoutFromDelegate(List<DashboardItem> items) {

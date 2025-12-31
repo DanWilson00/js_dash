@@ -3,7 +3,7 @@ import 'package:flutter/services.dart' show rootBundle;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'mavlink/mavlink.dart';
 import 'services/dialect_discovery.dart';
-import 'services/settings_manager.dart';
+import 'services/settings_service.dart';
 import 'services/window/window_service.dart';
 import 'providers/service_providers.dart';
 import 'providers/ui_providers.dart';
@@ -12,13 +12,14 @@ import 'views/navigation/main_navigation.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Initialize settings manager
-  final settingsManager = SettingsManager();
-  await settingsManager.initialize();
+  // Load settings for pre-app initialization (dialect, window)
+  // The Settings notifier will load the same settings when it initializes
+  final settingsService = SettingsService();
+  final initialSettings = await settingsService.loadSettings();
 
   // Load MAVLink metadata from selected dialect
   // Check user dialects first, then fall back to bundled assets
-  final dialect = settingsManager.settings.connection.mavlinkDialect;
+  final dialect = initialSettings.connection.mavlinkDialect;
   final userDialectManager = DialectDiscovery.userDialectManager;
   String jsonString;
 
@@ -40,7 +41,7 @@ void main() async {
       await windowService.initialize();
 
       // Configure window with saved settings
-      final windowSettings = settingsManager.window;
+      final windowSettings = initialSettings.window;
       await windowService.setupWindow(
         size: windowSettings.size,
         position: windowSettings.position,
@@ -56,8 +57,6 @@ void main() async {
   runApp(
     ProviderScope(
       overrides: [
-        // Override the settingsManagerProvider to use the pre-initialized instance
-        settingsManagerProvider.overrideWith((ref) => settingsManager),
         // Override the mavlinkRegistryProvider to use the pre-loaded registry
         mavlinkRegistryProvider.overrideWithValue(registry),
       ],
@@ -125,7 +124,7 @@ class _SubmersibleJetskiAppState extends ConsumerState<SubmersibleJetskiApp>
 
     try {
       await _saveWindowState();
-      await ref.read(settingsManagerProvider).saveNow();
+      await ref.read(settingsProvider.notifier).saveNow();
     } catch (e) {
       debugPrint('Error saving state on close: $e');
     } finally {
@@ -152,7 +151,7 @@ class _SubmersibleJetskiAppState extends ConsumerState<SubmersibleJetskiApp>
       final isMaximized = await _windowService.isMaximized();
 
       ref
-          .read(settingsManagerProvider)
+          .read(settingsProvider.notifier)
           .updateWindowState(
             size: size,
             position: position,
