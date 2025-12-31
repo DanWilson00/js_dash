@@ -13,14 +13,13 @@ import 'settings_manager.dart';
 class TimeSeriesDataManager implements IDataRepository, Disposable {
   TimeSeriesDataManager.injected(
     this._tracker,
-    this._settingsManager, [
+    this._settings, [
     this._connectionManager,
   ]) {
     // Note: Do NOT subscribe to statsStream here - let startTracking() handle it
     // to avoid double subscription if startTracking() is called later.
-    if (_settingsManager != null) {
+    if (_settings != null) {
       _updateFromSettings();
-      _settingsManager!.addListener(_updateFromSettings);
     }
   }
 
@@ -35,7 +34,7 @@ class TimeSeriesDataManager implements IDataRepository, Disposable {
   bool _isTracking = false;
   bool _isPaused = false;
   bool _isInitialized = false;
-  SettingsManager? _settingsManager;
+  Settings? _settings;
 
   // Buffer configuration - defaults that can be overridden by settings
   int _currentBufferSize = 2000; // ~10 minutes at 3Hz, covers 5m window + margin
@@ -43,6 +42,14 @@ class TimeSeriesDataManager implements IDataRepository, Disposable {
 
   // Performance optimizations
   static const int maxFieldCount = 500; // Limit field discovery to prevent unbounded growth
+
+  // Throttle emissions to max 60Hz (16ms) to reduce UI rebuilds
+  Timer? _emitThrottleTimer;
+  bool _hasPendingEmit = false;
+  static const Duration _emitThrottleInterval = Duration(milliseconds: 16);
+
+  // Track last cleanup time instead of modulo check
+  DateTime? _lastCleanupTime;
 
   @override
   Stream<Map<String, CircularBuffer>> get dataStream => _dataController.stream;
@@ -52,15 +59,14 @@ class TimeSeriesDataManager implements IDataRepository, Disposable {
       _tracker?.statsStream ?? const Stream.empty();
 
   @override
-  void startTracking([SettingsManager? settingsManager]) {
+  void startTracking([Settings? settings]) {
     if (_isTracking) return;
     _isTracking = true;
 
-    // Set up settings manager if provided
-    if (settingsManager != null) {
-      _settingsManager = settingsManager;
+    // Set up settings if provided
+    if (settings != null) {
+      _settings = settings;
       _updateFromSettings();
-      settingsManager.addListener(_updateFromSettings);
     }
 
     // Note: _tracker should be injected, not created here
@@ -75,9 +81,9 @@ class TimeSeriesDataManager implements IDataRepository, Disposable {
   }
 
   void _updateFromSettings() {
-    if (_settingsManager == null) return;
+    if (_settings == null) return;
 
-    final performance = _settingsManager!.performance;
+    final performance = _settings!.performance;
     _currentBufferSize = performance.dataBufferSize;
     _currentMaxAge = Duration(minutes: performance.dataRetentionMinutes);
 
@@ -91,8 +97,7 @@ class TimeSeriesDataManager implements IDataRepository, Disposable {
     _messageSubscription?.cancel();
     _messageSubscription = null;
     _tracker?.stopTracking();
-    _settingsManager?.removeListener(_updateFromSettings);
-    _settingsManager = null;
+    _settings = null;
   }
 
   // ============================================================
@@ -159,7 +164,6 @@ class TimeSeriesDataManager implements IDataRepository, Disposable {
 
     final now = DateTime.now();
     bool hasNewData = false;
-    final updatedBuffers = <String, CircularBuffer>{};
 
     for (final entry in messageStats.entries) {
       final messageName = entry.key;
@@ -181,20 +185,31 @@ class TimeSeriesDataManager implements IDataRepository, Disposable {
           if (value != null) {
             _dataBuffers.putIfAbsent(fieldKey, () => CircularBuffer(_currentBufferSize));
             _dataBuffers[fieldKey]!.add(TimeSeriesPoint(now, value));
-            updatedBuffers[fieldKey] = _dataBuffers[fieldKey]!;
             hasNewData = true;
           }
         }
       }
     }
 
-    // Clean up old data less frequently
-    if (now.millisecondsSinceEpoch % 5000 < 200) { // Every ~5 seconds
+    // Clean up old data every ~5 seconds (using tracked time instead of modulo)
+    if (_lastCleanupTime == null || now.difference(_lastCleanupTime!) > const Duration(seconds: 5)) {
       _cleanupOldData(now);
+      _lastCleanupTime = now;
     }
 
-    if (hasNewData && !_dataController.isClosed) {
+    // Throttle emissions to 60Hz max to reduce UI rebuilds
+    if (hasNewData) {
+      _hasPendingEmit = true;
+      _emitThrottleTimer ??= Timer(_emitThrottleInterval, _emitThrottledData);
+    }
+  }
+
+  /// Emit throttled data to reduce UI rebuild frequency
+  void _emitThrottledData() {
+    _emitThrottleTimer = null;
+    if (_hasPendingEmit && !_dataController.isClosed) {
       _dataController.add(Map.from(_dataBuffers));
+      _hasPendingEmit = false;
     }
   }
 
@@ -286,6 +301,8 @@ class TimeSeriesDataManager implements IDataRepository, Disposable {
   void dispose() {
     _connectionStatusSubscription?.cancel();
     _connectionStatusSubscription = null;
+    _emitThrottleTimer?.cancel();
+    _emitThrottleTimer = null;
     stopTracking();
     _dataBuffers.clear();
     if (!_dataController.isClosed) {

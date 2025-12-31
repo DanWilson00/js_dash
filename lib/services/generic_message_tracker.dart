@@ -19,11 +19,19 @@ class GenericMessageStats {
     lastReceived = DateTime.now();
     lastMessage = message;
 
-    // Track recent timestamps for responsive frequency calculation
+    // Track recent timestamps for frequency calculation
+    // NOTE: Cleanup and frequency calculation deferred to updateFrequency()
+    // which is called by the tracker's timer (100ms) instead of per-message
+    // This avoids O(n) removeWhere() on every incoming message (60+/sec)
     _recentTimestamps.add(lastReceived);
+  }
 
+  /// Update frequency calculation and cleanup old timestamps.
+  /// Called by GenericMessageTracker's timer (every 100ms) instead of per-message.
+  void updateFrequency() {
     // Keep only timestamps from the last 5 seconds
-    final cutoff = lastReceived.subtract(const Duration(seconds: 5));
+    final now = DateTime.now();
+    final cutoff = now.subtract(const Duration(seconds: 5));
     _recentTimestamps.removeWhere((timestamp) => timestamp.isBefore(cutoff));
 
     // Calculate frequency based on recent activity
@@ -183,6 +191,9 @@ class GenericMessageTracker {
     );
 
     for (final stats in _messageStats.values) {
+      // Update frequency and cleanup timestamps (deferred from per-message)
+      stats.updateFrequency();
+
       final timeSinceLastMessage = now.difference(stats.lastReceived);
 
       // Decay frequency if no messages recently

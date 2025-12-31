@@ -185,24 +185,36 @@ class PlotLayoutData {
   final int y;
   final int width;
   final int height;
+  @JsonKey(defaultValue: 1)
+  final int layoutVersion;
+
+  static const int kCurrentLayoutVersion = 2;
 
   const PlotLayoutData({
     this.x = 0,
     this.y = 0,
     this.width = 6,
     this.height = 4,
+    this.layoutVersion = 1,
   });
 
   factory PlotLayoutData.fromJson(Map<String, dynamic> json) =>
       _$PlotLayoutDataFromJson(json);
   Map<String, dynamic> toJson() => _$PlotLayoutDataToJson(this);
 
-  PlotLayoutData copyWith({int? x, int? y, int? width, int? height}) {
+  PlotLayoutData copyWith({
+    int? x,
+    int? y,
+    int? width,
+    int? height,
+    int? layoutVersion,
+  }) {
     return PlotLayoutData(
       x: x ?? this.x,
       y: y ?? this.y,
       width: width ?? this.width,
       height: height ?? this.height,
+      layoutVersion: layoutVersion ?? this.layoutVersion,
     );
   }
 }

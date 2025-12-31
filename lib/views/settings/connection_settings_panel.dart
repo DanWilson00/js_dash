@@ -46,8 +46,8 @@ class _ConnectionSettingsPanelState extends ConsumerState<ConnectionSettingsPane
   @override
   void initState() {
     super.initState();
-    final settingsManager = ref.read(settingsManagerProvider);
-    final connection = settingsManager.connection;
+    final settings = ref.read(settingsProvider).value ?? AppSettings.defaults();
+    final connection = settings.connection;
     _spoofSystemIdController = TextEditingController(text: connection.spoofSystemId.toString());
     _spoofComponentIdController = TextEditingController(text: connection.spoofComponentId.toString());
     _refreshPorts();
@@ -88,8 +88,8 @@ class _ConnectionSettingsPanelState extends ConsumerState<ConnectionSettingsPane
       if (_webSerialPort == null) return;
     }
 
-    final settingsManager = ref.read(settingsManagerProvider);
-    final connection = settingsManager.connection;
+    final settings = ref.read(settingsProvider).value ?? AppSettings.defaults();
+    final connection = settings.connection;
 
     try {
       final connectionActions = ref.read(connectionActionsProvider);
@@ -355,8 +355,8 @@ class _ConnectionSettingsPanelState extends ConsumerState<ConnectionSettingsPane
 
   @override
   Widget build(BuildContext context) {
-    final settingsManager = ref.watch(settingsManagerProvider);
-    final connection = settingsManager.connection;
+    final settings = ref.watch(settingsProvider).value ?? AppSettings.defaults();
+    final connection = settings.connection;
 
     // Sync controllers with settings (replaces listener pattern)
     _syncControllersIfNeeded(connection);
@@ -489,14 +489,14 @@ class _ConnectionSettingsPanelState extends ConsumerState<ConnectionSettingsPane
                     }
 
                     // Update the setting
-                    settingsManager.updateConnectionMode(value);
+                    ref.read(settingsProvider.notifier).updateConnectionMode(value);
 
                     // Auto-start connection based on new mode
                     if (value) {
                       // Spoofing enabled - connect to spoof
                       try {
                         final connectionActions = ref.read(connectionActionsProvider);
-                        final conn = settingsManager.connection;
+                        final conn = (ref.read(settingsProvider).value ?? AppSettings.defaults()).connection;
                         await connectionActions.connectWith(SpoofConnectionConfig(
                           systemId: conn.spoofSystemId,
                           componentId: conn.spoofComponentId,
@@ -508,7 +508,7 @@ class _ConnectionSettingsPanelState extends ConsumerState<ConnectionSettingsPane
                     } else {
                       // Spoofing disabled - connect to serial if port selected and exists
                       try {
-                        final conn = settingsManager.connection;
+                        final conn = (ref.read(settingsProvider).value ?? AppSettings.defaults()).connection;
                         final portExists = _availablePorts.any((p) => p.portName == conn.serialPort);
                         if (conn.serialPort.isNotEmpty && portExists) {
                           final connectionActions = ref.read(connectionActionsProvider);
@@ -628,7 +628,7 @@ class _ConnectionSettingsPanelState extends ConsumerState<ConnectionSettingsPane
                               )).toList(),
                               onChanged: (value) {
                                 if (value != null) {
-                                  settingsManager.updateSerialConnection(
+                                  ref.read(settingsProvider.notifier).updateSerialConnection(
                                     value,
                                     connection.serialBaudRate,
                                   );
@@ -661,7 +661,7 @@ class _ConnectionSettingsPanelState extends ConsumerState<ConnectionSettingsPane
                         )).toList(),
                         onChanged: (value) {
                           if (value != null) {
-                            settingsManager.updateSerialConnection(
+                            ref.read(settingsProvider.notifier).updateSerialConnection(
                               connection.serialPort,
                               value,
                             );
@@ -718,7 +718,7 @@ class _ConnectionSettingsPanelState extends ConsumerState<ConnectionSettingsPane
                         onChanged: (value) {
                           final systemId = int.tryParse(value);
                           if (systemId != null && systemId > 0 && systemId <= 255) {
-                            settingsManager.updateSpoofingConfig(spoofSystemId: systemId);
+                            ref.read(settingsProvider.notifier).updateSpoofingConfig(spoofSystemId: systemId);
                           }
                         },
                       ),
@@ -743,7 +743,7 @@ class _ConnectionSettingsPanelState extends ConsumerState<ConnectionSettingsPane
                         onChanged: (value) {
                           final componentId = int.tryParse(value);
                           if (componentId != null && componentId > 0 && componentId <= 255) {
-                            settingsManager.updateSpoofingConfig(spoofComponentId: componentId);
+                            ref.read(settingsProvider.notifier).updateSpoofingConfig(spoofComponentId: componentId);
                           }
                         },
                       ),
@@ -763,7 +763,7 @@ class _ConnectionSettingsPanelState extends ConsumerState<ConnectionSettingsPane
                       )).toList(),
                       onChanged: (value) {
                         if (value != null) {
-                          settingsManager.updateSpoofingConfig(spoofBaudRate: value);
+                          ref.read(settingsProvider.notifier).updateSpoofingConfig(spoofBaudRate: value);
                         }
                       },
                     ),
@@ -800,7 +800,7 @@ class _ConnectionSettingsPanelState extends ConsumerState<ConnectionSettingsPane
                   subtitle: const Text('Begin monitoring MAVLink messages on startup'),
                   value: connection.autoStartMonitor,
                   onChanged: (value) {
-                    settingsManager.updateAutoStartMonitor(value);
+                    ref.read(settingsProvider.notifier).updateAutoStartMonitor(value);
                   },
                 ),
                 SwitchListTile(
@@ -809,7 +809,7 @@ class _ConnectionSettingsPanelState extends ConsumerState<ConnectionSettingsPane
                   subtitle: const Text('Begin with data collection paused'),
                   value: connection.isPaused,
                   onChanged: (value) {
-                    settingsManager.updatePauseState(value);
+                    ref.read(settingsProvider.notifier).updatePauseState(value);
                   },
                 ),
               ],

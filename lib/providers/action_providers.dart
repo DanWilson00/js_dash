@@ -2,8 +2,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/connection_config.dart';
 import '../interfaces/i_connection_manager.dart';
 import '../interfaces/i_data_repository.dart';
+import '../models/app_settings.dart';
 import '../services/dialect_discovery.dart';
-import '../services/settings_manager.dart';
 import 'service_providers.dart';
 import 'ui_providers.dart';
 
@@ -13,15 +13,15 @@ import 'ui_providers.dart';
 /// Connection Actions Provider
 /// Handles connection-related operations
 final connectionActionsProvider = Provider<ConnectionActions>((ref) {
-  final settingsManager = ref.read(settingsManagerProvider);
-  return ConnectionActions(settingsManager, ref);
+  final settings = ref.read(settingsProvider.notifier);
+  return ConnectionActions(settings, ref);
 });
 
 class ConnectionActions {
-  final SettingsManager _settingsManager;
+  final Settings _settings;
   final Ref _ref;
 
-  ConnectionActions(this._settingsManager, this._ref);
+  ConnectionActions(this._settings, this._ref);
 
   /// Get the current connection manager (always fresh to avoid stale references after invalidation)
   IConnectionManager get _connectionManager => _ref.read(connectionManagerProvider);
@@ -116,17 +116,18 @@ class ConnectionActions {
   /// Load connection settings from stored configuration
   void loadConnectionSettings() {
     final formNotifier = _ref.read(connectionFormProvider.notifier);
-    formNotifier.loadFromSettings(_settingsManager.settings);
+    final appSettings = _ref.read(settingsProvider).value ?? AppSettings.defaults();
+    formNotifier.loadFromSettings(appSettings);
   }
 
   /// Save connection settings
   Future<void> _saveConnectionSettings(ConnectionFormState formState) async {
-    _settingsManager.updateConnectionMode(formState.enableSpoofing);
+    _settings.updateConnectionMode(formState.enableSpoofing);
 
     if (!formState.enableSpoofing) {
-      _settingsManager.updateSerialConnection(formState.serialPort, formState.serialBaudRate);
+      _settings.updateSerialConnection(formState.serialPort, formState.serialBaudRate);
     } else {
-      _settingsManager.updateSpoofingConfig(
+      _settings.updateSpoofingConfig(
         spoofBaudRate: formState.spoofBaudRate,
         spoofSystemId: formState.spoofSystemId,
         spoofComponentId: formState.spoofComponentId,
@@ -139,19 +140,19 @@ class ConnectionActions {
   /// Saves the dialect setting. Requires app restart to take effect.
   /// Returns true if the dialect was changed (restart needed).
   bool changeDialect(String newDialect) {
-    final currentDialect = _settingsManager.settings.connection.mavlinkDialect;
+    final currentDialect = _settings.connection.mavlinkDialect;
     if (newDialect == currentDialect) return false;
 
-    _settingsManager.updateMavlinkDialect(newDialect);
+    _settings.updateMavlinkDialect(newDialect);
     return true; // Restart required
   }
 
   /// Connect with spoofing configuration from settings
   Future<bool> connectWithSpoofing() async {
-    final settings = _settingsManager.settings.connection;
+    final connectionSettings = _settings.connection;
     final config = SpoofConnectionConfig(
-      systemId: settings.spoofSystemId,
-      componentId: settings.spoofComponentId,
+      systemId: connectionSettings.spoofSystemId,
+      componentId: connectionSettings.spoofComponentId,
     );
     return await connectWith(config);
   }
@@ -171,7 +172,7 @@ class ConnectionActions {
       final dialectName = await userDialectManager.importXmlDialect(xmlPath);
 
       // Set as current dialect (will be loaded on restart)
-      _settingsManager.updateMavlinkDialect(dialectName);
+      _settings.updateMavlinkDialect(dialectName);
 
       return dialectName;
     } catch (e) {
@@ -284,26 +285,26 @@ class DataActions {
 /// Navigation Actions Provider
 /// Handles navigation and UI state changes
 final navigationActionsProvider = Provider<NavigationActions>((ref) {
-  final settingsManager = ref.read(settingsManagerProvider);
-  return NavigationActions(settingsManager, ref);
+  final settings = ref.read(settingsProvider.notifier);
+  return NavigationActions(settings, ref);
 });
 
 class NavigationActions {
-  final SettingsManager _settingsManager;
+  final Settings _settings;
   final Ref _ref;
 
-  NavigationActions(this._settingsManager, this._ref);
+  NavigationActions(this._settings, this._ref);
 
   /// Navigate to specific view
   void navigateToView(int viewIndex) {
     _ref.read(selectedViewIndexProvider.notifier).set(viewIndex);
-    _settingsManager.updateSelectedViewIndex(viewIndex);
+    _settings.updateSelectedViewIndex(viewIndex);
   }
 
   /// Select specific plot
   void selectPlot(int plotIndex) {
     _ref.read(selectedPlotIndexProvider.notifier).set(plotIndex);
-    _settingsManager.updateSelectedPlotInNavigation(plotIndex);
+    _settings.updateSelectedPlotInNavigation(plotIndex);
   }
 
   /// Clear any error state

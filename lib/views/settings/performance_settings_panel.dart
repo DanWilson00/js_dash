@@ -20,8 +20,8 @@ class _PerformanceSettingsPanelState extends ConsumerState<PerformanceSettingsPa
   @override
   void initState() {
     super.initState();
-    final settingsManager = ref.read(settingsManagerProvider);
-    final performance = settingsManager.performance;
+    final settings = ref.read(settingsProvider).value ?? AppSettings.defaults();
+    final performance = settings.performance;
     _updateIntervalController = TextEditingController(
       text: performance.updateInterval.toString(),
     );
@@ -56,8 +56,8 @@ class _PerformanceSettingsPanelState extends ConsumerState<PerformanceSettingsPa
 
   @override
   Widget build(BuildContext context) {
-    final settingsManager = ref.watch(settingsManagerProvider);
-    final performance = settingsManager.performance;
+    final settings = ref.watch(settingsProvider).value ?? AppSettings.defaults();
+    final performance = settings.performance;
 
     // Sync controllers with settings (replaces listener pattern)
     _syncControllersIfNeeded(performance);
@@ -79,7 +79,7 @@ class _PerformanceSettingsPanelState extends ConsumerState<PerformanceSettingsPa
                 ),
                 value: performance.enablePointDecimation,
                 onChanged: (value) {
-                  settingsManager.updatePointDecimation(enabled: value);
+                  ref.read(settingsProvider.notifier).updatePointDecimation(enabled: value);
                 },
               ),
               ListTile(
@@ -99,7 +99,7 @@ class _PerformanceSettingsPanelState extends ConsumerState<PerformanceSettingsPa
                     label: performance.decimationThreshold.toString(),
                     onChanged: performance.enablePointDecimation
                         ? (value) {
-                            settingsManager.updatePointDecimation(
+                            ref.read(settingsProvider.notifier).updatePointDecimation(
                               threshold: value.round(),
                             );
                           }
@@ -122,7 +122,7 @@ class _PerformanceSettingsPanelState extends ConsumerState<PerformanceSettingsPa
                 ),
                 value: performance.enableUpdateThrottling,
                 onChanged: (value) {
-                  settingsManager.updateThrottling(enabled: value);
+                  ref.read(settingsProvider.notifier).updateThrottling(enabled: value);
                 },
               ),
               ListTile(
@@ -154,7 +154,7 @@ class _PerformanceSettingsPanelState extends ConsumerState<PerformanceSettingsPa
                       if (interval != null &&
                           interval > 0 &&
                           interval <= 1000) {
-                        settingsManager.updateThrottling(
+                        ref.read(settingsProvider.notifier).updateThrottling(
                           interval: interval,
                         );
                       }
@@ -194,7 +194,7 @@ class _PerformanceSettingsPanelState extends ConsumerState<PerformanceSettingsPa
                     onChanged: (value) {
                       final size = int.tryParse(value);
                       if (size != null && size >= 100 && size <= 10000) {
-                        settingsManager.updateDataManagement(
+                        ref.read(settingsProvider.notifier).updateDataManagement(
                           bufferSize: size,
                         );
                       }
@@ -225,7 +225,7 @@ class _PerformanceSettingsPanelState extends ConsumerState<PerformanceSettingsPa
                     onChanged: (value) {
                       final minutes = int.tryParse(value);
                       if (minutes != null && minutes >= 1 && minutes <= 60) {
-                        settingsManager.updateDataManagement(
+                        ref.read(settingsProvider.notifier).updateDataManagement(
                           retentionMinutes: minutes,
                         );
                       }

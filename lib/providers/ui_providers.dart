@@ -16,8 +16,8 @@ import 'service_providers.dart';
 class SelectedViewIndexNotifier extends Notifier<int> {
   @override
   int build() {
-    final settingsManager = ref.read(settingsManagerProvider);
-    return settingsManager.settings.navigation.selectedViewIndex;
+    final settings = ref.read(settingsProvider).value ?? AppSettings.defaults();
+    return settings.navigation.selectedViewIndex;
   }
 
   void set(int index) {
@@ -35,8 +35,8 @@ final selectedViewIndexProvider =
 class SelectedPlotIndexNotifier extends Notifier<int> {
   @override
   int build() {
-    final settingsManager = ref.read(settingsManagerProvider);
-    return settingsManager.settings.navigation.selectedPlotIndex;
+    final settings = ref.read(settingsProvider).value ?? AppSettings.defaults();
+    return settings.navigation.selectedPlotIndex;
   }
 
   void set(int index) {
@@ -207,14 +207,14 @@ final connectionFormProvider =
 // =============================================================================
 
 /// Settings State Provider - Provides reactive access to app settings
-final appSettingsProvider = StreamProvider<AppSettings>((ref) async* {
-  final settingsManager = ref.watch(settingsManagerProvider);
-  yield settingsManager.settings;
+/// Now uses the generated settingsProvider directly
+final appSettingsProvider = Provider<AsyncValue<AppSettings>>((ref) {
+  return ref.watch(settingsProvider);
 });
 
 /// Window Settings Provider
 final windowSettingsProvider = Provider<WindowSettings>((ref) {
-  final settings = ref.watch(appSettingsProvider);
+  final settings = ref.watch(settingsProvider);
   return settings.when(
     data: (settings) => settings.window,
     loading: () => WindowSettings.defaults(),
@@ -224,7 +224,7 @@ final windowSettingsProvider = Provider<WindowSettings>((ref) {
 
 /// Plot Settings Provider
 final plotSettingsProvider = Provider<PlotSettings>((ref) {
-  final settings = ref.watch(appSettingsProvider);
+  final settings = ref.watch(settingsProvider);
   return settings.when(
     data: (settings) => settings.plots,
     loading: () => PlotSettings.defaults(),
@@ -234,7 +234,7 @@ final plotSettingsProvider = Provider<PlotSettings>((ref) {
 
 /// Performance Settings Provider
 final performanceSettingsProvider = Provider<PerformanceSettings>((ref) {
-  final settings = ref.watch(appSettingsProvider);
+  final settings = ref.watch(settingsProvider);
   return settings.when(
     data: (settings) => settings.performance,
     loading: () => PerformanceSettings.defaults(),
@@ -244,7 +244,7 @@ final performanceSettingsProvider = Provider<PerformanceSettings>((ref) {
 
 /// Map Settings Provider
 final mapSettingsProvider = Provider<MapSettings>((ref) {
-  final settings = ref.watch(appSettingsProvider);
+  final settings = ref.watch(settingsProvider);
   return settings.when(
     data: (settings) => settings.map,
     loading: () => MapSettings.defaults(),

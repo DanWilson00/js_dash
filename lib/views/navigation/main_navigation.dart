@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../telemetry/realtime_data_display.dart';
 import '../dashboard/main_dashboard.dart';
 import '../map/map_view.dart';
+import '../../models/app_settings.dart';
 import '../../providers/service_providers.dart';
 import '../../providers/ui_providers.dart';
 import '../../providers/action_providers.dart';
@@ -57,8 +58,7 @@ class _MainNavigationState extends ConsumerState<MainNavigation> {
     final connectionActions = ref.read(connectionActionsProvider);
     connectionActions.loadConnectionSettings();
 
-    final settingsManager = ref.read(settingsManagerProvider);
-    final settings = settingsManager.settings;
+    final settings = ref.read(settingsProvider).value ?? AppSettings.defaults();
     ref.read(selectedViewIndexProvider.notifier).set(
         settings.navigation.selectedViewIndex);
     ref.read(selectedPlotIndexProvider.notifier).set(
@@ -66,8 +66,7 @@ class _MainNavigationState extends ConsumerState<MainNavigation> {
   }
 
   void _autoStartConnectionIfEnabled() {
-    final settingsManager = ref.read(settingsManagerProvider);
-    final settings = settingsManager.settings;
+    final settings = ref.read(settingsProvider).value ?? AppSettings.defaults();
     final connectionActions = ref.read(connectionActionsProvider);
 
     if (settings.connection.enableSpoofing) {

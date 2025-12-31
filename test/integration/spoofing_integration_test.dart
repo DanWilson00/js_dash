@@ -128,7 +128,7 @@ void main() {
 
     test('should start spoofing when enabled in settings', () async {
       final connectionManager = container.read(connectionManagerProvider);
-      final settingsManager = container.read(settingsManagerProvider);
+      final settingsManager = container.read(settingsProvider.notifier);
 
       // Enable spoofing in settings
       settingsManager.updateConnectionMode(true);
@@ -153,7 +153,7 @@ void main() {
 
     test('should stop spoofing when disabled in settings', () async {
       final connectionManager = container.read(connectionManagerProvider);
-      final settingsManager = container.read(settingsManagerProvider);
+      final settingsManager = container.read(settingsProvider.notifier);
 
       // First, start spoofing
       settingsManager.updateConnectionMode(true);
@@ -177,7 +177,7 @@ void main() {
       () async {
         final connectionManager = container.read(connectionManagerProvider);
         final dataManager = container.read(timeSeriesDataManagerProvider);
-        final settingsManager = container.read(settingsManagerProvider);
+        final settingsManager = container.read(settingsProvider.notifier);
 
         // Connect data manager to connection manager first
         dataManager.startListening();
@@ -207,7 +207,7 @@ void main() {
     test('should stop data flow when spoofing is disconnected', () async {
       final connectionManager = container.read(connectionManagerProvider);
       final dataManager = container.read(timeSeriesDataManagerProvider);
-      final settingsManager = container.read(settingsManagerProvider);
+      final settingsManager = container.read(settingsProvider.notifier);
 
       // Start with spoofing connected
       dataManager.startListening();
@@ -231,7 +231,7 @@ void main() {
       () async {
         final connectionManager = container.read(connectionManagerProvider);
         final dataManager = container.read(timeSeriesDataManagerProvider);
-        final settingsManager = container.read(settingsManagerProvider);
+        final settingsManager = container.read(settingsProvider.notifier);
 
         // Disable spoofing
         settingsManager.updateConnectionMode(false);
@@ -264,7 +264,7 @@ void main() {
     test('should ensure MapView cannot bypass data manager', () async {
       final connectionManager = container.read(connectionManagerProvider);
       final dataManager = container.read(timeSeriesDataManagerProvider);
-      final settingsManager = container.read(settingsManagerProvider);
+      final settingsManager = container.read(settingsProvider.notifier);
 
       // This test ensures UI components like MapView must go through data manager
       // and cannot directly access data sources

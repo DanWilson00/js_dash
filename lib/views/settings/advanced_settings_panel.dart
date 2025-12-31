@@ -8,7 +8,6 @@ class AdvancedSettingsPanel extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final settingsManager = ref.watch(settingsManagerProvider);
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(12),
@@ -60,7 +59,7 @@ class AdvancedSettingsPanel extends ConsumerWidget {
                           ),
                           TextButton(
                             onPressed: () async {
-                              await settingsManager.resetToDefaults();
+                              await ref.read(settingsProvider.notifier).resetToDefaults();
 
                               Navigator.of(dialogContext).pop();
                               ScaffoldMessenger.of(context).showSnackBar(

@@ -68,6 +68,7 @@ PlotLayoutData _$PlotLayoutDataFromJson(Map<String, dynamic> json) =>
       y: (json['y'] as num?)?.toInt() ?? 0,
       width: (json['width'] as num?)?.toInt() ?? 6,
       height: (json['height'] as num?)?.toInt() ?? 4,
+      layoutVersion: (json['layoutVersion'] as num?)?.toInt() ?? 1,
     );
 
 Map<String, dynamic> _$PlotLayoutDataToJson(PlotLayoutData instance) =>
@@ -76,6 +77,7 @@ Map<String, dynamic> _$PlotLayoutDataToJson(PlotLayoutData instance) =>
       'y': instance.y,
       'width': instance.width,
       'height': instance.height,
+      'layoutVersion': instance.layoutVersion,
     };
 
 PlotConfiguration _$PlotConfigurationFromJson(

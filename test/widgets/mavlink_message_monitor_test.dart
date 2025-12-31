@@ -5,7 +5,6 @@ import 'package:js_dash/mavlink/mavlink.dart';
 import 'package:js_dash/models/statustext_entry.dart';
 import 'package:js_dash/views/telemetry/mavlink_message_monitor.dart';
 import 'package:js_dash/services/generic_message_tracker.dart';
-import 'package:js_dash/services/settings_manager.dart';
 import 'package:js_dash/services/timeseries_data_manager.dart';
 import 'package:js_dash/providers/service_providers.dart';
 import 'package:js_dash/providers/statustext_provider.dart';
@@ -26,7 +25,6 @@ void main() {
   group('MavlinkMessageMonitor Widget', () {
     late MavlinkMetadataRegistry registry;
     late GenericMessageTracker tracker;
-    late SettingsManager settingsManager;
     late TimeSeriesDataManager dataManager;
 
     setUp(() {
@@ -49,8 +47,8 @@ void main() {
 ''');
       tracker = GenericMessageTracker(registry);
       tracker.startTracking();
-      settingsManager = SettingsManager();
-      dataManager = TimeSeriesDataManager.injected(tracker, settingsManager);
+      // Pass null for settings - TimeSeriesDataManager will use defaults
+      dataManager = TimeSeriesDataManager.injected(tracker, null);
     });
 
     tearDown(() {

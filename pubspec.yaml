@@ -58,6 +58,7 @@ dependencies:
 
   # State management with Riverpod
   flutter_riverpod: ^3.0.0
+  riverpod_annotation: ^3.0.0
 
   # XML parsing for MAVLink dialect loading
   xml: ^6.5.0
@@ -79,10 +80,15 @@ dependencies:
 dev_dependencies:
   flutter_test:
     sdk: flutter
+  integration_test:
+    sdk: flutter
 
   # JSON code generation
   json_serializable: ^6.7.1
   build_runner: ^2.4.7
+
+  # Riverpod code generation
+  riverpod_generator: ^3.0.0
 
   # The "flutter_lints" package below contains a set of recommended lints to
   # encourage good coding practices. The lint set provided by the package is

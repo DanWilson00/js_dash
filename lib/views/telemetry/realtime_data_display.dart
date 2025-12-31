@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../providers/service_providers.dart';
+import '../../models/app_settings.dart';
 import '../../models/plot_configuration.dart';
 import 'mavlink_message_monitor.dart';
 import 'plot_grid.dart';
@@ -25,8 +26,8 @@ class _RealtimeDataDisplayState extends ConsumerState<RealtimeDataDisplay> {
   final Map<String, GlobalKey<PlotGridManagerState>> _tabKeys = {};
 
   GlobalKey<PlotGridManagerState> get _currentPlotGridKey {
-    final settingsManager = ref.read(settingsManagerProvider);
-    final selectedId = settingsManager.plots.selectedTabId;
+    final settings = ref.read(settingsProvider.notifier);
+    final selectedId = settings.plots.selectedTabId;
     if (!_tabKeys.containsKey(selectedId)) {
       _tabKeys[selectedId] = GlobalKey<PlotGridManagerState>();
     }
@@ -35,7 +36,6 @@ class _RealtimeDataDisplayState extends ConsumerState<RealtimeDataDisplay> {
 
   // Current telemetry data (kept for message tracking functionality)
   late bool _isPaused;
-  StreamSubscription? _dataStreamSubscription;
   late double _messagePanelWidth;
   bool _isEditMode = false;
   Timer? _panelWidthSaveTimer;
@@ -53,24 +53,21 @@ class _RealtimeDataDisplayState extends ConsumerState<RealtimeDataDisplay> {
     _renameFocusNode = FocusNode();
 
     // Initialize from settings
-    final settingsManager = ref.read(settingsManagerProvider);
-    _isPaused = settingsManager.connection.isPaused;
-    _messagePanelWidth = settingsManager.plots.messagePanelWidth;
+    final settings = ref.read(settingsProvider.notifier);
+    _isPaused = settings.connection.isPaused;
+    _messagePanelWidth = settings.plots.messagePanelWidth;
   }
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
 
-    // Set up data stream subscription using TimeSeriesDataManager
-    final dataManager = ref.read(timeSeriesDataManagerProvider);
-    _dataStreamSubscription = dataManager.dataStream.listen((_) {
-      if (mounted) {
-        setState(() {}); // Trigger rebuild to update connection status
-      }
-    });
+    // NOTE: Removed dataStream subscription that called empty setState() at 10+Hz
+    // Connection status is already watched via ref.watch(isConnectedProvider) in _buildStatusIndicator
+    // and settings are watched via ref.watch(settingsProvider) in build()
 
     // Sync data manager with current pause state
+    final dataManager = ref.read(timeSeriesDataManagerProvider);
     if (_isPaused) {
       dataManager.pause();
     } else {
@@ -93,7 +90,6 @@ class _RealtimeDataDisplayState extends ConsumerState<RealtimeDataDisplay> {
   @override
   void dispose() {
     _panelWidthSaveTimer?.cancel();
-    _dataStreamSubscription?.cancel();
     _renameController.dispose();
     _renameFocusNode.dispose();
     super.dispose();
@@ -119,7 +115,7 @@ class _RealtimeDataDisplayState extends ConsumerState<RealtimeDataDisplay> {
     });
 
     // Save pause state to settings
-    ref.read(settingsManagerProvider).updatePauseState(_isPaused);
+    ref.read(settingsProvider.notifier).updatePauseState(_isPaused);
   }
 
   void _toggleEditMode() {
@@ -143,22 +139,22 @@ class _RealtimeDataDisplayState extends ConsumerState<RealtimeDataDisplay> {
   }
 
   void _addTab() {
-    final settingsManager = ref.read(settingsManagerProvider);
-    settingsManager.addPlotTab(
-      'Tab ${settingsManager.plots.tabs.length + 1}',
+    final settings = ref.read(settingsProvider.notifier);
+    settings.addPlotTab(
+      'Tab ${settings.plots.tabs.length + 1}',
     );
   }
 
   void _removeTab(String tabId) {
-    ref.read(settingsManagerProvider).removePlotTab(tabId);
+    ref.read(settingsProvider.notifier).removePlotTab(tabId);
   }
 
   void _renameTab(String tabId, String newName) {
-    ref.read(settingsManagerProvider).renamePlotTab(tabId, newName);
+    ref.read(settingsProvider.notifier).renamePlotTab(tabId, newName);
   }
 
   void _selectTab(String tabId) {
-    ref.read(settingsManagerProvider).selectPlotTab(tabId);
+    ref.read(settingsProvider.notifier).selectPlotTab(tabId);
   }
 
   void _startEditing(String tabId, String currentName) {
@@ -187,13 +183,13 @@ class _RealtimeDataDisplayState extends ConsumerState<RealtimeDataDisplay> {
 
   @override
   Widget build(BuildContext context) {
-    final settingsManager = ref.watch(settingsManagerProvider);
-    final uiScale = settingsManager.appearance.uiScale;
-    final tabs = settingsManager.plots.tabs;
-    final selectedTabId = settingsManager.plots.selectedTabId;
+    final settings = ref.watch(settingsProvider).value ?? AppSettings.defaults();
+    final uiScale = settings.appearance.uiScale;
+    final tabs = settings.plots.tabs;
+    final selectedTabId = settings.plots.selectedTabId;
 
     // Sync pause state from settings (replaces listener pattern)
-    _syncPauseState(settingsManager.connection.isPaused);
+    _syncPauseState(settings.connection.isPaused);
 
     // Ensure keys exist for all tabs
     for (var tab in tabs) {
@@ -206,7 +202,7 @@ class _RealtimeDataDisplayState extends ConsumerState<RealtimeDataDisplay> {
     _tabKeys.removeWhere((key, _) => !tabs.any((t) => t.id == key));
 
     // Get current time window from settings
-    final currentTimeWindowLabel = settingsManager.plots.timeWindow;
+    final currentTimeWindowLabel = settings.plots.timeWindow;
     final currentTimeWindow = TimeWindowOption.availableWindows.firstWhere(
       (w) => w.label == currentTimeWindowLabel,
       orElse: () => TimeWindowOption.getDefault(),
@@ -346,7 +342,7 @@ class _RealtimeDataDisplayState extends ConsumerState<RealtimeDataDisplay> {
                         onChanged: (window) {
                           if (window != null) {
                             // Update global settings
-                            settingsManager.updateTimeWindow(
+                            ref.read(settingsProvider.notifier).updateTimeWindow(
                               window.label,
                             );
                             // Update existing plots
@@ -439,7 +435,7 @@ class _RealtimeDataDisplayState extends ConsumerState<RealtimeDataDisplay> {
                       _panelWidthSaveTimer = Timer(
                         const Duration(milliseconds: 500),
                         () {
-                          ref.read(settingsManagerProvider).updateMessagePanelWidth(
+                          ref.read(settingsProvider.notifier).updateMessagePanelWidth(
                             _messagePanelWidth,
                           );
                         },
@@ -493,7 +489,7 @@ class _RealtimeDataDisplayState extends ConsumerState<RealtimeDataDisplay> {
     final isActuallyConnected = ref.watch(isConnectedProvider);
 
     final isConnected = isActuallyConnected && !_isPaused;
-    final connection = ref.read(settingsManagerProvider).connection;
+    final connection = ref.read(settingsProvider.notifier).connection;
     final statusColor = _isPaused
         ? Colors.orange
         : (isConnected ? Colors.green : Colors.red);

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:collection';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
@@ -31,7 +32,7 @@ class _MapViewState extends ConsumerState<MapView> {
   double? _vehicleHeading;
 
   // Path tracking
-  final List<LatLng> _vehiclePath = [];
+  final ListQueue<LatLng> _vehiclePath = ListQueue<LatLng>();
 
   // Map ready state
   bool _mapReady = false;
@@ -116,7 +117,7 @@ class _MapViewState extends ConsumerState<MapView> {
         // Limit path length based on settings
         final mapSettings = ref.read(mapSettingsProvider);
         if (_vehiclePath.length > mapSettings.maxPathPoints) {
-          _vehiclePath.removeAt(0);
+          _vehiclePath.removeFirst();
         }
 
         // Update heading if available
@@ -138,15 +139,15 @@ class _MapViewState extends ConsumerState<MapView> {
   void _saveMapState() {
     final camera = _mapController.camera;
     final mapSettings = ref.read(mapSettingsProvider);
-    final settingsManager = ref.read(settingsManagerProvider);
+    final settings = ref.read(settingsProvider.notifier);
 
     // Always save zoom, but only save position if not following vehicle
     if (mapSettings.followVehicle) {
       // When following vehicle, only save zoom level, keep saved position
-      settingsManager.updateMapZoom(camera.zoom);
+      settings.updateMapZoom(camera.zoom);
     } else {
       // When not following, save both position and zoom
-      settingsManager.updateMapCenterAndZoom(
+      settings.updateMapCenterAndZoom(
         camera.center.latitude,
         camera.center.longitude,
         camera.zoom,
@@ -164,7 +165,6 @@ class _MapViewState extends ConsumerState<MapView> {
   @override
   Widget build(BuildContext context) {
     final mapSettings = ref.watch(mapSettingsProvider);
-    final settingsManager = ref.watch(settingsManagerProvider);
     final defaultCenter = LatLng(
       mapSettings.centerLatitude,
       mapSettings.centerLongitude,
@@ -225,7 +225,7 @@ class _MapViewState extends ConsumerState<MapView> {
                 if (mapEvent is MapEventMoveStart &&
                     mapEvent.source == MapEventSource.onDrag) {
                   if (mapSettings.followVehicle) {
-                    settingsManager.updateMapFollowVehicle(false);
+                    ref.read(settingsProvider.notifier).updateMapFollowVehicle(false);
                   }
                 }
               },
@@ -242,7 +242,7 @@ class _MapViewState extends ConsumerState<MapView> {
                 PolylineLayer(
                   polylines: [
                     Polyline(
-                      points: _vehiclePath,
+                      points: _vehiclePath.toList(growable: false),
                       strokeWidth: 3.0,
                       color: Colors.blue.withValues(alpha: 0.7),
                     ),
@@ -296,7 +296,6 @@ class _MapViewState extends ConsumerState<MapView> {
 
   Widget _buildMapControls() {
     final mapSettings = ref.watch(mapSettingsProvider);
-    final settingsManager = ref.watch(settingsManagerProvider);
 
     return Positioned(
       top: 20,
@@ -382,9 +381,7 @@ class _MapViewState extends ConsumerState<MapView> {
                     color: mapSettings.showPath ? Colors.blue : Colors.white,
                   ),
                   onPressed: () {
-                    settingsManager.updateMapShowPath(
-                      !mapSettings.showPath,
-                    );
+                    ref.read(settingsProvider.notifier).updateMapShowPath(!mapSettings.showPath);
                   },
                   tooltip: mapSettings.showPath ? 'Hide Path' : 'Show Path',
                 ),
@@ -441,7 +438,7 @@ class _MapViewState extends ConsumerState<MapView> {
                           : Colors.white,
                     ),
                     onPressed: () {
-                      settingsManager.updateMapFollowVehicle(
+                      ref.read(settingsProvider.notifier).updateMapFollowVehicle(
                         !mapSettings.followVehicle,
                       );
                       // If enabling follow mode, immediately center on vehicle
@@ -502,7 +499,6 @@ class _MapViewState extends ConsumerState<MapView> {
   // Show path configuration dialog
   void _showPathConfigDialog() {
     final mapSettings = ref.read(mapSettingsProvider);
-    final settingsManager = ref.read(settingsManagerProvider);
     showDialog(
       context: context,
       builder: (BuildContext context) {
@@ -543,13 +539,11 @@ class _MapViewState extends ConsumerState<MapView> {
                 ),
                 TextButton(
                   onPressed: () {
-                    settingsManager.updateMapMaxPathPoints(
-                      tempMaxPathPoints,
-                    );
+                    ref.read(settingsProvider.notifier).updateMapMaxPathPoints(tempMaxPathPoints);
                     // Trim existing path if it's too long
                     setState(() {
                       while (_vehiclePath.length > tempMaxPathPoints) {
-                        _vehiclePath.removeAt(0);
+                        _vehiclePath.removeFirst();
                       }
                     });
                     Navigator.of(context).pop();

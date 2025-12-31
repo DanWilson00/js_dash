@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:fl_chart/fl_chart.dart';
+import '../../models/app_settings.dart';
 import '../../models/plot_configuration.dart';
 import '../../core/timeseries_point.dart';
 
@@ -183,7 +184,8 @@ class _InteractivePlotState extends ConsumerState<InteractivePlot> {
 
   void _scheduleUpdate() {
     _pendingUpdate = true;
-    final performance = ref.read(settingsManagerProvider).performance;
+    final settings = ref.read(settingsProvider).value ?? AppSettings.defaults();
+    final performance = settings.performance;
 
     if (_updateTimer == null || !_updateTimer!.isActive) {
       final updateInterval = Duration(milliseconds: performance.updateInterval);
@@ -213,7 +215,7 @@ class _InteractivePlotState extends ConsumerState<InteractivePlot> {
       allData: _getAllDataForSignals(widget.configuration.yAxis.visibleSignals),
       timeWindow: timeWindow,
       scalingMode: widget.configuration.yAxis.scalingMode,
-      performance: ref.read(settingsManagerProvider).performance,
+      performance: (ref.read(settingsProvider).value ?? AppSettings.defaults()).performance,
       absoluteEpoch: _absoluteEpoch,
       lastDataTimestamps: Map.from(_lastDataTimestamps),
     );
@@ -498,227 +500,243 @@ class _InteractivePlotState extends ConsumerState<InteractivePlot> {
                   _handleDragZoom(maxWidth);
                 }
               },
-              child: LineChart(
-                LineChartData(
-                  clipData: FlClipData.all(),
-                  lineTouchData: LineTouchData(
-                    enabled:
-                        _dataManager.isPaused &&
-                        !_isDragging, // Disable when dragging
-                    handleBuiltInTouches:
-                        !_isDragging, // Don't handle built-in touches when dragging
-                    touchSpotThreshold:
-                        50, // Increase threshold for sticky feel
-                    touchCallback: (FlTouchEvent event, LineTouchResponse? response) {
-                      if (!mounted) return;
+              child: RepaintBoundary(
+                child: LineChart(
+                  LineChartData(
+                    clipData: FlClipData.all(),
+                    lineTouchData: LineTouchData(
+                      enabled:
+                          _dataManager.isPaused &&
+                          !_isDragging, // Disable when dragging
+                      handleBuiltInTouches:
+                          !_isDragging, // Don't handle built-in touches when dragging
+                      touchSpotThreshold:
+                          50, // Increase threshold for sticky feel
+                      touchCallback: (FlTouchEvent event, LineTouchResponse? response) {
+                        if (!mounted) return;
 
-                      if (event is FlPointerHoverEvent) {
-                        if (response?.lineBarSpots != null &&
-                            response!.lineBarSpots!.isNotEmpty) {
-                          setState(() {
-                            _hoveredValues.clear();
+                        if (event is FlPointerHoverEvent) {
+                          if (response?.lineBarSpots != null &&
+                              response!.lineBarSpots!.isNotEmpty) {
+                            setState(() {
+                              _hoveredValues.clear();
 
-                            // Collect values from all signals at this X position
-                            for (final spot in response.lineBarSpots!) {
-                              final barIndex = spot.barIndex;
-                              if (barIndex <
-                                  widget
+                              // Collect values from all signals at this X position
+                              for (final spot in response.lineBarSpots!) {
+                                final barIndex = spot.barIndex;
+                                if (barIndex <
+                                    widget
+                                        .configuration
+                                        .yAxis
+                                        .visibleSignals
+                                        .length) {
+                                  final signal = widget
                                       .configuration
                                       .yAxis
-                                      .visibleSignals
-                                      .length) {
-                                final signal = widget
+                                      .visibleSignals[barIndex];
+                                  _hoveredValues[signal.fieldKey] = spot.y;
+                                }
+                              }
+
+                              // Update showing tooltip indicators
+                              _showingTooltipIndicators = response.lineBarSpots!
+                                  .map((spot) {
+                                    return ShowingTooltipIndicators([
+                                      LineBarSpot(
+                                        spot.bar,
+                                        spot.barIndex,
+                                        spot,
+                                      ),
+                                    ]);
+                                  })
+                                  .toList();
+                            });
+                          }
+                        } else if (event is FlPointerExitEvent) {
+                          // Don't clear hovered values or indicators to make it "sticky"
+                          // Only clear if we start dragging or explicitly clear
+                        }
+                      },
+                      touchTooltipData: LineTouchTooltipData(
+                        tooltipBorderRadius: BorderRadius.circular(8),
+                        getTooltipColor: (spot) => Theme.of(context)
+                            .colorScheme
+                            .surfaceContainerHighest
+                            .withValues(alpha: 0.95),
+                        tooltipBorder: BorderSide(
+                          color: Theme.of(
+                            context,
+                          ).colorScheme.primary.withValues(alpha: 0.3),
+                          width: 1.5,
+                        ),
+                        tooltipPadding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 10,
+                        ),
+                        maxContentWidth: 300,
+                        fitInsideHorizontally: true,
+                        fitInsideVertically: true,
+                        getTooltipItems: (touchedSpots) {
+                          // Sort by barIndex to match legend order
+                          final sortedSpots = List<LineBarSpot>.from(
+                            touchedSpots,
+                          )..sort((a, b) => a.barIndex.compareTo(b.barIndex));
+
+                          return sortedSpots.map((LineBarSpot spot) {
+                            final barIndex = spot.barIndex;
+                            if (barIndex >=
+                                widget
                                     .configuration
                                     .yAxis
-                                    .visibleSignals[barIndex];
-                                _hoveredValues[signal.fieldKey] = spot.y;
-                              }
+                                    .visibleSignals
+                                    .length) {
+                              return null;
                             }
 
-                            // Update showing tooltip indicators
-                            _showingTooltipIndicators = response.lineBarSpots!
-                                .map((spot) {
-                                  return ShowingTooltipIndicators([
-                                    LineBarSpot(spot.bar, spot.barIndex, spot),
-                                  ]);
-                                })
-                                .toList();
-                          });
-                        }
-                      } else if (event is FlPointerExitEvent) {
-                        // Don't clear hovered values or indicators to make it "sticky"
-                        // Only clear if we start dragging or explicitly clear
-                      }
-                    },
-                    touchTooltipData: LineTouchTooltipData(
-                      tooltipBorderRadius: BorderRadius.circular(8),
-                      getTooltipColor: (spot) => Theme.of(
-                        context,
-                      ).colorScheme.surfaceContainerHighest.withValues(alpha: 0.95),
-                      tooltipBorder: BorderSide(
-                        color: Theme.of(
-                          context,
-                        ).colorScheme.primary.withValues(alpha: 0.3),
-                        width: 1.5,
-                      ),
-                      tooltipPadding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 10,
-                      ),
-                      maxContentWidth: 300,
-                      fitInsideHorizontally: true,
-                      fitInsideVertically: true,
-                      getTooltipItems: (touchedSpots) {
-                        // Sort by barIndex to match legend order
-                        final sortedSpots = List<LineBarSpot>.from(touchedSpots)
-                          ..sort((a, b) => a.barIndex.compareTo(b.barIndex));
+                            final signal = widget
+                                .configuration
+                                .yAxis
+                                .visibleSignals[barIndex];
 
-                        return sortedSpots.map((LineBarSpot spot) {
-                          final barIndex = spot.barIndex;
-                          if (barIndex >=
-                              widget
-                                  .configuration
-                                  .yAxis
-                                  .visibleSignals
-                                  .length) {
-                            return null;
-                          }
+                            // Get original value from stored map
+                            final originalValue =
+                                _originalValues[signal.fieldKey]?[spot.x];
+                            final displayValue =
+                                originalValue?.toStringAsFixed(2) ??
+                                spot.y.toStringAsFixed(2);
 
-                          final signal = widget
-                              .configuration
-                              .yAxis
-                              .visibleSignals[barIndex];
+                            final fontSize =
+                                14.0 *
+                                (ref.read(settingsProvider).value ?? AppSettings.defaults())
+                                    .appearance
+                                    .uiScale;
 
-                          // Get original value from stored map
-                          final originalValue =
-                              _originalValues[signal.fieldKey]?[spot.x];
-                          final displayValue =
-                              originalValue?.toStringAsFixed(2) ??
-                              spot.y.toStringAsFixed(2);
+                            // Format with units if available
+                            final unitsSuffix =
+                                signal.units != null && signal.units!.isNotEmpty
+                                ? ' ${signal.units}'
+                                : '';
 
-                          final fontSize =
-                              14.0 * ref.read(settingsManagerProvider).appearance.uiScale;
-
-                          // Format with units if available
-                          final unitsSuffix = signal.units != null && signal.units!.isNotEmpty
-                              ? ' ${signal.units}'
-                              : '';
-
-                          return LineTooltipItem(
-                            '${signal.effectiveDisplayName}: $displayValue$unitsSuffix',
-                            TextStyle(
-                              color: signal.color,
-                              fontWeight: FontWeight.w600,
-                              fontSize: fontSize * 0.85,
-                              fontFamily: 'RobotoMono',
-                            ),
-                          );
-                        }).toList();
-                      },
-                    ),
-                    getTouchedSpotIndicator:
-                        (LineChartBarData barData, List<int> spotIndexes) {
-                          return spotIndexes.map((index) {
-                            return TouchedSpotIndicatorData(
-                              FlLine(
-                                color: Theme.of(
-                                  context,
-                                ).colorScheme.primary.withValues(alpha: 0.4),
-                                strokeWidth: 1.5,
-                                dashArray: [6, 4],
-                              ),
-                              FlDotData(
-                                show: true,
-                                getDotPainter: (spot, percent, barData, index) {
-                                  return FlDotCirclePainter(
-                                    radius: 6,
-                                    color: barData.color ?? Colors.blue,
-                                    strokeWidth: 2,
-                                    strokeColor: Theme.of(
-                                      context,
-                                    ).colorScheme.surface,
-                                  );
-                                },
+                            return LineTooltipItem(
+                              '${signal.effectiveDisplayName}: $displayValue$unitsSuffix',
+                              TextStyle(
+                                color: signal.color,
+                                fontWeight: FontWeight.w600,
+                                fontSize: fontSize * 0.85,
+                                fontFamily: 'RobotoMono',
                               ),
                             );
                           }).toList();
                         },
-                  ),
-                  gridData: FlGridData(
-                    show: true,
-                    drawVerticalLine: true,
-                    horizontalInterval: (_maxY - _minY) / 5,
-                    verticalInterval:
-                        (widget.configuration.timeWindow.inMilliseconds /
-                            _zoomLevel) /
-                        5,
-                    getDrawingHorizontalLine: (value) => FlLine(
-                      color: Theme.of(
-                        context,
-                      ).colorScheme.outline.withValues(alpha: 0.1),
-                      strokeWidth: 1,
-                      dashArray: [5, 5],
+                      ),
+                      getTouchedSpotIndicator:
+                          (LineChartBarData barData, List<int> spotIndexes) {
+                            return spotIndexes.map((index) {
+                              return TouchedSpotIndicatorData(
+                                FlLine(
+                                  color: Theme.of(
+                                    context,
+                                  ).colorScheme.primary.withValues(alpha: 0.4),
+                                  strokeWidth: 1.5,
+                                  dashArray: [6, 4],
+                                ),
+                                FlDotData(
+                                  show: true,
+                                  getDotPainter:
+                                      (spot, percent, barData, index) {
+                                        return FlDotCirclePainter(
+                                          radius: 6,
+                                          color: barData.color ?? Colors.blue,
+                                          strokeWidth: 2,
+                                          strokeColor: Theme.of(
+                                            context,
+                                          ).colorScheme.surface,
+                                        );
+                                      },
+                                ),
+                              );
+                            }).toList();
+                          },
                     ),
-                    getDrawingVerticalLine: (value) => FlLine(
-                      color: Theme.of(
-                        context,
-                      ).colorScheme.outline.withValues(alpha: 0.1),
-                      strokeWidth: 1,
-                      dashArray: [5, 5],
-                    ),
-                  ),
-                  titlesData: FlTitlesData(
-                    show: true,
-                    rightTitles: const AxisTitles(
-                      sideTitles: SideTitles(
-                        showTitles: false,
-                        reservedSize: 0,
+                    gridData: FlGridData(
+                      show: true,
+                      drawVerticalLine: true,
+                      horizontalInterval: (_maxY - _minY) / 5,
+                      verticalInterval:
+                          (widget.configuration.timeWindow.inMilliseconds /
+                              _zoomLevel) /
+                          5,
+                      getDrawingHorizontalLine: (value) => FlLine(
+                        color: Theme.of(
+                          context,
+                        ).colorScheme.outline.withValues(alpha: 0.1),
+                        strokeWidth: 1,
+                        dashArray: [5, 5],
+                      ),
+                      getDrawingVerticalLine: (value) => FlLine(
+                        color: Theme.of(
+                          context,
+                        ).colorScheme.outline.withValues(alpha: 0.1),
+                        strokeWidth: 1,
+                        dashArray: [5, 5],
                       ),
                     ),
-                    topTitles: const AxisTitles(
-                      sideTitles: SideTitles(
-                        showTitles: false,
-                        reservedSize: 0,
+                    titlesData: FlTitlesData(
+                      show: true,
+                      rightTitles: const AxisTitles(
+                        sideTitles: SideTitles(
+                          showTitles: false,
+                          reservedSize: 0,
+                        ),
+                      ),
+                      topTitles: const AxisTitles(
+                        sideTitles: SideTitles(
+                          showTitles: false,
+                          reservedSize: 0,
+                        ),
+                      ),
+                      bottomTitles: AxisTitles(
+                        sideTitles: SideTitles(
+                          showTitles: true,
+                          reservedSize: _bottomTitleHeight,
+                          interval:
+                              widget.configuration.timeWindow.inMilliseconds /
+                              4,
+                          getTitlesWidget: (value, meta) =>
+                              _buildTimeLabel(value),
+                        ),
+                      ),
+                      leftTitles: AxisTitles(
+                        sideTitles: SideTitles(
+                          showTitles: true,
+                          interval: (_maxY - _minY) / 4,
+                          reservedSize: _leftTitleWidth,
+                          getTitlesWidget: (value, meta) =>
+                              _buildValueLabel(value),
+                        ),
                       ),
                     ),
-                    bottomTitles: AxisTitles(
-                      sideTitles: SideTitles(
-                        showTitles: true,
-                        reservedSize: _bottomTitleHeight,
-                        interval:
-                            widget.configuration.timeWindow.inMilliseconds / 4,
-                        getTitlesWidget: (value, meta) =>
-                            _buildTimeLabel(value),
+                    borderData: FlBorderData(
+                      show: true,
+                      border: Border.all(
+                        color: Theme.of(
+                          context,
+                        ).colorScheme.outline.withValues(alpha: 0.3),
+                        width: _borderWidth,
                       ),
                     ),
-                    leftTitles: AxisTitles(
-                      sideTitles: SideTitles(
-                        showTitles: true,
-                        interval: (_maxY - _minY) / 4,
-                        reservedSize: _leftTitleWidth,
-                        getTitlesWidget: (value, meta) =>
-                            _buildValueLabel(value),
-                      ),
-                    ),
+                    minX: _calculateMinX(),
+                    maxX: _calculateMaxX(),
+                    minY: _minY,
+                    maxY: _maxY,
+                    lineBarsData: _buildLineChartBars(),
+                    showingTooltipIndicators: _dataManager.isPaused
+                        ? _showingTooltipIndicators
+                        : [],
                   ),
-                  borderData: FlBorderData(
-                    show: true,
-                    border: Border.all(
-                      color: Theme.of(
-                        context,
-                      ).colorScheme.outline.withValues(alpha: 0.3),
-                      width: _borderWidth,
-                    ),
-                  ),
-                  minX: _calculateMinX(),
-                  maxX: _calculateMaxX(),
-                  minY: _minY,
-                  maxY: _maxY,
-                  lineBarsData: _buildLineChartBars(),
-                  showingTooltipIndicators: _dataManager.isPaused ? _showingTooltipIndicators : [],
+                  // Animations disabled for performance
+                  duration: Duration.zero,
                 ),
-                // Animations disabled for performance
-                duration: Duration.zero,
               ),
             ),
             // Legend overlay

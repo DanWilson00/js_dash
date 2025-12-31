@@ -1,23 +1,27 @@
+import 'dart:collection';
 import 'timeseries_point.dart';
 
 class CircularBuffer {
   final int capacity;
-  final List<TimeSeriesPoint> _points = [];
+  final ListQueue<TimeSeriesPoint> _points = ListQueue<TimeSeriesPoint>();
 
   CircularBuffer(this.capacity);
 
   void add(TimeSeriesPoint point) {
     if (_points.length >= capacity) {
-      _points.removeAt(0);
+      _points.removeFirst();
     }
-    _points.add(point);
+    _points.addLast(point);
   }
 
   void removeOldData(DateTime cutoff) {
-    _points.removeWhere((p) => p.timestamp.isBefore(cutoff));
+    while (_points.isNotEmpty && _points.first.timestamp.isBefore(cutoff)) {
+      _points.removeFirst();
+    }
   }
 
-  List<TimeSeriesPoint> get points => List.unmodifiable(_points);
+  // Returns an unmodifiable list view for consumers who need index access
+  List<TimeSeriesPoint> get points => _points.toList(growable: false);
 
   int get length => _points.length;
 
