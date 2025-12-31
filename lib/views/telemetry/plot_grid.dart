@@ -5,6 +5,7 @@ import 'package:dashboard/dashboard.dart';
 import '../../models/app_settings.dart';
 import '../../models/plot_configuration.dart';
 import '../../providers/service_providers.dart';
+import '../../services/settings_manager.dart';
 import 'interactive_plot.dart';
 import 'signal_properties_panel.dart';
 
@@ -41,7 +42,8 @@ class PlotGridManagerState extends ConsumerState<PlotGridManager> {
   }
 
   void _loadFromSettings() {
-    final settings = ref.read(settingsProvider).value ?? AppSettings.defaults();
+    // Use synchronous access to pre-loaded settings (bypasses AsyncNotifier loading state)
+    final settings = Settings.getInitialSettings();
     final plotSettings = settings.plots;
 
     // Find the tab by ID

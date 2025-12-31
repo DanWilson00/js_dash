@@ -16,12 +16,32 @@ class Settings extends _$Settings {
   Timer? _saveTimer;
   static const Duration _saveDelay = Duration(seconds: 2);
 
+  /// Optional initial settings to avoid async loading race condition
+  static AppSettings? _initialSettings;
+
+  /// Call before app starts to provide pre-loaded settings
+  static void setInitialSettings(AppSettings settings) {
+    _initialSettings = settings;
+  }
+
+  /// Get initial settings synchronously (for initState use)
+  /// This bypasses the async provider loading state
+  static AppSettings getInitialSettings() {
+    return _initialSettings ?? AppSettings.defaults();
+  }
+
   @override
   Future<AppSettings> build() async {
     ref.onDispose(() {
       _saveTimer?.cancel();
     });
 
+    // Use pre-loaded settings if available (avoids race condition on startup)
+    if (_initialSettings != null) {
+      return _initialSettings!;
+    }
+
+    // Fall back to loading from disk
     try {
       return await _settingsService.loadSettings();
     } catch (e) {

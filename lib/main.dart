@@ -3,6 +3,7 @@ import 'package:flutter/services.dart' show rootBundle;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'mavlink/mavlink.dart';
 import 'services/dialect_discovery.dart';
+import 'services/settings_manager.dart';
 import 'services/settings_service.dart';
 import 'services/window/window_service.dart';
 import 'providers/service_providers.dart';
@@ -13,9 +14,11 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   // Load settings for pre-app initialization (dialect, window)
-  // The Settings notifier will load the same settings when it initializes
   final settingsService = SettingsService();
   final initialSettings = await settingsService.loadSettings();
+
+  // Pass pre-loaded settings to avoid race condition with AsyncNotifier
+  Settings.setInitialSettings(initialSettings);
 
   // Load MAVLink metadata from selected dialect
   // Check user dialects first, then fall back to bundled assets
