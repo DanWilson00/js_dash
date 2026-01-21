@@ -738,8 +738,8 @@ class _ResizablePlotPanel extends StatefulWidget {
 class _ResizablePlotPanelState extends State<_ResizablePlotPanel> {
   late Rect _rect;
 
-  static const double _handleSize = 12.0;
-  static const double _handleHitArea = 20.0;
+  static const double _handleSize = 24.0; // Corner handle size
+  static const double _handleHitArea = 48.0; // Edge hit area
   static const double _snapThreshold = 10.0; // pixels to trigger snap
   static const double _snapGap = 4.0; // gap between snapped panels
 
