@@ -349,7 +349,6 @@ class _RealtimeDataDisplayState extends ConsumerState<RealtimeDataDisplay> {
                           _currentPlotGridKey.currentState?.addNewPlot(),
                       tooltip: 'Add Plot',
                     ),
-                    SizedBox(width: 16 * uiScale),
                     IconButton(
                       icon: Icon(_isPaused ? Icons.play_arrow : Icons.pause),
                       iconSize: 24 * uiScale,

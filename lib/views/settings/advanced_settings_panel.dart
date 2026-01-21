@@ -8,7 +8,6 @@ class AdvancedSettingsPanel extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-
     return SingleChildScrollView(
       padding: const EdgeInsets.all(12),
       child: Column(
@@ -59,7 +58,9 @@ class AdvancedSettingsPanel extends ConsumerWidget {
                           ),
                           TextButton(
                             onPressed: () async {
-                              await ref.read(settingsProvider.notifier).resetToDefaults();
+                              await ref
+                                  .read(settingsProvider.notifier)
+                                  .resetToDefaults();
 
                               Navigator.of(dialogContext).pop();
                               ScaffoldMessenger.of(context).showSnackBar(
@@ -111,11 +112,6 @@ class AdvancedSettingsPanel extends ConsumerWidget {
                     ],
                   ),
                   const SizedBox(height: 16),
-                  Text(
-                    'Submersible Jetski Dashboard',
-                    style: Theme.of(context).textTheme.titleSmall,
-                  ),
-                  const SizedBox(height: 4),
                   Text(
                     'Real-time telemetry display for MAVLink-compatible vehicles',
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(

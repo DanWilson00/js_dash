@@ -13,10 +13,7 @@ import '../../services/serial/serial_service.dart';
 class MainNavigation extends ConsumerStatefulWidget {
   final bool autoStartMonitor;
 
-  const MainNavigation({
-    super.key,
-    this.autoStartMonitor = true,
-  });
+  const MainNavigation({super.key, this.autoStartMonitor = true});
 
   @override
   ConsumerState<MainNavigation> createState() => _MainNavigationState();
@@ -59,10 +56,12 @@ class _MainNavigationState extends ConsumerState<MainNavigation> {
     connectionActions.loadConnectionSettings();
 
     final settings = ref.read(settingsProvider).value ?? AppSettings.defaults();
-    ref.read(selectedViewIndexProvider.notifier).set(
-        settings.navigation.selectedViewIndex);
-    ref.read(selectedPlotIndexProvider.notifier).set(
-        settings.navigation.selectedPlotIndex);
+    ref
+        .read(selectedViewIndexProvider.notifier)
+        .set(settings.navigation.selectedViewIndex);
+    ref
+        .read(selectedPlotIndexProvider.notifier)
+        .set(settings.navigation.selectedPlotIndex);
   }
 
   void _autoStartConnectionIfEnabled() {
@@ -82,7 +81,9 @@ class _MainNavigationState extends ConsumerState<MainNavigation> {
       // Auto-start serial if spoofing disabled and port is configured
       // Only connect if the port actually exists
       final availablePorts = getAvailableSerialPorts();
-      final portExists = availablePorts.any((p) => p.portName == settings.connection.serialPort);
+      final portExists = availablePorts.any(
+        (p) => p.portName == settings.connection.serialPort,
+      );
       if (portExists) {
         connectionActions.connectWith(
           SerialConnectionConfig(
@@ -123,23 +124,57 @@ class _MainNavigationState extends ConsumerState<MainNavigation> {
   }
 
   Widget _buildBottomNavigation(int selectedIndex, bool isConnected) {
-    return BottomNavigationBar(
-      items: const <BottomNavigationBarItem>[
-        BottomNavigationBarItem(
-          icon: Icon(Icons.dashboard),
-          label: 'Dashboard',
+    final selectedColor = isConnected ? Colors.green : Colors.blue;
+
+    Widget buildItem(int index, IconData icon, String label) {
+      final isSelected = selectedIndex == index;
+      return Expanded(
+        child: InkWell(
+          onTap: () => _onItemTapped(index),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 8),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  icon,
+                  color: isSelected ? selectedColor : Colors.grey,
+                  size: 24,
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: isSelected ? selectedColor : Colors.grey,
+                    fontWeight: isSelected
+                        ? FontWeight.w600
+                        : FontWeight.normal,
+                  ),
+                ),
+              ],
+            ),
+          ),
         ),
-        BottomNavigationBarItem(
-          icon: Icon(Icons.show_chart),
-          label: 'Telemetry',
+      );
+    }
+
+    return Container(
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface,
+        border: Border(
+          top: BorderSide(
+            color: Theme.of(context).colorScheme.outline.withValues(alpha: 0.2),
+          ),
         ),
-        BottomNavigationBarItem(icon: Icon(Icons.map), label: 'Map'),
-      ],
-      currentIndex: selectedIndex,
-      onTap: _onItemTapped,
-      type: BottomNavigationBarType.fixed,
-      selectedItemColor: isConnected ? Colors.green : Colors.blue,
-      unselectedItemColor: Colors.grey,
+      ),
+      child: Row(
+        children: [
+          buildItem(0, Icons.dashboard, 'Dashboard'),
+          buildItem(1, Icons.show_chart, 'Telemetry'),
+          buildItem(2, Icons.map, 'Map'),
+        ],
+      ),
     );
   }
 
