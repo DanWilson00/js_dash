@@ -25,6 +25,7 @@ class PlotGridManagerState extends ConsumerState<PlotGridManager> {
   late List<PlotConfiguration> _plots;
   String? _selectedPlotId;
   late bool _showPropertiesPanel;
+  bool _hasLoadedPlotsFromSettings = false;
 
   // Canvas constraints
   Size _canvasSize = Size.zero;
@@ -52,6 +53,23 @@ class PlotGridManagerState extends ConsumerState<PlotGridManager> {
       _selectedPlotId = _plots.first.id;
     } else {
       _selectedPlotId = null;
+    }
+  }
+
+  /// Syncs plots from settings once they're actually loaded from disk
+  void _syncPlotsFromSettings(AsyncValue<AppSettings> settingsAsync) {
+    if (!_hasLoadedPlotsFromSettings && settingsAsync.hasValue) {
+      final plotSettings = settingsAsync.value!.plots;
+      final tab = plotSettings.tabs.firstWhere(
+        (t) => t.id == widget.tabId,
+        orElse: () => plotSettings.tabs.first,
+      );
+      _plots = List<PlotConfiguration>.from(tab.plots);
+      _showPropertiesPanel = plotSettings.propertiesPanelVisible;
+      if (_plots.isNotEmpty && _selectedPlotId == null) {
+        _selectedPlotId = _plots.first.id;
+      }
+      _hasLoadedPlotsFromSettings = true;
     }
   }
 
@@ -551,6 +569,10 @@ class PlotGridManagerState extends ConsumerState<PlotGridManager> {
 
   @override
   Widget build(BuildContext context) {
+    // Sync plots from settings once they're actually loaded
+    final settingsAsync = ref.watch(settingsProvider);
+    _syncPlotsFromSettings(settingsAsync);
+
     return Column(
       children: [
         if (_selectedPlotId != null && _showPropertiesPanel) ...[
