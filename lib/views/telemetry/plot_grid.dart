@@ -436,6 +436,10 @@ class PlotGridManagerState extends ConsumerState<PlotGridManager> {
                     plot: plot,
                     isSelected: _selectedPlotId == plot.id,
                     canvasSize: _canvasSize,
+                    otherPanelRects: _plots
+                        .where((p) => p.id != plot.id)
+                        .map((p) => p.layoutData.toRect())
+                        .toList(),
                     onSelect: () {
                       _selectPlot(plot.id);
                       _bringToFront(plot.id);
@@ -502,6 +506,7 @@ class _ResizablePlotPanel extends StatefulWidget {
   final VoidCallback onClearAxis;
   final VoidCallback onLegendTap;
   final int plotIndex;
+  final List<Rect> otherPanelRects;
 
   const _ResizablePlotPanel({
     super.key,
@@ -514,6 +519,7 @@ class _ResizablePlotPanel extends StatefulWidget {
     required this.onClearAxis,
     required this.onLegendTap,
     required this.plotIndex,
+    required this.otherPanelRects,
   });
 
   @override
@@ -525,6 +531,8 @@ class _ResizablePlotPanelState extends State<_ResizablePlotPanel> {
 
   static const double _handleSize = 12.0;
   static const double _handleHitArea = 20.0;
+  static const double _snapThreshold = 10.0; // pixels to trigger snap
+  static const double _snapGap = 4.0; // gap between snapped panels
 
   @override
   void initState() {
@@ -540,13 +548,113 @@ class _ResizablePlotPanelState extends State<_ResizablePlotPanel> {
     }
   }
 
+  /// Snaps a value to target if within threshold
+  double _snapToValue(double value, double target, double threshold) {
+    return (value - target).abs() < threshold ? target : value;
+  }
+
+  /// Clamps rect to canvas bounds and prevents overlap with other panels
+  Rect _clampAndPreventOverlap(Rect proposed) {
+    var left = proposed.left.clamp(0.0, widget.canvasSize.width - proposed.width);
+    var top = proposed.top.clamp(0.0, widget.canvasSize.height - proposed.height);
+
+    // Push out of any overlapping panels
+    for (final other in widget.otherPanelRects) {
+      final rect = Rect.fromLTWH(left, top, proposed.width, proposed.height);
+      if (rect.overlaps(other)) {
+        // Calculate push distances for each direction
+        final pushRight = other.right - rect.left + _snapGap;
+        final pushLeft = rect.right - other.left + _snapGap;
+        final pushDown = other.bottom - rect.top + _snapGap;
+        final pushUp = rect.bottom - other.top + _snapGap;
+
+        // Find minimum push distance (absolute value)
+        final distances = [
+          (pushRight, 'right'),
+          (pushLeft, 'left'),
+          (pushDown, 'down'),
+          (pushUp, 'up'),
+        ];
+        distances.sort((a, b) => a.$1.abs().compareTo(b.$1.abs()));
+        final minPush = distances.first;
+
+        // Apply the smallest push
+        switch (minPush.$2) {
+          case 'right':
+            left = other.right + _snapGap;
+          case 'left':
+            left = other.left - proposed.width - _snapGap;
+          case 'down':
+            top = other.bottom + _snapGap;
+          case 'up':
+            top = other.top - proposed.height - _snapGap;
+        }
+
+        // Re-clamp after pushing
+        left = left.clamp(0.0, widget.canvasSize.width - proposed.width);
+        top = top.clamp(0.0, widget.canvasSize.height - proposed.height);
+      }
+    }
+
+    return Rect.fromLTWH(left, top, proposed.width, proposed.height);
+  }
+
   void _onDragUpdate(DragUpdateDetails details) {
     setState(() {
-      final newLeft = (_rect.left + details.delta.dx)
-          .clamp(0.0, widget.canvasSize.width - _rect.width);
-      final newTop = (_rect.top + details.delta.dy)
-          .clamp(0.0, widget.canvasSize.height - _rect.height);
-      _rect = Rect.fromLTWH(newLeft, newTop, _rect.width, _rect.height);
+      var newLeft = _rect.left + details.delta.dx;
+      var newTop = _rect.top + details.delta.dy;
+
+      // Snap to canvas edges
+      newLeft = _snapToValue(newLeft, 0, _snapThreshold);
+      newTop = _snapToValue(newTop, 0, _snapThreshold);
+      newLeft = _snapToValue(
+        newLeft + _rect.width,
+        widget.canvasSize.width,
+        _snapThreshold,
+      ) - _rect.width;
+      newTop = _snapToValue(
+        newTop + _rect.height,
+        widget.canvasSize.height,
+        _snapThreshold,
+      ) - _rect.height;
+
+      // Snap to other panel edges
+      for (final other in widget.otherPanelRects) {
+        // Snap left edge to other's right edge (with gap)
+        newLeft = _snapToValue(newLeft, other.right + _snapGap, _snapThreshold);
+        // Snap right edge to other's left edge (with gap)
+        newLeft = _snapToValue(
+          newLeft + _rect.width,
+          other.left - _snapGap,
+          _snapThreshold,
+        ) - _rect.width;
+        // Snap top edge to other's bottom edge (with gap)
+        newTop = _snapToValue(newTop, other.bottom + _snapGap, _snapThreshold);
+        // Snap bottom edge to other's top edge (with gap)
+        newTop = _snapToValue(
+          newTop + _rect.height,
+          other.top - _snapGap,
+          _snapThreshold,
+        ) - _rect.height;
+
+        // Also snap aligned edges (left-to-left, right-to-right, etc.)
+        newLeft = _snapToValue(newLeft, other.left, _snapThreshold);
+        newLeft = _snapToValue(
+          newLeft + _rect.width,
+          other.right,
+          _snapThreshold,
+        ) - _rect.width;
+        newTop = _snapToValue(newTop, other.top, _snapThreshold);
+        newTop = _snapToValue(
+          newTop + _rect.height,
+          other.bottom,
+          _snapThreshold,
+        ) - _rect.height;
+      }
+
+      // Clamp to canvas and prevent overlap
+      final proposedRect = Rect.fromLTWH(newLeft, newTop, _rect.width, _rect.height);
+      _rect = _clampAndPreventOverlap(proposedRect);
     });
   }
 
@@ -562,16 +670,68 @@ class _ResizablePlotPanelState extends State<_ResizablePlotPanel> {
       double bottom = _rect.bottom;
 
       if (handle.influencesLeft) {
-        left = (left + details.delta.dx).clamp(0.0, right - PlotLayoutData.kMinWidth);
+        left = left + details.delta.dx;
+        // Snap to canvas edge
+        left = _snapToValue(left, 0, _snapThreshold);
+        // Snap to other panel edges
+        for (final other in widget.otherPanelRects) {
+          left = _snapToValue(left, other.right + _snapGap, _snapThreshold);
+          left = _snapToValue(left, other.left, _snapThreshold);
+        }
+        left = left.clamp(0.0, right - PlotLayoutData.kMinWidth);
       }
       if (handle.influencesRight) {
-        right = (right + details.delta.dx).clamp(left + PlotLayoutData.kMinWidth, widget.canvasSize.width);
+        right = right + details.delta.dx;
+        // Snap to canvas edge
+        right = _snapToValue(right, widget.canvasSize.width, _snapThreshold);
+        // Snap to other panel edges
+        for (final other in widget.otherPanelRects) {
+          right = _snapToValue(right, other.left - _snapGap, _snapThreshold);
+          right = _snapToValue(right, other.right, _snapThreshold);
+        }
+        right = right.clamp(left + PlotLayoutData.kMinWidth, widget.canvasSize.width);
       }
       if (handle.influencesTop) {
-        top = (top + details.delta.dy).clamp(0.0, bottom - PlotLayoutData.kMinHeight);
+        top = top + details.delta.dy;
+        // Snap to canvas edge
+        top = _snapToValue(top, 0, _snapThreshold);
+        // Snap to other panel edges
+        for (final other in widget.otherPanelRects) {
+          top = _snapToValue(top, other.bottom + _snapGap, _snapThreshold);
+          top = _snapToValue(top, other.top, _snapThreshold);
+        }
+        top = top.clamp(0.0, bottom - PlotLayoutData.kMinHeight);
       }
       if (handle.influencesBottom) {
-        bottom = (bottom + details.delta.dy).clamp(top + PlotLayoutData.kMinHeight, widget.canvasSize.height);
+        bottom = bottom + details.delta.dy;
+        // Snap to canvas edge
+        bottom = _snapToValue(bottom, widget.canvasSize.height, _snapThreshold);
+        // Snap to other panel edges
+        for (final other in widget.otherPanelRects) {
+          bottom = _snapToValue(bottom, other.top - _snapGap, _snapThreshold);
+          bottom = _snapToValue(bottom, other.bottom, _snapThreshold);
+        }
+        bottom = bottom.clamp(top + PlotLayoutData.kMinHeight, widget.canvasSize.height);
+      }
+
+      // Prevent overlap by checking against other panels
+      final proposedRect = Rect.fromLTRB(left, top, right, bottom);
+      for (final other in widget.otherPanelRects) {
+        if (proposedRect.overlaps(other)) {
+          // Block resize at the overlapping edge
+          if (handle.influencesLeft && left < other.right && _rect.left >= other.right) {
+            left = other.right + _snapGap;
+          }
+          if (handle.influencesRight && right > other.left && _rect.right <= other.left) {
+            right = other.left - _snapGap;
+          }
+          if (handle.influencesTop && top < other.bottom && _rect.top >= other.bottom) {
+            top = other.bottom + _snapGap;
+          }
+          if (handle.influencesBottom && bottom > other.top && _rect.bottom <= other.top) {
+            bottom = other.top - _snapGap;
+          }
+        }
       }
 
       _rect = Rect.fromLTRB(left, top, right, bottom);
