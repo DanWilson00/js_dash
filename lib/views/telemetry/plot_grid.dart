@@ -36,7 +36,8 @@ class PlotGridManagerState extends ConsumerState<PlotGridManager> {
   }
 
   void _loadFromSettings() {
-    final settings = Settings.getInitialSettings();
+    // Use the provider to get live settings instead of static cached settings
+    final settings = ref.read(settingsProvider).value ?? AppSettings.defaults();
     final plotSettings = settings.plots;
 
     final tab = plotSettings.tabs.firstWhere(
@@ -54,6 +55,53 @@ class PlotGridManagerState extends ConsumerState<PlotGridManager> {
     }
   }
 
+  /// Finds a non-overlapping position for a new plot by scanning grid positions
+  Offset _findNonOverlappingPosition(Size plotSize) {
+    const double gap = 4.0; // Gap between panels
+    final existingRects = _plots.map((p) => p.layoutData.toRect()).toList();
+
+    // If canvas size is not yet set, use a reasonable default
+    final canvasWidth = _canvasSize.width > 0 ? _canvasSize.width : 800.0;
+    final canvasHeight = _canvasSize.height > 0 ? _canvasSize.height : 600.0;
+
+    // Try positions starting from (0,0), shifting right then wrapping to next row
+    double x = 0;
+    double y = 0;
+
+    while (y + plotSize.height <= canvasHeight) {
+      final candidateRect = Rect.fromLTWH(x, y, plotSize.width, plotSize.height);
+
+      // Check if this position overlaps with any existing plot
+      bool overlaps = false;
+      for (final existing in existingRects) {
+        // Add gap to existing rect for overlap check
+        final expandedExisting = existing.inflate(gap / 2);
+        if (candidateRect.overlaps(expandedExisting)) {
+          overlaps = true;
+          break;
+        }
+      }
+
+      if (!overlaps) {
+        // Found a valid position
+        return Offset(x, y);
+      }
+
+      // Move right by one step (use gap as step size for efficiency, but could use smaller steps)
+      x += plotSize.width + gap;
+
+      // If we've gone past the right edge, wrap to next row
+      if (x + plotSize.width > canvasWidth) {
+        x = 0;
+        y += plotSize.height + gap;
+      }
+    }
+
+    // If no position found, stack diagonally as fallback
+    final offset = (_plots.length % 5) * 30.0;
+    return Offset(offset, offset);
+  }
+
   void _addDefaultPlot({bool save = true}) {
     final newId = 'plot_${DateTime.now().millisecondsSinceEpoch}';
 
@@ -64,14 +112,16 @@ class PlotGridManagerState extends ConsumerState<PlotGridManager> {
       orElse: () => TimeWindowOption.getDefault(),
     );
 
-    final offset = (_plots.length % 5) * 30.0;
+    // Find a non-overlapping position for the new plot
+    final plotSize = Size(PlotLayoutData.kDefaultWidth, PlotLayoutData.kDefaultHeight);
+    final position = _findNonOverlappingPosition(plotSize);
 
     final newPlot = PlotConfiguration(
       id: newId,
       timeWindow: timeWindowOption.duration,
       layoutData: PlotLayoutData(
-        x: offset,
-        y: offset,
+        x: position.dx,
+        y: position.dy,
         width: PlotLayoutData.kDefaultWidth,
         height: PlotLayoutData.kDefaultHeight,
       ),
@@ -800,27 +850,8 @@ class _ResizablePlotPanelState extends State<_ResizablePlotPanel> {
           child: Container(
             width: isCorner ? _handleSize : (isHorizontal ? _handleSize / 2 : _handleHitArea),
             height: isCorner ? _handleSize : (isHorizontal ? _handleHitArea : _handleSize / 2),
-            decoration: BoxDecoration(
-              color: widget.isSelected
-                  ? Theme.of(context).colorScheme.primary
-                  : Theme.of(context).colorScheme.outline.withValues(alpha: 0.5),
-              borderRadius: BorderRadius.circular(isCorner ? 2 : 3),
-              border: isCorner
-                  ? Border.all(color: Colors.white, width: 1)
-                  : null,
-              boxShadow: widget.isSelected && isCorner
-                  ? [
-                      BoxShadow(
-                        color: Theme.of(context)
-                            .colorScheme
-                            .primary
-                            .withValues(alpha: 0.4),
-                        blurRadius: 6,
-                        spreadRadius: 1,
-                      ),
-                    ]
-                  : null,
-            ),
+            // Transparent decoration - keeps hit area functional without visible handles
+            color: Colors.transparent,
           ),
         ),
       ),
