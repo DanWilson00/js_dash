@@ -62,24 +62,6 @@ const _$ScalingModeEnumMap = {
   ScalingMode.autoScale: 'autoScale',
 };
 
-PlotLayoutData _$PlotLayoutDataFromJson(Map<String, dynamic> json) =>
-    PlotLayoutData(
-      x: (json['x'] as num?)?.toInt() ?? 0,
-      y: (json['y'] as num?)?.toInt() ?? 0,
-      width: (json['width'] as num?)?.toInt() ?? 6,
-      height: (json['height'] as num?)?.toInt() ?? 4,
-      layoutVersion: (json['layoutVersion'] as num?)?.toInt() ?? 1,
-    );
-
-Map<String, dynamic> _$PlotLayoutDataToJson(PlotLayoutData instance) =>
-    <String, dynamic>{
-      'x': instance.x,
-      'y': instance.y,
-      'width': instance.width,
-      'height': instance.height,
-      'layoutVersion': instance.layoutVersion,
-    };
-
 PlotConfiguration _$PlotConfigurationFromJson(
   Map<String, dynamic> json,
 ) => PlotConfiguration(

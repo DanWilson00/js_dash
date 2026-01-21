@@ -114,10 +114,10 @@ class _MainNavigationState extends ConsumerState<MainNavigation> {
   Widget _buildBody(int selectedIndex) {
     return IndexedStack(
       index: selectedIndex,
-      children: const [
-        MainDashboard(),
-        RealtimeDataDisplay(),
-        MapView(),
+      children: [
+        MainDashboard(isActive: selectedIndex == 0),
+        const RealtimeDataDisplay(),
+        MapView(isActive: selectedIndex == 2),
       ],
     );
   }

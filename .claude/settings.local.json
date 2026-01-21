@@ -2,7 +2,9 @@
   "permissions": {
     "allow": [
       "Bash(flutter pub get:*)",
-      "WebSearch"
+      "WebSearch",
+      "Bash(findstr:*)",
+      "Bash(flutter build:*)"
     ]
   }
 }

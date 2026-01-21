@@ -1,11 +1,9 @@
-import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:dashboard/dashboard.dart';
+import 'package:box_transform/box_transform.dart' as bt;
 import '../../models/app_settings.dart';
 import '../../models/plot_configuration.dart';
 import '../../providers/service_providers.dart';
-import '../../services/settings_manager.dart';
 import 'interactive_plot.dart';
 import 'signal_properties_panel.dart';
 
@@ -28,90 +26,37 @@ class PlotGridManagerState extends ConsumerState<PlotGridManager> {
   String? _selectedPlotId;
   late bool _showPropertiesPanel;
 
-  late DashboardItemController _itemController;
-
-  // Grid configuration
-  static const int kSlotCount = 96; // 4x resolution (was 24)
-  static const int kScaleFactor = 4;
+  // Canvas constraints
+  Size _canvasSize = Size.zero;
 
   @override
   void initState() {
     super.initState();
     _loadFromSettings();
-    _initializeController();
   }
 
   void _loadFromSettings() {
-    // Use synchronous access to pre-loaded settings (bypasses AsyncNotifier loading state)
     final settings = Settings.getInitialSettings();
     final plotSettings = settings.plots;
 
-    // Find the tab by ID
     final tab = plotSettings.tabs.firstWhere(
       (t) => t.id == widget.tabId,
-      orElse: () => plotSettings.tabs.first, // Fallback
+      orElse: () => plotSettings.tabs.first,
     );
 
-    // Load plots from the specific tab
     _plots = List<PlotConfiguration>.from(tab.plots);
     _showPropertiesPanel = plotSettings.propertiesPanelVisible;
 
-    // Restore selected plot index (global setting, might need per-tab later)
     if (_plots.isNotEmpty) {
       _selectedPlotId = _plots.first.id;
     } else {
       _selectedPlotId = null;
     }
-
-    // MIGRATION: Check for old low-res layouts and scale them up
-    bool needsSave = false;
-    for (var i = 0; i < _plots.length; i++) {
-      // Check if layout version is old (default 1)
-      if (_plots[i].layoutData.layoutVersion < 2) {
-        // Upgrade to version 2: Scale coordinates by kScaleFactor
-        _plots[i] = _plots[i].copyWith(
-          layoutData: _plots[i].layoutData.copyWith(
-            x: _plots[i].layoutData.x * kScaleFactor,
-            y: _plots[i].layoutData.y * kScaleFactor,
-            width: _plots[i].layoutData.width * kScaleFactor,
-            height: _plots[i].layoutData.height * kScaleFactor,
-            layoutVersion: 2,
-          ),
-        );
-        needsSave = true;
-      }
-    }
-
-    if (needsSave) {
-      // Save the migrated layouts immediately
-      Future.microtask(() => _saveToSettings());
-    }
-  }
-
-  void _initializeController() {
-    // Removed forced default plot creation to allow empty state persistence
-    // if (_plots.isEmpty) {
-    //   _addDefaultPlot(save: false);
-    // }
-
-    _itemController = DashboardItemController.withDelegate(
-      itemStorageDelegate: _PlotGridStorageDelegate(
-        plots: _plots,
-        onItemsUpdatedCallback: _updateLayoutFromDelegate,
-        onItemsAddedCallback: (items) {
-          // Handle items added via controller if needed
-        },
-        onItemsDeletedCallback: (items) {
-          // Handle items deleted via controller if needed
-        },
-      ),
-    );
   }
 
   void _addDefaultPlot({bool save = true}) {
     final newId = 'plot_${DateTime.now().millisecondsSinceEpoch}';
 
-    // Get current time window from settings
     final settings = ref.read(settingsProvider).value ?? AppSettings.defaults();
     final timeWindowLabel = settings.plots.timeWindow;
     final timeWindowOption = TimeWindowOption.availableWindows.firstWhere(
@@ -119,31 +64,26 @@ class PlotGridManagerState extends ConsumerState<PlotGridManager> {
       orElse: () => TimeWindowOption.getDefault(),
     );
 
+    final offset = (_plots.length % 5) * 30.0;
+
     final newPlot = PlotConfiguration(
       id: newId,
       timeWindow: timeWindowOption.duration,
-      // Default size scaled up for high resolution (was 8x6)
-      layoutData: const PlotLayoutData(
-        x: 0,
-        y: 0,
-        width: 8 * kScaleFactor,
-        height: 6 * kScaleFactor,
-        layoutVersion: 2,
+      layoutData: PlotLayoutData(
+        x: offset,
+        y: offset,
+        width: PlotLayoutData.kDefaultWidth,
+        height: PlotLayoutData.kDefaultHeight,
       ),
     );
 
-    _plots.add(newPlot);
+    setState(() {
+      _plots.add(newPlot);
+      _selectedPlotId = newId;
+    });
+
     if (save) {
       _saveToSettings();
-      _itemController.add(
-        DashboardItem(
-          width: newPlot.layoutData.width,
-          height: newPlot.layoutData.height,
-          identifier: newPlot.id,
-          startX: newPlot.layoutData.x,
-          startY: newPlot.layoutData.y,
-        ),
-      );
     }
   }
 
@@ -151,23 +91,13 @@ class PlotGridManagerState extends ConsumerState<PlotGridManager> {
     ref.read(settingsProvider.notifier).updatePlotsInTab(widget.tabId, _plots);
   }
 
-  void _updateLayoutFromDelegate(List<DashboardItem> items) {
+  void _updatePlotLayout(String plotId, Rect newRect) {
     setState(() {
-      for (final item in items) {
-        final index = _plots.indexWhere((p) => p.id == item.identifier);
-        if (index != -1) {
-          // Keep the existing version when updating layout from dashboard interaction
-          // (assuming dashboard interactions are in the current resolution)
-          _plots[index] = _plots[index].copyWith(
-            layoutData: PlotLayoutData(
-              x: item.layoutData.startX,
-              y: item.layoutData.startY,
-              width: item.layoutData.width,
-              height: item.layoutData.height,
-              layoutVersion: _plots[index].layoutData.layoutVersion,
-            ),
-          );
-        }
+      final index = _plots.indexWhere((p) => p.id == plotId);
+      if (index != -1) {
+        _plots[index] = _plots[index].copyWith(
+          layoutData: PlotLayoutData.fromRect(newRect),
+        );
       }
     });
     _saveToSettings();
@@ -177,7 +107,6 @@ class PlotGridManagerState extends ConsumerState<PlotGridManager> {
     setState(() {
       _selectedPlotId = plotId;
     });
-    _saveToSettings();
   }
 
   void _clearPlotAxis(String plotId) {
@@ -220,9 +149,10 @@ class PlotGridManagerState extends ConsumerState<PlotGridManager> {
                     border: Border.all(
                       color: signal.color == color
                           ? Theme.of(context).colorScheme.primary
-                          : Theme.of(
-                              context,
-                            ).colorScheme.outline.withValues(alpha: 0.2),
+                          : Theme.of(context)
+                              .colorScheme
+                              .outline
+                              .withValues(alpha: 0.2),
                       width: signal.color == color ? 3 : 1,
                     ),
                   ),
@@ -270,13 +200,23 @@ class PlotGridManagerState extends ConsumerState<PlotGridManager> {
       if (_selectedPlotId == plotId) {
         _selectedPlotId = _plots.isNotEmpty ? _plots.last.id : null;
       }
-      _itemController.delete(plotId);
     });
     _saveToSettings();
   }
 
   int _getPlotIndex(String plotId) {
     return _plots.indexWhere((p) => p.id == plotId);
+  }
+
+  void _bringToFront(String plotId) {
+    setState(() {
+      final index = _plots.indexWhere((p) => p.id == plotId);
+      if (index != -1 && index < _plots.length - 1) {
+        final plot = _plots.removeAt(index);
+        _plots.add(plot);
+      }
+    });
+    _saveToSettings();
   }
 
   // --- Public Methods for RealtimeDataDisplay ---
@@ -289,13 +229,12 @@ class PlotGridManagerState extends ConsumerState<PlotGridManager> {
     setState(() {
       _plots.clear();
       _selectedPlotId = null;
-      _itemController.clear();
     });
     _saveToSettings();
   }
 
   void setEditMode(bool enabled) {
-    _itemController.isEditing = enabled;
+    // Edit mode is always enabled with the new free-form system
   }
 
   void updateTimeWindow(TimeWindowOption window) {
@@ -320,18 +259,15 @@ class PlotGridManagerState extends ConsumerState<PlotGridManager> {
         final plot = _plots[index];
         final fieldKey = '$messageType.$fieldName';
 
-        // Check if signal already exists
         final existingSignalIndex = plot.yAxis.signals.indexWhere(
           (s) => s.fieldKey == fieldKey,
         );
 
         List<PlotSignalConfiguration> updatedSignals;
         if (existingSignalIndex != -1) {
-          // Remove if exists (toggle)
           updatedSignals = List.from(plot.yAxis.signals)
             ..removeAt(existingSignalIndex);
         } else {
-          // Add new signal - get units from metadata
           final registry = ref.read(mavlinkRegistryProvider);
           final messageMetadata = registry.getMessageByName(messageType);
           final fieldMetadata = messageMetadata?.getField(fieldName);
@@ -361,9 +297,7 @@ class PlotGridManagerState extends ConsumerState<PlotGridManager> {
         widget.onFieldAssignment?.call();
       }
     } else {
-      // No plot selected and no plots exist, create one
       addNewPlot();
-      // Then assign (recursive call)
       Future.microtask(() => assignFieldToSelectedPlot(messageType, fieldName));
     }
   }
@@ -388,8 +322,6 @@ class PlotGridManagerState extends ConsumerState<PlotGridManager> {
       for (final signal in plot.yAxis.signals) signal.fieldKey: signal.color,
     };
   }
-
-  // --- Panel Builders ---
 
   Widget _buildSignalPropertiesPanel() {
     final plot = _plots.firstWhere((p) => p.id == _selectedPlotId);
@@ -432,9 +364,7 @@ class PlotGridManagerState extends ConsumerState<PlotGridManager> {
         });
         _saveToSettings();
       },
-      onAddSignals: () {
-        // TODO: Show color picker or handle add signal
-      },
+      onAddSignals: () {},
       scalingMode: plot.yAxis.scalingMode,
       onScalingModeChanged: (mode) {
         setState(() {
@@ -458,178 +388,100 @@ class PlotGridManagerState extends ConsumerState<PlotGridManager> {
           _buildSignalPropertiesPanel(),
           const SizedBox(height: 8),
         ],
-
         Expanded(
-          child: Dashboard(
-            dashboardItemController: _itemController,
-            slotCount: kSlotCount,
-            editModeSettings: EditModeSettings(
-              paintBackgroundLines: false,
-              fillEditingBackground: false,
-              resizeCursorSide: 15,
-              curve: Curves.easeOut,
-              duration: const Duration(milliseconds: 300),
-            ),
-            itemBuilder: (DashboardItem item) {
-              // Find the plot config.
-              final plot = _plots.firstWhere(
-                (p) => p.id == item.identifier,
-                orElse: () => _plots.first, // Fallback
-              );
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              _canvasSize = Size(constraints.maxWidth, constraints.maxHeight);
 
-              final isSelected = _selectedPlotId == plot.id;
-
-              return Container(
-                decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.surface,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(
-                    color: isSelected
-                        ? Theme.of(context).colorScheme.primary
-                        : Theme.of(
-                            context,
-                          ).colorScheme.outline.withValues(alpha: 0.2),
-                    width: isSelected ? 2 : 1,
+              if (_plots.isEmpty) {
+                return Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        Icons.add_chart,
+                        size: 64,
+                        color: Theme.of(context)
+                            .colorScheme
+                            .outline
+                            .withValues(alpha: 0.5),
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        'No plots yet',
+                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                              color: Theme.of(context).colorScheme.outline,
+                            ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Click "Add Plot" to create a new plot',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .outline
+                                  .withValues(alpha: 0.7),
+                            ),
+                      ),
+                    ],
                   ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.1),
-                      blurRadius: 4,
-                      offset: const Offset(0, 2),
-                    ),
-                  ],
-                ),
-                child: Column(
-                  children: [
-                    // Header / Drag Handle
-                    Container(
-                      height: 24,
-                      decoration: BoxDecoration(
-                        color: isSelected
-                            ? Theme.of(
-                                context,
-                              ).colorScheme.primary.withValues(alpha: 0.1)
-                            : Theme.of(
-                                context,
-                              ).colorScheme.surfaceContainerHighest,
-                        borderRadius: const BorderRadius.vertical(
-                          top: Radius.circular(7),
-                        ),
-                      ),
-                      child: Row(
-                        children: [
-                          // Draggable area with move cursor
-                          Expanded(
-                            child: MouseRegion(
-                              cursor: SystemMouseCursors.move,
-                              child: Row(
-                                children: [
-                                  const SizedBox(width: 8),
-                                  Icon(
-                                    Icons.drag_indicator,
-                                    size: 16,
-                                    color: Theme.of(
-                                      context,
-                                    ).colorScheme.primary,
-                                  ),
-                                  const SizedBox(width: 4),
-                                  Expanded(
-                                    child: GestureDetector(
-                                      onTap: () => _selectPlot(plot.id),
-                                      child: Text(
-                                        plot.yAxis.hasData
-                                            ? plot.yAxis.displayName
-                                            : 'Plot ${_getPlotIndex(plot.id) + 1}',
-                                        style: Theme.of(
-                                          context,
-                                        ).textTheme.labelSmall,
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                          // Close Button - now clickable with default cursor!
-                          MouseRegion(
-                            cursor: SystemMouseCursors.click,
-                            child: Material(
-                              color: Colors.transparent,
-                              child: InkWell(
-                                onTap: () => _removePlot(plot.id),
-                                borderRadius: BorderRadius.circular(4),
-                                child: Padding(
-                                  padding: const EdgeInsets.all(4.0),
-                                  child: Icon(
-                                    Icons.close,
-                                    size: 16,
-                                    color: Theme.of(context).colorScheme.error,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 4),
-                        ],
-                      ),
-                    ),
-                    // Plot Area - force basic cursor to override dashboard's move cursor
-                    Expanded(
-                      child: MouseRegion(
-                        cursor: SystemMouseCursors.basic,
-                        child: InteractivePlot(
-                          configuration: plot,
-                          isAxisSelected: isSelected,
-                          onAxisTap: () => _selectPlot(plot.id),
-                          onClearAxis: () => _clearPlotAxis(plot.id),
-                          onLegendTap: () {
-                            if (plot.yAxis.signals.isNotEmpty) {
-                              if (plot.yAxis.signals.length == 1) {
-                                _handleLegendTap(
-                                  plot.id,
-                                  plot.yAxis.signals.first,
-                                );
-                              } else {
-                                // Show a simple dialog to pick a signal
-                                showDialog(
-                                  context: context,
-                                  builder: (context) => SimpleDialog(
-                                    title: const Text(
-                                      'Select Signal to Edit Color',
-                                    ),
-                                    children: plot.yAxis.signals.map((signal) {
-                                      return SimpleDialogOption(
-                                        onPressed: () {
-                                          Navigator.pop(context);
-                                          _handleLegendTap(plot.id, signal);
-                                        },
-                                        child: Row(
-                                          children: [
-                                            Container(
-                                              width: 16,
-                                              height: 16,
-                                              decoration: BoxDecoration(
-                                                color: signal.color,
-                                                shape: BoxShape.circle,
-                                              ),
-                                            ),
-                                            const SizedBox(width: 8),
-                                            Text(signal.fieldName),
-                                          ],
+                );
+              }
+
+              return Stack(
+                clipBehavior: Clip.none,
+                children: _plots.map((plot) {
+                  return _ResizablePlotPanel(
+                    key: ValueKey(plot.id),
+                    plot: plot,
+                    isSelected: _selectedPlotId == plot.id,
+                    canvasSize: _canvasSize,
+                    onSelect: () {
+                      _selectPlot(plot.id);
+                      _bringToFront(plot.id);
+                    },
+                    onLayoutChanged: (rect) => _updatePlotLayout(plot.id, rect),
+                    onRemove: () => _removePlot(plot.id),
+                    onClearAxis: () => _clearPlotAxis(plot.id),
+                    onLegendTap: () {
+                      if (plot.yAxis.signals.isNotEmpty) {
+                        if (plot.yAxis.signals.length == 1) {
+                          _handleLegendTap(plot.id, plot.yAxis.signals.first);
+                        } else {
+                          showDialog(
+                            context: context,
+                            builder: (context) => SimpleDialog(
+                              title: const Text('Select Signal to Edit Color'),
+                              children: plot.yAxis.signals.map((signal) {
+                                return SimpleDialogOption(
+                                  onPressed: () {
+                                    Navigator.pop(context);
+                                    _handleLegendTap(plot.id, signal);
+                                  },
+                                  child: Row(
+                                    children: [
+                                      Container(
+                                        width: 16,
+                                        height: 16,
+                                        decoration: BoxDecoration(
+                                          color: signal.color,
+                                          shape: BoxShape.circle,
                                         ),
-                                      );
-                                    }).toList(),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Text(signal.fieldName),
+                                    ],
                                   ),
                                 );
-                              }
-                            }
-                          },
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
+                              }).toList(),
+                            ),
+                          );
+                        }
+                      }
+                    },
+                    plotIndex: _getPlotIndex(plot.id),
+                  );
+                }).toList(),
               );
             },
           ),
@@ -639,51 +491,319 @@ class PlotGridManagerState extends ConsumerState<PlotGridManager> {
   }
 }
 
-class _PlotGridStorageDelegate
-    extends DashboardItemStorageDelegate<DashboardItem> {
-  final List<PlotConfiguration> plots;
-  final Function(List<DashboardItem>) onItemsUpdatedCallback;
-  final Function(List<DashboardItem>) onItemsAddedCallback;
-  final Function(List<DashboardItem>) onItemsDeletedCallback;
+/// A resizable and draggable plot panel widget
+class _ResizablePlotPanel extends StatefulWidget {
+  final PlotConfiguration plot;
+  final bool isSelected;
+  final Size canvasSize;
+  final VoidCallback onSelect;
+  final ValueChanged<Rect> onLayoutChanged;
+  final VoidCallback onRemove;
+  final VoidCallback onClearAxis;
+  final VoidCallback onLegendTap;
+  final int plotIndex;
 
-  _PlotGridStorageDelegate({
-    required this.plots,
-    required this.onItemsUpdatedCallback,
-    required this.onItemsAddedCallback,
-    required this.onItemsDeletedCallback,
+  const _ResizablePlotPanel({
+    super.key,
+    required this.plot,
+    required this.isSelected,
+    required this.canvasSize,
+    required this.onSelect,
+    required this.onLayoutChanged,
+    required this.onRemove,
+    required this.onClearAxis,
+    required this.onLegendTap,
+    required this.plotIndex,
   });
 
   @override
-  bool get cacheItems => true;
+  State<_ResizablePlotPanel> createState() => _ResizablePlotPanelState();
+}
+
+class _ResizablePlotPanelState extends State<_ResizablePlotPanel> {
+  late Rect _rect;
+
+  static const double _handleSize = 12.0;
+  static const double _handleHitArea = 20.0;
 
   @override
-  bool get layoutsBySlotCount => false;
-
-  @override
-  FutureOr<List<DashboardItem>> getAllItems(int slotCount) {
-    return plots.map((plot) {
-      return DashboardItem(
-        width: plot.layoutData.width,
-        height: plot.layoutData.height,
-        identifier: plot.id,
-        startX: plot.layoutData.x,
-        startY: plot.layoutData.y,
-      );
-    }).toList();
+  void initState() {
+    super.initState();
+    _rect = widget.plot.layoutData.toRect();
   }
 
   @override
-  FutureOr<void> onItemsUpdated(List<DashboardItem> items, int slotCount) {
-    onItemsUpdatedCallback(items);
+  void didUpdateWidget(_ResizablePlotPanel oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.plot.layoutData != widget.plot.layoutData) {
+      _rect = widget.plot.layoutData.toRect();
+    }
+  }
+
+  void _onDragUpdate(DragUpdateDetails details) {
+    setState(() {
+      final newLeft = (_rect.left + details.delta.dx)
+          .clamp(0.0, widget.canvasSize.width - _rect.width);
+      final newTop = (_rect.top + details.delta.dy)
+          .clamp(0.0, widget.canvasSize.height - _rect.height);
+      _rect = Rect.fromLTWH(newLeft, newTop, _rect.width, _rect.height);
+    });
+  }
+
+  void _onDragEnd(DragEndDetails details) {
+    widget.onLayoutChanged(_rect);
+  }
+
+  void _onResizeUpdate(DragUpdateDetails details, bt.HandlePosition handle) {
+    setState(() {
+      double left = _rect.left;
+      double top = _rect.top;
+      double right = _rect.right;
+      double bottom = _rect.bottom;
+
+      if (handle.influencesLeft) {
+        left = (left + details.delta.dx).clamp(0.0, right - PlotLayoutData.kMinWidth);
+      }
+      if (handle.influencesRight) {
+        right = (right + details.delta.dx).clamp(left + PlotLayoutData.kMinWidth, widget.canvasSize.width);
+      }
+      if (handle.influencesTop) {
+        top = (top + details.delta.dy).clamp(0.0, bottom - PlotLayoutData.kMinHeight);
+      }
+      if (handle.influencesBottom) {
+        bottom = (bottom + details.delta.dy).clamp(top + PlotLayoutData.kMinHeight, widget.canvasSize.height);
+      }
+
+      _rect = Rect.fromLTRB(left, top, right, bottom);
+    });
+  }
+
+  void _onResizeEnd(DragEndDetails details) {
+    widget.onLayoutChanged(_rect);
+  }
+
+  Widget _buildHandle(bt.HandlePosition position) {
+    final isCorner = position.isDiagonal;
+    final isHorizontal = position == bt.HandlePosition.left || position == bt.HandlePosition.right;
+
+    Alignment alignment;
+    switch (position) {
+      case bt.HandlePosition.topLeft:
+        alignment = Alignment.topLeft;
+      case bt.HandlePosition.topRight:
+        alignment = Alignment.topRight;
+      case bt.HandlePosition.bottomLeft:
+        alignment = Alignment.bottomLeft;
+      case bt.HandlePosition.bottomRight:
+        alignment = Alignment.bottomRight;
+      case bt.HandlePosition.top:
+        alignment = Alignment.topCenter;
+      case bt.HandlePosition.bottom:
+        alignment = Alignment.bottomCenter;
+      case bt.HandlePosition.left:
+        alignment = Alignment.centerLeft;
+      case bt.HandlePosition.right:
+        alignment = Alignment.centerRight;
+      default:
+        alignment = Alignment.center;
+    }
+
+    MouseCursor cursor;
+    switch (position) {
+      case bt.HandlePosition.topLeft:
+      case bt.HandlePosition.bottomRight:
+        cursor = SystemMouseCursors.resizeUpLeftDownRight;
+      case bt.HandlePosition.topRight:
+      case bt.HandlePosition.bottomLeft:
+        cursor = SystemMouseCursors.resizeUpRightDownLeft;
+      case bt.HandlePosition.top:
+      case bt.HandlePosition.bottom:
+        cursor = SystemMouseCursors.resizeUpDown;
+      case bt.HandlePosition.left:
+      case bt.HandlePosition.right:
+        cursor = SystemMouseCursors.resizeLeftRight;
+      default:
+        cursor = SystemMouseCursors.basic;
+    }
+
+    return Align(
+      alignment: alignment,
+      child: MouseRegion(
+        cursor: cursor,
+        child: GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onPanStart: (_) {
+            widget.onSelect();
+          },
+          onPanUpdate: (details) => _onResizeUpdate(details, position),
+          onPanEnd: _onResizeEnd,
+          child: Container(
+            width: isCorner ? _handleSize : (isHorizontal ? _handleSize / 2 : _handleHitArea),
+            height: isCorner ? _handleSize : (isHorizontal ? _handleHitArea : _handleSize / 2),
+            decoration: BoxDecoration(
+              color: widget.isSelected
+                  ? Theme.of(context).colorScheme.primary
+                  : Theme.of(context).colorScheme.outline.withValues(alpha: 0.5),
+              borderRadius: BorderRadius.circular(isCorner ? 2 : 3),
+              border: isCorner
+                  ? Border.all(color: Colors.white, width: 1)
+                  : null,
+              boxShadow: widget.isSelected && isCorner
+                  ? [
+                      BoxShadow(
+                        color: Theme.of(context)
+                            .colorScheme
+                            .primary
+                            .withValues(alpha: 0.4),
+                        blurRadius: 6,
+                        spreadRadius: 1,
+                      ),
+                    ]
+                  : null,
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
   @override
-  FutureOr<void> onItemsAdded(List<DashboardItem> items, int slotCount) {
-    onItemsAddedCallback(items);
-  }
-
-  @override
-  FutureOr<void> onItemsDeleted(List<DashboardItem> items, int slotCount) {
-    onItemsDeletedCallback(items);
+  Widget build(BuildContext context) {
+    return Positioned(
+      left: _rect.left,
+      top: _rect.top,
+      width: _rect.width,
+      height: _rect.height,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          // Main content
+          Positioned.fill(
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 150),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.surface,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: widget.isSelected
+                      ? Theme.of(context).colorScheme.primary
+                      : Theme.of(context).colorScheme.outline.withValues(alpha: 0.2),
+                  width: widget.isSelected ? 2 : 1,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: widget.isSelected
+                        ? Theme.of(context).colorScheme.primary.withValues(alpha: 0.15)
+                        : Colors.black.withValues(alpha: 0.1),
+                    blurRadius: widget.isSelected ? 12 : 4,
+                    offset: const Offset(0, 2),
+                    spreadRadius: widget.isSelected ? 1 : 0,
+                  ),
+                ],
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(7),
+                child: Column(
+                  children: [
+                    // Header / Drag Handle
+                    GestureDetector(
+                      onTap: widget.onSelect,
+                      onPanStart: (_) => widget.onSelect(),
+                      onPanUpdate: _onDragUpdate,
+                      onPanEnd: _onDragEnd,
+                      child: MouseRegion(
+                        cursor: SystemMouseCursors.move,
+                        child: Container(
+                          height: 28,
+                          decoration: BoxDecoration(
+                            color: widget.isSelected
+                                ? Theme.of(context)
+                                    .colorScheme
+                                    .primary
+                                    .withValues(alpha: 0.1)
+                                : Theme.of(context).colorScheme.surfaceContainerHighest,
+                            borderRadius: const BorderRadius.vertical(
+                              top: Radius.circular(7),
+                            ),
+                          ),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                                  child: Row(
+                                    children: [
+                                      Icon(
+                                        Icons.drag_indicator,
+                                        size: 16,
+                                        color: Theme.of(context).colorScheme.primary,
+                                      ),
+                                      const SizedBox(width: 4),
+                                      Expanded(
+                                        child: Text(
+                                          widget.plot.yAxis.hasData
+                                              ? widget.plot.yAxis.displayName
+                                              : 'Plot ${widget.plotIndex + 1}',
+                                          style: Theme.of(context).textTheme.labelSmall,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                              MouseRegion(
+                                cursor: SystemMouseCursors.click,
+                                child: Material(
+                                  color: Colors.transparent,
+                                  child: InkWell(
+                                    onTap: widget.onRemove,
+                                    borderRadius: BorderRadius.circular(4),
+                                    child: Padding(
+                                      padding: const EdgeInsets.all(4.0),
+                                      child: Icon(
+                                        Icons.close,
+                                        size: 16,
+                                        color: Theme.of(context).colorScheme.error,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 4),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                    // Plot Area
+                    Expanded(
+                      child: InteractivePlot(
+                        configuration: widget.plot,
+                        isAxisSelected: widget.isSelected,
+                        onAxisTap: widget.onSelect,
+                        onClearAxis: widget.onClearAxis,
+                        onLegendTap: widget.onLegendTap,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          // Resize handles (only show when selected)
+          if (widget.isSelected) ...[
+            _buildHandle(bt.HandlePosition.topLeft),
+            _buildHandle(bt.HandlePosition.topRight),
+            _buildHandle(bt.HandlePosition.bottomLeft),
+            _buildHandle(bt.HandlePosition.bottomRight),
+            _buildHandle(bt.HandlePosition.top),
+            _buildHandle(bt.HandlePosition.bottom),
+            _buildHandle(bt.HandlePosition.left),
+            _buildHandle(bt.HandlePosition.right),
+          ],
+        ],
+      ),
+    );
   }
 }

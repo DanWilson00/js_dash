@@ -48,7 +48,10 @@ final _blurFilter = ui.ImageFilter.blur(sigmaX: 12, sigmaY: 12);
 
 /// Modular Dashboard - Fighter Jet HUD Redesign
 class MainDashboard extends ConsumerStatefulWidget {
-  const MainDashboard({super.key});
+  /// When false, animations and data updates are paused to save CPU
+  final bool isActive;
+
+  const MainDashboard({super.key, this.isActive = true});
 
   @override
   ConsumerState<MainDashboard> createState() => _MainDashboardState();
@@ -95,8 +98,30 @@ class _MainDashboardState extends ConsumerState<MainDashboard>
             vsync: this,
             duration: const Duration(milliseconds: 16),
           )
-          ..addListener(_updatePhysicsBasedData)
-          ..repeat();
+          ..addListener(_updatePhysicsBasedData);
+
+    // Only start animations if active
+    if (widget.isActive) {
+      _smoothDataController.repeat();
+    }
+  }
+
+  @override
+  void didUpdateWidget(MainDashboard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+
+    if (widget.isActive != oldWidget.isActive) {
+      if (widget.isActive) {
+        // Resume animations and data listening
+        _smoothDataController.repeat();
+        if (_dataSubscription == null) {
+          _startDataListening();
+        }
+      } else {
+        // Pause animations and optionally data listening
+        _smoothDataController.stop();
+      }
+    }
   }
 
   void _startDataListening() {

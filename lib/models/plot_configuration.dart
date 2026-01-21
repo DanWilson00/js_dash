@@ -179,34 +179,101 @@ class PlotAxisConfiguration {
   }
 }
 
-@JsonSerializable()
+@JsonSerializable(createFactory: false, createToJson: false)
 class PlotLayoutData {
-  final int x;
-  final int y;
-  final int width;
-  final int height;
-  @JsonKey(defaultValue: 1)
+  /// X position in pixels from top-left of canvas
+  final double x;
+
+  /// Y position in pixels from top-left of canvas
+  final double y;
+
+  /// Width in pixels
+  final double width;
+
+  /// Height in pixels
+  final double height;
+
+  /// Layout version for migration:
+  /// - v1/v2: old slot-based grid system (ints)
+  /// - v3: free-form canvas with pixel coordinates (doubles)
+  @JsonKey(defaultValue: 3)
   final int layoutVersion;
 
-  static const int kCurrentLayoutVersion = 2;
+  static const int kCurrentLayoutVersion = 3;
+
+  /// Default plot size
+  static const double kDefaultWidth = 400.0;
+  static const double kDefaultHeight = 300.0;
+
+  /// Minimum plot dimensions
+  static const double kMinWidth = 200.0;
+  static const double kMinHeight = 150.0;
 
   const PlotLayoutData({
-    this.x = 0,
-    this.y = 0,
-    this.width = 6,
-    this.height = 4,
-    this.layoutVersion = 1,
+    this.x = 0.0,
+    this.y = 0.0,
+    this.width = kDefaultWidth,
+    this.height = kDefaultHeight,
+    this.layoutVersion = kCurrentLayoutVersion,
   });
 
-  factory PlotLayoutData.fromJson(Map<String, dynamic> json) =>
-      _$PlotLayoutDataFromJson(json);
-  Map<String, dynamic> toJson() => _$PlotLayoutDataToJson(this);
+  factory PlotLayoutData.fromJson(Map<String, dynamic> json) {
+    // Handle migration from old int-based format (v1/v2) to new double format (v3)
+    final version = json['layoutVersion'] as int? ?? 1;
+
+    if (version < 3) {
+      // Convert old slot-based layout to pixel-based
+      // The old system used a 96-slot grid; we'll estimate pixel values
+      // by multiplying by a reasonable slot size
+      const slotToPixelFactor = 50.0 / 4; // Approximately 12.5 pixels per slot
+      final oldX = (json['x'] as num?)?.toDouble() ?? 0.0;
+      final oldY = (json['y'] as num?)?.toDouble() ?? 0.0;
+      final oldWidth = (json['width'] as num?)?.toDouble() ?? 32.0;
+      final oldHeight = (json['height'] as num?)?.toDouble() ?? 24.0;
+
+      return PlotLayoutData(
+        x: oldX * slotToPixelFactor,
+        y: oldY * slotToPixelFactor,
+        width: (oldWidth * slotToPixelFactor).clamp(kMinWidth, double.infinity),
+        height: (oldHeight * slotToPixelFactor).clamp(kMinHeight, double.infinity),
+        layoutVersion: kCurrentLayoutVersion,
+      );
+    }
+
+    return PlotLayoutData(
+      x: (json['x'] as num?)?.toDouble() ?? 0.0,
+      y: (json['y'] as num?)?.toDouble() ?? 0.0,
+      width: (json['width'] as num?)?.toDouble() ?? kDefaultWidth,
+      height: (json['height'] as num?)?.toDouble() ?? kDefaultHeight,
+      layoutVersion: kCurrentLayoutVersion,
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+    'x': x,
+    'y': y,
+    'width': width,
+    'height': height,
+    'layoutVersion': layoutVersion,
+  };
+
+  /// Convert to a Rect for use with TransformableBox
+  Rect toRect() => Rect.fromLTWH(x, y, width, height);
+
+  /// Create from a Rect
+  factory PlotLayoutData.fromRect(Rect rect) => PlotLayoutData(
+    x: rect.left,
+    y: rect.top,
+    width: rect.width,
+    height: rect.height,
+    layoutVersion: kCurrentLayoutVersion,
+  );
 
   PlotLayoutData copyWith({
-    int? x,
-    int? y,
-    int? width,
-    int? height,
+    double? x,
+    double? y,
+    double? width,
+    double? height,
     int? layoutVersion,
   }) {
     return PlotLayoutData(
