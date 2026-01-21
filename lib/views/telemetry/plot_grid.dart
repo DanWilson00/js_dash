@@ -69,7 +69,12 @@ class PlotGridManagerState extends ConsumerState<PlotGridManager> {
     double y = 0;
 
     while (y + plotSize.height <= canvasHeight) {
-      final candidateRect = Rect.fromLTWH(x, y, plotSize.width, plotSize.height);
+      final candidateRect = Rect.fromLTWH(
+        x,
+        y,
+        plotSize.width,
+        plotSize.height,
+      );
 
       // Check if this position overlaps with any existing plot
       bool overlaps = false;
@@ -113,7 +118,10 @@ class PlotGridManagerState extends ConsumerState<PlotGridManager> {
     );
 
     // Find a non-overlapping position for the new plot
-    final plotSize = Size(PlotLayoutData.kDefaultWidth, PlotLayoutData.kDefaultHeight);
+    final plotSize = Size(
+      PlotLayoutData.kDefaultWidth,
+      PlotLayoutData.kDefaultHeight,
+    );
     final position = _findNonOverlappingPosition(plotSize);
 
     final newPlot = PlotConfiguration(
@@ -141,7 +149,7 @@ class PlotGridManagerState extends ConsumerState<PlotGridManager> {
     ref.read(settingsProvider.notifier).updatePlotsInTab(widget.tabId, _plots);
   }
 
-  void _updatePlotLayout(String plotId, Rect newRect) {
+  void _updatePlotLayout(String plotId, Rect newRect, {bool save = true}) {
     setState(() {
       final index = _plots.indexWhere((p) => p.id == plotId);
       if (index != -1) {
@@ -150,7 +158,123 @@ class PlotGridManagerState extends ConsumerState<PlotGridManager> {
         );
       }
     });
-    _saveToSettings();
+    if (save) {
+      _saveToSettings();
+    }
+  }
+
+  /// Pushes overlapping panels out of the way when resizing
+  /// Returns a map of plotId -> new rect for panels that were pushed
+  Map<String, Rect> _pushOverlappingPanels(
+    String resizingPlotId,
+    Rect newRect,
+  ) {
+    final pushedPanels = <String, Rect>{};
+    const double gap = 4.0;
+    const double minWidth = PlotLayoutData.kMinWidth;
+    const double minHeight = PlotLayoutData.kMinHeight;
+
+    for (final plot in _plots) {
+      if (plot.id == resizingPlotId) continue;
+
+      final otherRect = plot.layoutData.toRect();
+      if (!newRect.overlaps(otherRect)) continue;
+
+      // Calculate overlap amounts for each direction
+      final overlapLeft = newRect.right - otherRect.left;
+      final overlapRight = otherRect.right - newRect.left;
+      final overlapTop = newRect.bottom - otherRect.top;
+      final overlapBottom = otherRect.bottom - newRect.top;
+
+      // Determine push direction based on smallest overlap
+      double newLeft = otherRect.left;
+      double newTop = otherRect.top;
+      double newRight = otherRect.right;
+      double newBottom = otherRect.bottom;
+
+      // Check which push direction is feasible
+      final canPushRight =
+          newRect.right + gap + otherRect.width <= _canvasSize.width;
+      final canPushLeft = newRect.left - gap - otherRect.width >= 0;
+      final canPushDown =
+          newRect.bottom + gap + otherRect.height <= _canvasSize.height;
+      final canPushUp = newRect.top - gap - otherRect.height >= 0;
+
+      // Determine the best push strategy
+      if (overlapLeft > 0 &&
+          overlapLeft < overlapRight &&
+          overlapLeft < overlapTop &&
+          overlapLeft < overlapBottom) {
+        // Push right
+        if (canPushRight) {
+          newLeft = newRect.right + gap;
+          newRight = newLeft + otherRect.width;
+        } else {
+          // Shrink from left edge
+          newLeft = newRect.right + gap;
+          newRight = _canvasSize.width;
+        }
+      } else if (overlapRight > 0 &&
+          overlapRight < overlapLeft &&
+          overlapRight < overlapTop &&
+          overlapRight < overlapBottom) {
+        // Push left
+        if (canPushLeft) {
+          newRight = newRect.left - gap;
+          newLeft = newRight - otherRect.width;
+        } else {
+          newRight = newRect.left - gap;
+          newLeft = 0;
+        }
+      } else if (overlapTop > 0 && overlapTop < overlapBottom) {
+        // Push down
+        if (canPushDown) {
+          newTop = newRect.bottom + gap;
+          newBottom = newTop + otherRect.height;
+        } else {
+          newTop = newRect.bottom + gap;
+          newBottom = _canvasSize.height;
+        }
+      } else {
+        // Push up
+        if (canPushUp) {
+          newBottom = newRect.top - gap;
+          newTop = newBottom - otherRect.height;
+        } else {
+          newBottom = newRect.top - gap;
+          newTop = 0;
+        }
+      }
+
+      // Clamp to canvas bounds and minimum sizes
+      newLeft = newLeft.clamp(0.0, _canvasSize.width - minWidth);
+      newTop = newTop.clamp(0.0, _canvasSize.height - minHeight);
+      newRight = newRight.clamp(newLeft + minWidth, _canvasSize.width);
+      newBottom = newBottom.clamp(newTop + minHeight, _canvasSize.height);
+
+      final pushedRect = Rect.fromLTRB(newLeft, newTop, newRight, newBottom);
+      if (pushedRect != otherRect) {
+        pushedPanels[plot.id] = pushedRect;
+      }
+    }
+
+    return pushedPanels;
+  }
+
+  /// Updates multiple plot layouts at once (for push operations, no save)
+  void _updateMultiplePlotLayouts(Map<String, Rect> layouts) {
+    if (layouts.isEmpty) return;
+    setState(() {
+      for (final entry in layouts.entries) {
+        final index = _plots.indexWhere((p) => p.id == entry.key);
+        if (index != -1) {
+          _plots[index] = _plots[index].copyWith(
+            layoutData: PlotLayoutData.fromRect(entry.value),
+          );
+        }
+      }
+    });
+    // Don't save here - deferred to resize end for performance
   }
 
   void _selectPlot(String plotId) {
@@ -199,10 +323,9 @@ class PlotGridManagerState extends ConsumerState<PlotGridManager> {
                     border: Border.all(
                       color: signal.color == color
                           ? Theme.of(context).colorScheme.primary
-                          : Theme.of(context)
-                              .colorScheme
-                              .outline
-                              .withValues(alpha: 0.2),
+                          : Theme.of(
+                              context,
+                            ).colorScheme.outline.withValues(alpha: 0.2),
                       width: signal.color == color ? 3 : 1,
                     ),
                   ),
@@ -451,15 +574,15 @@ class PlotGridManagerState extends ConsumerState<PlotGridManager> {
                       Icon(
                         Icons.add_chart,
                         size: 64,
-                        color: Theme.of(context)
-                            .colorScheme
-                            .outline
-                            .withValues(alpha: 0.5),
+                        color: Theme.of(
+                          context,
+                        ).colorScheme.outline.withValues(alpha: 0.5),
                       ),
                       const SizedBox(height: 16),
                       Text(
                         'No plots yet',
-                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        style: Theme.of(context).textTheme.titleMedium
+                            ?.copyWith(
                               color: Theme.of(context).colorScheme.outline,
                             ),
                       ),
@@ -467,11 +590,10 @@ class PlotGridManagerState extends ConsumerState<PlotGridManager> {
                       Text(
                         'Click "Add Plot" to create a new plot',
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                              color: Theme.of(context)
-                                  .colorScheme
-                                  .outline
-                                  .withValues(alpha: 0.7),
-                            ),
+                          color: Theme.of(
+                            context,
+                          ).colorScheme.outline.withValues(alpha: 0.7),
+                        ),
                       ),
                     ],
                   ),
@@ -494,8 +616,13 @@ class PlotGridManagerState extends ConsumerState<PlotGridManager> {
                       _selectPlot(plot.id);
                       _bringToFront(plot.id);
                     },
-                    onLayoutChanged: (rect) => _updatePlotLayout(plot.id, rect),
+                    onLayoutUpdate: (rect) =>
+                        _updatePlotLayout(plot.id, rect, save: false),
+                    onLayoutChanged: (rect) =>
+                        _updatePlotLayout(plot.id, rect, save: true),
                     onRemove: () => _removePlot(plot.id),
+                    onRequestPush: _pushOverlappingPanels,
+                    onApplyPushedLayouts: _updateMultiplePlotLayouts,
                     onClearAxis: () => _clearPlotAxis(plot.id),
                     onLegendTap: () {
                       if (plot.yAxis.signals.isNotEmpty) {
@@ -551,6 +678,11 @@ class _ResizablePlotPanel extends StatefulWidget {
   final bool isSelected;
   final Size canvasSize;
   final VoidCallback onSelect;
+
+  /// Called during drag/resize with live position updates (no save)
+  final ValueChanged<Rect> onLayoutUpdate;
+
+  /// Called when drag/resize ends (triggers save)
   final ValueChanged<Rect> onLayoutChanged;
   final VoidCallback onRemove;
   final VoidCallback onClearAxis;
@@ -558,18 +690,27 @@ class _ResizablePlotPanel extends StatefulWidget {
   final int plotIndex;
   final List<Rect> otherPanelRects;
 
+  /// Called during resize to calculate pushed panels
+  final Map<String, Rect> Function(String plotId, Rect newRect) onRequestPush;
+
+  /// Called to apply pushed panel layouts
+  final void Function(Map<String, Rect> layouts) onApplyPushedLayouts;
+
   const _ResizablePlotPanel({
     super.key,
     required this.plot,
     required this.isSelected,
     required this.canvasSize,
     required this.onSelect,
+    required this.onLayoutUpdate,
     required this.onLayoutChanged,
     required this.onRemove,
     required this.onClearAxis,
     required this.onLegendTap,
     required this.plotIndex,
     required this.otherPanelRects,
+    required this.onRequestPush,
+    required this.onApplyPushedLayouts,
   });
 
   @override
@@ -605,8 +746,14 @@ class _ResizablePlotPanelState extends State<_ResizablePlotPanel> {
 
   /// Clamps rect to canvas bounds and prevents overlap with other panels
   Rect _clampAndPreventOverlap(Rect proposed) {
-    var left = proposed.left.clamp(0.0, widget.canvasSize.width - proposed.width);
-    var top = proposed.top.clamp(0.0, widget.canvasSize.height - proposed.height);
+    var left = proposed.left.clamp(
+      0.0,
+      widget.canvasSize.width - proposed.width,
+    );
+    var top = proposed.top.clamp(
+      0.0,
+      widget.canvasSize.height - proposed.height,
+    );
 
     // Push out of any overlapping panels
     for (final other in widget.otherPanelRects) {
@@ -657,55 +804,66 @@ class _ResizablePlotPanelState extends State<_ResizablePlotPanel> {
       // Snap to canvas edges
       newLeft = _snapToValue(newLeft, 0, _snapThreshold);
       newTop = _snapToValue(newTop, 0, _snapThreshold);
-      newLeft = _snapToValue(
-        newLeft + _rect.width,
-        widget.canvasSize.width,
-        _snapThreshold,
-      ) - _rect.width;
-      newTop = _snapToValue(
-        newTop + _rect.height,
-        widget.canvasSize.height,
-        _snapThreshold,
-      ) - _rect.height;
+      newLeft =
+          _snapToValue(
+            newLeft + _rect.width,
+            widget.canvasSize.width,
+            _snapThreshold,
+          ) -
+          _rect.width;
+      newTop =
+          _snapToValue(
+            newTop + _rect.height,
+            widget.canvasSize.height,
+            _snapThreshold,
+          ) -
+          _rect.height;
 
       // Snap to other panel edges
       for (final other in widget.otherPanelRects) {
         // Snap left edge to other's right edge (with gap)
         newLeft = _snapToValue(newLeft, other.right + _snapGap, _snapThreshold);
         // Snap right edge to other's left edge (with gap)
-        newLeft = _snapToValue(
-          newLeft + _rect.width,
-          other.left - _snapGap,
-          _snapThreshold,
-        ) - _rect.width;
+        newLeft =
+            _snapToValue(
+              newLeft + _rect.width,
+              other.left - _snapGap,
+              _snapThreshold,
+            ) -
+            _rect.width;
         // Snap top edge to other's bottom edge (with gap)
         newTop = _snapToValue(newTop, other.bottom + _snapGap, _snapThreshold);
         // Snap bottom edge to other's top edge (with gap)
-        newTop = _snapToValue(
-          newTop + _rect.height,
-          other.top - _snapGap,
-          _snapThreshold,
-        ) - _rect.height;
+        newTop =
+            _snapToValue(
+              newTop + _rect.height,
+              other.top - _snapGap,
+              _snapThreshold,
+            ) -
+            _rect.height;
 
         // Also snap aligned edges (left-to-left, right-to-right, etc.)
         newLeft = _snapToValue(newLeft, other.left, _snapThreshold);
-        newLeft = _snapToValue(
-          newLeft + _rect.width,
-          other.right,
-          _snapThreshold,
-        ) - _rect.width;
+        newLeft =
+            _snapToValue(newLeft + _rect.width, other.right, _snapThreshold) -
+            _rect.width;
         newTop = _snapToValue(newTop, other.top, _snapThreshold);
-        newTop = _snapToValue(
-          newTop + _rect.height,
-          other.bottom,
-          _snapThreshold,
-        ) - _rect.height;
+        newTop =
+            _snapToValue(newTop + _rect.height, other.bottom, _snapThreshold) -
+            _rect.height;
       }
 
       // Clamp to canvas and prevent overlap
-      final proposedRect = Rect.fromLTWH(newLeft, newTop, _rect.width, _rect.height);
+      final proposedRect = Rect.fromLTWH(
+        newLeft,
+        newTop,
+        _rect.width,
+        _rect.height,
+      );
       _rect = _clampAndPreventOverlap(proposedRect);
     });
+    // Sync with parent for smooth visual updates (no save)
+    widget.onLayoutUpdate(_rect);
   }
 
   void _onDragEnd(DragEndDetails details) {
@@ -739,7 +897,10 @@ class _ResizablePlotPanelState extends State<_ResizablePlotPanel> {
           right = _snapToValue(right, other.left - _snapGap, _snapThreshold);
           right = _snapToValue(right, other.right, _snapThreshold);
         }
-        right = right.clamp(left + PlotLayoutData.kMinWidth, widget.canvasSize.width);
+        right = right.clamp(
+          left + PlotLayoutData.kMinWidth,
+          widget.canvasSize.width,
+        );
       }
       if (handle.influencesTop) {
         top = top + details.delta.dy;
@@ -761,31 +922,23 @@ class _ResizablePlotPanelState extends State<_ResizablePlotPanel> {
           bottom = _snapToValue(bottom, other.top - _snapGap, _snapThreshold);
           bottom = _snapToValue(bottom, other.bottom, _snapThreshold);
         }
-        bottom = bottom.clamp(top + PlotLayoutData.kMinHeight, widget.canvasSize.height);
+        bottom = bottom.clamp(
+          top + PlotLayoutData.kMinHeight,
+          widget.canvasSize.height,
+        );
       }
 
-      // Prevent overlap by checking against other panels
+      // Push overlapping panels instead of blocking resize
       final proposedRect = Rect.fromLTRB(left, top, right, bottom);
-      for (final other in widget.otherPanelRects) {
-        if (proposedRect.overlaps(other)) {
-          // Block resize at the overlapping edge
-          if (handle.influencesLeft && left < other.right && _rect.left >= other.right) {
-            left = other.right + _snapGap;
-          }
-          if (handle.influencesRight && right > other.left && _rect.right <= other.left) {
-            right = other.left - _snapGap;
-          }
-          if (handle.influencesTop && top < other.bottom && _rect.top >= other.bottom) {
-            top = other.bottom + _snapGap;
-          }
-          if (handle.influencesBottom && bottom > other.top && _rect.bottom <= other.top) {
-            bottom = other.top - _snapGap;
-          }
-        }
+      final pushedLayouts = widget.onRequestPush(widget.plot.id, proposedRect);
+      if (pushedLayouts.isNotEmpty) {
+        widget.onApplyPushedLayouts(pushedLayouts);
       }
 
-      _rect = Rect.fromLTRB(left, top, right, bottom);
+      _rect = proposedRect;
     });
+    // Sync with parent for smooth visual updates (no save)
+    widget.onLayoutUpdate(_rect);
   }
 
   void _onResizeEnd(DragEndDetails details) {
@@ -794,7 +947,9 @@ class _ResizablePlotPanelState extends State<_ResizablePlotPanel> {
 
   Widget _buildHandle(bt.HandlePosition position) {
     final isCorner = position.isDiagonal;
-    final isHorizontal = position == bt.HandlePosition.left || position == bt.HandlePosition.right;
+    final isHorizontal =
+        position == bt.HandlePosition.left ||
+        position == bt.HandlePosition.right;
 
     Alignment alignment;
     switch (position) {
@@ -848,8 +1003,12 @@ class _ResizablePlotPanelState extends State<_ResizablePlotPanel> {
           onPanUpdate: (details) => _onResizeUpdate(details, position),
           onPanEnd: _onResizeEnd,
           child: Container(
-            width: isCorner ? _handleSize : (isHorizontal ? _handleSize / 2 : _handleHitArea),
-            height: isCorner ? _handleSize : (isHorizontal ? _handleHitArea : _handleSize / 2),
+            width: isCorner
+                ? _handleSize
+                : (isHorizontal ? _handleSize / 2 : _handleHitArea),
+            height: isCorner
+                ? _handleSize
+                : (isHorizontal ? _handleHitArea : _handleSize / 2),
             // Transparent decoration - keeps hit area functional without visible handles
             color: Colors.transparent,
           ),
@@ -870,114 +1029,128 @@ class _ResizablePlotPanelState extends State<_ResizablePlotPanel> {
         children: [
           // Main content
           Positioned.fill(
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 150),
-              decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.surface,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(
-                  color: widget.isSelected
-                      ? Theme.of(context).colorScheme.primary
-                      : Theme.of(context).colorScheme.outline.withValues(alpha: 0.2),
-                  width: widget.isSelected ? 2 : 1,
-                ),
-                boxShadow: [
-                  BoxShadow(
+            child: RepaintBoundary(
+              child: Container(
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.surface,
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
                     color: widget.isSelected
-                        ? Theme.of(context).colorScheme.primary.withValues(alpha: 0.15)
-                        : Colors.black.withValues(alpha: 0.1),
-                    blurRadius: widget.isSelected ? 12 : 4,
-                    offset: const Offset(0, 2),
-                    spreadRadius: widget.isSelected ? 1 : 0,
+                        ? Theme.of(context).colorScheme.primary
+                        : Theme.of(
+                            context,
+                          ).colorScheme.outline.withValues(alpha: 0.2),
+                    width: widget.isSelected ? 2 : 1,
                   ),
-                ],
-              ),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(7),
-                child: Column(
-                  children: [
-                    // Header / Drag Handle
-                    GestureDetector(
-                      onTap: widget.onSelect,
-                      onPanStart: (_) => widget.onSelect(),
-                      onPanUpdate: _onDragUpdate,
-                      onPanEnd: _onDragEnd,
-                      child: MouseRegion(
-                        cursor: SystemMouseCursors.move,
-                        child: Container(
-                          height: 28,
-                          decoration: BoxDecoration(
-                            color: widget.isSelected
-                                ? Theme.of(context)
-                                    .colorScheme
-                                    .primary
-                                    .withValues(alpha: 0.1)
-                                : Theme.of(context).colorScheme.surfaceContainerHighest,
-                            borderRadius: const BorderRadius.vertical(
-                              top: Radius.circular(7),
+                  boxShadow: [
+                    BoxShadow(
+                      color: widget.isSelected
+                          ? Theme.of(
+                              context,
+                            ).colorScheme.primary.withValues(alpha: 0.15)
+                          : Colors.black.withValues(alpha: 0.1),
+                      blurRadius: widget.isSelected ? 12 : 4,
+                      offset: const Offset(0, 2),
+                      spreadRadius: widget.isSelected ? 1 : 0,
+                    ),
+                  ],
+                ),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(7),
+                  child: Column(
+                    children: [
+                      // Header / Drag Handle
+                      GestureDetector(
+                        onTap: widget.onSelect,
+                        onPanStart: (_) => widget.onSelect(),
+                        onPanUpdate: _onDragUpdate,
+                        onPanEnd: _onDragEnd,
+                        child: MouseRegion(
+                          cursor: SystemMouseCursors.move,
+                          child: Container(
+                            height: 28,
+                            decoration: BoxDecoration(
+                              color: widget.isSelected
+                                  ? Theme.of(
+                                      context,
+                                    ).colorScheme.primary.withValues(alpha: 0.1)
+                                  : Theme.of(
+                                      context,
+                                    ).colorScheme.surfaceContainerHighest,
+                              borderRadius: const BorderRadius.vertical(
+                                top: Radius.circular(7),
+                              ),
                             ),
-                          ),
-                          child: Row(
-                            children: [
-                              Expanded(
-                                child: Padding(
-                                  padding: const EdgeInsets.symmetric(horizontal: 8),
-                                  child: Row(
-                                    children: [
-                                      Icon(
-                                        Icons.drag_indicator,
-                                        size: 16,
-                                        color: Theme.of(context).colorScheme.primary,
-                                      ),
-                                      const SizedBox(width: 4),
-                                      Expanded(
-                                        child: Text(
-                                          widget.plot.yAxis.hasData
-                                              ? widget.plot.yAxis.displayName
-                                              : 'Plot ${widget.plotIndex + 1}',
-                                          style: Theme.of(context).textTheme.labelSmall,
-                                          overflow: TextOverflow.ellipsis,
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  child: Padding(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 8,
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        Icon(
+                                          Icons.drag_indicator,
+                                          size: 16,
+                                          color: Theme.of(
+                                            context,
+                                          ).colorScheme.primary,
                                         ),
-                                      ),
-                                    ],
+                                        const SizedBox(width: 4),
+                                        Expanded(
+                                          child: Text(
+                                            widget.plot.yAxis.hasData
+                                                ? widget.plot.yAxis.displayName
+                                                : 'Plot ${widget.plotIndex + 1}',
+                                            style: Theme.of(
+                                              context,
+                                            ).textTheme.labelSmall,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
                                   ),
                                 ),
-                              ),
-                              MouseRegion(
-                                cursor: SystemMouseCursors.click,
-                                child: Material(
-                                  color: Colors.transparent,
-                                  child: InkWell(
-                                    onTap: widget.onRemove,
-                                    borderRadius: BorderRadius.circular(4),
-                                    child: Padding(
-                                      padding: const EdgeInsets.all(4.0),
-                                      child: Icon(
-                                        Icons.close,
-                                        size: 16,
-                                        color: Theme.of(context).colorScheme.error,
+                                MouseRegion(
+                                  cursor: SystemMouseCursors.click,
+                                  child: Material(
+                                    color: Colors.transparent,
+                                    child: InkWell(
+                                      onTap: widget.onRemove,
+                                      borderRadius: BorderRadius.circular(4),
+                                      child: Padding(
+                                        padding: const EdgeInsets.all(4.0),
+                                        child: Icon(
+                                          Icons.close,
+                                          size: 16,
+                                          color: Theme.of(
+                                            context,
+                                          ).colorScheme.error,
+                                        ),
                                       ),
                                     ),
                                   ),
                                 ),
-                              ),
-                              const SizedBox(width: 4),
-                            ],
+                                const SizedBox(width: 4),
+                              ],
+                            ),
                           ),
                         ),
                       ),
-                    ),
-                    // Plot Area
-                    Expanded(
-                      child: InteractivePlot(
-                        configuration: widget.plot,
-                        isAxisSelected: widget.isSelected,
-                        onAxisTap: widget.onSelect,
-                        onClearAxis: widget.onClearAxis,
-                        onLegendTap: widget.onLegendTap,
+                      // Plot Area
+                      Expanded(
+                        child: InteractivePlot(
+                          configuration: widget.plot,
+                          isAxisSelected: widget.isSelected,
+                          onAxisTap: widget.onSelect,
+                          onClearAxis: widget.onClearAxis,
+                          onLegendTap: widget.onLegendTap,
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             ),
