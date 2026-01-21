@@ -406,10 +406,6 @@ class PlotGridManagerState extends ConsumerState<PlotGridManager> {
     _saveToSettings();
   }
 
-  void setEditMode(bool enabled) {
-    // Edit mode is always enabled with the new free-form system
-  }
-
   void updateTimeWindow(TimeWindowOption window) {
     setState(() {
       for (var i = 0; i < _plots.length; i++) {
