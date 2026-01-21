@@ -9,10 +9,7 @@ import 'plot_grid.dart';
 import '../settings/settings_dialog.dart';
 
 class RealtimeDataDisplay extends ConsumerStatefulWidget {
-  const RealtimeDataDisplay({
-    super.key,
-    this.autoStartMonitor = true,
-  });
+  const RealtimeDataDisplay({super.key, this.autoStartMonitor = true});
 
   final bool autoStartMonitor;
 
@@ -37,7 +34,7 @@ class _RealtimeDataDisplayState extends ConsumerState<RealtimeDataDisplay> {
   // Current telemetry data (kept for message tracking functionality)
   late bool _isPaused;
   late double _messagePanelWidth;
-  bool _isEditMode = false;
+  bool _hasLoadedPanelWidth = false;
   Timer? _panelWidthSaveTimer;
 
   // Inline editing state
@@ -87,6 +84,14 @@ class _RealtimeDataDisplayState extends ConsumerState<RealtimeDataDisplay> {
     }
   }
 
+  void _syncPanelWidth(AsyncValue<AppSettings> settingsAsync) {
+    // Only sync once when settings have actually loaded from disk (not defaults)
+    if (!_hasLoadedPanelWidth && settingsAsync.hasValue) {
+      _messagePanelWidth = settingsAsync.value!.plots.messagePanelWidth;
+      _hasLoadedPanelWidth = true;
+    }
+  }
+
   @override
   void dispose() {
     _panelWidthSaveTimer?.cancel();
@@ -118,13 +123,6 @@ class _RealtimeDataDisplayState extends ConsumerState<RealtimeDataDisplay> {
     ref.read(settingsProvider.notifier).updatePauseState(_isPaused);
   }
 
-  void _toggleEditMode() {
-    setState(() {
-      _isEditMode = !_isEditMode;
-      _currentPlotGridKey.currentState?.setEditMode(_isEditMode);
-    });
-  }
-
   void _clearAllPlots() {
     _currentPlotGridKey.currentState?.clearAllPlots();
     final dataManager = ref.read(timeSeriesDataManagerProvider);
@@ -132,17 +130,12 @@ class _RealtimeDataDisplayState extends ConsumerState<RealtimeDataDisplay> {
   }
 
   void _openSettings() {
-    showDialog(
-      context: context,
-      builder: (context) => const SettingsDialog(),
-    );
+    showDialog(context: context, builder: (context) => const SettingsDialog());
   }
 
   void _addTab() {
     final settings = ref.read(settingsProvider.notifier);
-    settings.addPlotTab(
-      'Tab ${settings.plots.tabs.length + 1}',
-    );
+    settings.addPlotTab('Tab ${settings.plots.tabs.length + 1}');
   }
 
   void _removeTab(String tabId) {
@@ -183,13 +176,16 @@ class _RealtimeDataDisplayState extends ConsumerState<RealtimeDataDisplay> {
 
   @override
   Widget build(BuildContext context) {
-    final settings = ref.watch(settingsProvider).value ?? AppSettings.defaults();
+    final settingsAsync = ref.watch(settingsProvider);
+    final settings = settingsAsync.value ?? AppSettings.defaults();
     final uiScale = settings.appearance.uiScale;
     final tabs = settings.plots.tabs;
     final selectedTabId = settings.plots.selectedTabId;
 
     // Sync pause state from settings (replaces listener pattern)
     _syncPauseState(settings.connection.isPaused);
+    // Sync panel width once from persisted settings (only when actually loaded)
+    _syncPanelWidth(settingsAsync);
 
     // Ensure keys exist for all tabs
     for (var tab in tabs) {
@@ -342,9 +338,9 @@ class _RealtimeDataDisplayState extends ConsumerState<RealtimeDataDisplay> {
                         onChanged: (window) {
                           if (window != null) {
                             // Update global settings
-                            ref.read(settingsProvider.notifier).updateTimeWindow(
-                              window.label,
-                            );
+                            ref
+                                .read(settingsProvider.notifier)
+                                .updateTimeWindow(window.label);
                             // Update existing plots
                             _currentPlotGridKey.currentState?.updateTimeWindow(
                               window,
@@ -364,7 +360,6 @@ class _RealtimeDataDisplayState extends ConsumerState<RealtimeDataDisplay> {
                           _currentPlotGridKey.currentState?.addNewPlot(),
                       tooltip: 'Add Plot',
                     ),
-                    SizedBox(width: 16 * uiScale),
                     IconButton(
                       icon: Icon(_isPaused ? Icons.play_arrow : Icons.pause),
                       iconSize: 24 * uiScale,
@@ -372,15 +367,6 @@ class _RealtimeDataDisplayState extends ConsumerState<RealtimeDataDisplay> {
                       tooltip: _isPaused
                           ? 'PAUSED (click to resume)'
                           : 'PLAYING (click to pause & enable zoom/hover)',
-                    ),
-                    IconButton(
-                      icon: Icon(_isEditMode ? Icons.lock_open : Icons.lock),
-                      iconSize: 24 * uiScale,
-                      onPressed: _toggleEditMode,
-                      tooltip: _isEditMode
-                          ? 'EDIT MODE (drag/resize plots)'
-                          : 'VIEW MODE (interact with plots)',
-                      color: _isEditMode ? Colors.orange : null,
                     ),
                     IconButton(
                       icon: const Icon(Icons.clear_all),
@@ -435,9 +421,9 @@ class _RealtimeDataDisplayState extends ConsumerState<RealtimeDataDisplay> {
                       _panelWidthSaveTimer = Timer(
                         const Duration(milliseconds: 500),
                         () {
-                          ref.read(settingsProvider.notifier).updateMessagePanelWidth(
-                            _messagePanelWidth,
-                          );
+                          ref
+                              .read(settingsProvider.notifier)
+                              .updateMessagePanelWidth(_messagePanelWidth);
                         },
                       );
                     },

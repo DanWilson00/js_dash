@@ -39,7 +39,7 @@ final class SettingsProvider
   Settings create() => Settings();
 }
 
-String _$settingsHash() => r'1b0e225aae82bf6a9595e6e396a64c4f89133d60';
+String _$settingsHash() => r'da619aeca828eec3d1ba55705388bdbb5d54a996';
 
 /// Central settings manager with automatic persistence and change notification
 /// Uses Riverpod's AsyncNotifier for reactive state management

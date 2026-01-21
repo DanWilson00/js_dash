@@ -11,7 +11,10 @@ import '../../providers/service_providers.dart';
 import '../../providers/ui_providers.dart';
 
 class MapView extends ConsumerStatefulWidget {
-  const MapView({super.key});
+  /// When false, map updates and data listening are paused to save resources
+  final bool isActive;
+
+  const MapView({super.key, this.isActive = true});
 
   // Map configuration constants
   static const double minZoomLevel = 5.0;
@@ -47,8 +50,29 @@ class _MapViewState extends ConsumerState<MapView> {
   @override
   void initState() {
     super.initState();
-    _setupTelemetryListening();
-    _startPeriodicSave();
+    if (widget.isActive) {
+      _setupTelemetryListening();
+      _startPeriodicSave();
+    }
+  }
+
+  @override
+  void didUpdateWidget(MapView oldWidget) {
+    super.didUpdateWidget(oldWidget);
+
+    if (widget.isActive != oldWidget.isActive) {
+      if (widget.isActive) {
+        // Resume data listening and periodic save
+        _setupTelemetryListening();
+        _startPeriodicSave();
+      } else {
+        // Pause data listening and periodic save
+        _dataSubscription?.cancel();
+        _dataSubscription = null;
+        _saveTimer?.cancel();
+        _saveTimer = null;
+      }
+    }
   }
 
   /// Start periodic saving of zoom level when vehicle tracking is enabled
