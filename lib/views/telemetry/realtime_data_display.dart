@@ -34,6 +34,7 @@ class _RealtimeDataDisplayState extends ConsumerState<RealtimeDataDisplay> {
   // Current telemetry data (kept for message tracking functionality)
   late bool _isPaused;
   late double _messagePanelWidth;
+  bool _hasLoadedPanelWidth = false;
   Timer? _panelWidthSaveTimer;
 
   // Inline editing state
@@ -80,6 +81,14 @@ class _RealtimeDataDisplayState extends ConsumerState<RealtimeDataDisplay> {
       } else {
         dataManager.resume();
       }
+    }
+  }
+
+  void _syncPanelWidth(AsyncValue<AppSettings> settingsAsync) {
+    // Only sync once when settings have actually loaded from disk (not defaults)
+    if (!_hasLoadedPanelWidth && settingsAsync.hasValue) {
+      _messagePanelWidth = settingsAsync.value!.plots.messagePanelWidth;
+      _hasLoadedPanelWidth = true;
     }
   }
 
@@ -167,14 +176,16 @@ class _RealtimeDataDisplayState extends ConsumerState<RealtimeDataDisplay> {
 
   @override
   Widget build(BuildContext context) {
-    final settings =
-        ref.watch(settingsProvider).value ?? AppSettings.defaults();
+    final settingsAsync = ref.watch(settingsProvider);
+    final settings = settingsAsync.value ?? AppSettings.defaults();
     final uiScale = settings.appearance.uiScale;
     final tabs = settings.plots.tabs;
     final selectedTabId = settings.plots.selectedTabId;
 
     // Sync pause state from settings (replaces listener pattern)
     _syncPauseState(settings.connection.isPaused);
+    // Sync panel width once from persisted settings (only when actually loaded)
+    _syncPanelWidth(settingsAsync);
 
     // Ensure keys exist for all tabs
     for (var tab in tabs) {
